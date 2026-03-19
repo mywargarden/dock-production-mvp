@@ -1,0 +1,54 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="stylesheet" href="popup.css" />
+    <title>Dock</title>
+  </head>
+  <body>
+    <div class="topbar">
+      <div class="brand">
+        <img src="assets/dock_logo.png" class="brandLogo" alt="Dock" />
+      </div>
+      <div class="topActions"><button id="viewAllBtn" class="linkBtn" title="View all memories">View all</button></div>
+    </div>
+
+<input id="reason" placeholder="Why are you saving this?" />
+<label class="saveToRow">
+  <span>Save to</span>
+  <select id="workspaceSelect">
+    <option value="__all__">Main Library</option>
+  </select>
+</label>
+
+    <div class="btnRow">
+      <button id="saveBtn">Save Tab</button>
+      <button id="saveAllBtn" class="secondary">Add all open tabs</button>
+    </div>
+<div id="progress" class="progress hidden"></div>
+
+    <ul id="tabList"></ul>
+
+    <!-- Limit / Upgrade modal (single-save path) -->
+    <div id="upgradeModal" class="modal hidden" role="dialog" aria-modal="true">
+      <p><strong>Your memory is full 🧠</strong></p>
+      <p class="muted">You’ve saved 5 tabs — the maximum for free.</p>
+      <div class="row">
+        <button id="upgradeBtn">Unlock Unlimited</button>
+        <button id="replaceBtn" class="secondary">Replace one</button>
+      </div>
+      <button id="dismissBtn" class="linkBtn">Not now</button>
+    </div>
+
+    <!-- Replace chooser -->
+    <div id="replaceModal" class="modal hidden" role="dialog" aria-modal="true">
+      <p><strong>Replace a memory</strong></p>
+      <p class="muted">Choose one to remove and save the new tab.</p>
+      <ul id="replaceList" class="replaceList"></ul>
+      <button id="cancelReplaceBtn" class="linkBtn">Cancel</button>
+    </div>
+
+    <script type="module" src="popup.js"></script>
+  </body>
+</html>

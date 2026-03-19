@@ -1,0 +1,46 @@
+
+html, body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+  background: #f6f7fb;
+  color: #1f2937;
+}
+* { box-sizing: border-box; }
+main { max-width: 1100px; margin: 0 auto; padding: 32px 20px 48px; }
+.card { background: white; border: 1px solid #e5e7eb; border-radius: 20px; padding: 24px; margin-bottom: 20px; box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06); }
+h1 { margin-top: 0; font-size: 2rem; }
+h2 { margin-bottom: 12px; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+label { display: flex; flex-direction: column; gap: 8px; font-weight: 600; }
+input, select { padding: 12px 14px; border: 1px solid #d1d5db; border-radius: 12px; font-size: 16px; }
+button { border: 0; border-radius: 12px; padding: 12px 18px; font-size: 15px; font-weight: 700; cursor: pointer; background: linear-gradient(90deg,#6f4cff,#ef4c9a); color: white; }
+button.secondary { background: white; color: #1f2937; border: 1px solid #d1d5db; }
+.row { display: flex; gap: 12px; align-items: center; }
+.row.wrap { flex-wrap: wrap; }
+.tabRow { display: grid; grid-template-columns: 1fr 2fr 1.5fr auto auto; gap: 10px; margin-bottom: 10px; }
+.muted { color: #667085; }
+pre { background: #0f172a; color: #e2e8f0; border-radius: 16px; padding: 18px; overflow: auto; }
+.status { margin-top: 12px; font-weight: 600; }
+@media (max-width: 900px) {
+  .grid, .tabRow { grid-template-columns: 1fr; }
+}
+
+
+.tabCard { border: 1px solid #e5e7eb; border-radius: 18px; padding: 16px; margin-bottom: 14px; background: #fff; }
+.tabMainRow { display: grid; grid-template-columns: 1fr 1.8fr auto; gap: 10px; margin-bottom: 12px; }
+.tabActions { display: flex; gap: 10px; align-items: stretch; }
+.iconUploadRow { display: grid; grid-template-columns: 96px 1fr; gap: 14px; align-items: start; }
+.iconPreviewBox { width: 96px; height: 96px; border: 1px solid #d1d5db; border-radius: 18px; background: #f8fafc; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.iconPreviewBox img { width: 100%; height: 100%; object-fit: contain; }
+.iconControls { display: flex; flex-direction: column; gap: 10px; }
+.hiddenInput { display: none; }
+
+@media (max-width: 900px) {
+  .tabMainRow { grid-template-columns: 1fr; }
+  .iconUploadRow { grid-template-columns: 1fr; }
+  .iconPreviewBox { width: 80px; height: 80px; }
+}
+
+.dropZone { border: 1px dashed #cbd5e1; border-radius: 16px; background: #f8fafc; min-height: 84px; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; justify-content: center; gap: 6px; color: #475467; }
+.helpText { color: #667085; font-size: 14px; line-height: 1.4; }

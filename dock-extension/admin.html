@@ -1,0 +1,36 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dock — Admin Workspace Prototype</title>
+    <link rel="stylesheet" href="admin.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brandHeader">
+        <img src="assets/dock_logo.png" class="brandLogo" alt="Dock" />
+        <div>
+          <h1>Admin Workspace Prototype</h1>
+          <p class="muted">Local-only prototype. Configure one locked district workspace with up to 10 tabs.</p>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="backBtn" class="secondaryBtn">View All</button>
+      </div>
+    </header>
+    <main class="main">
+      <section class="card">
+        <label>Workspace Name</label>
+        <input id="workspaceName" type="text" placeholder="District Workspace" />
+        <div class="grid" id="tabGrid"></div>
+        <div class="toolbar">
+          <button id="saveBtn">Save Admin Workspace</button>
+          <button id="clearBtn" class="secondaryBtn">Clear Admin Workspace</button>
+        </div>
+        <p id="status" class="muted"></p>
+      </section>
+    </main>
+    <script type="module" src="admin.js"></script>
+  </body>
+</html>

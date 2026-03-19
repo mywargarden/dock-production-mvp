@@ -1,0 +1,28 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dock — Import Workspace</title>
+    <link rel="stylesheet" href="import.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="panel">
+        <img src="assets/dock_logo.png" class="logo" alt="Dock" />
+        <h1>Import shared workspace</h1>
+        <p id="status" class="muted">Reading Dock share link…</p>
+        <div id="details" class="details hidden">
+          <div class="detailRow"><span>Name</span><strong id="wsName"></strong></div>
+          <div class="detailRow"><span>Tabs</span><strong id="wsCount"></strong></div>
+          <div class="detailRow"><span>Color</span><span class="colorSwatch" id="wsColor"></span></div>
+        </div>
+        <div class="actions">
+          <button id="importBtn" class="primary" disabled>Import into Dock</button>
+          <button id="openLibraryBtn" class="secondary hidden">Open Workspace Library</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="import.js"></script>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "Dock",
+  "description": "Save tabs with context and screenshots. Dock them safely so you can return anytime.",
+  "version": "0.2.1",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAydwKyjxiYKFAP38/WbQAijXb/syWxDE68nG9J7d8oUFftriRkpYjBmYIrsVTVRKqFNWpZ7y5lWcV6/R9YdP4ArNdad6j2qUaIRrFETikmmG6KoI4WN7srPLXJ+6/sz+pGxOykL2cNxIOzZVfkj8n8EATnxvRaGCCx+4LvT5NSETmmlDsWmXAEM/tPQZO+asK4vXsGi4EvI/hIZM8ao1tuxE+v95rhIM9F+N0SKX2plt9aeoS9mlk6K4F5r1a+Hqnd6lKnAmnm8hRUj4l0YCoQKA1yIRaMVG2pJioY8/KEYAJMEKdTSUMy3O7jwDJte8w7UaZuAJdxVAefeceiE2SOwIDAQAB",
+  "permissions": [
+    "storage",
+    "tabs",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "http://localhost:3003/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "import.html",
+        "import.js",
+        "import.css",
+        "assets/dock_logo.png",
+        "icons/icon16.png",
+        "icons/icon48.png",
+        "icons/icon128.png"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

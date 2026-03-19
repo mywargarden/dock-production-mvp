@@ -1,0 +1,86 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dock — All Memories</title>
+    <link rel="stylesheet" href="memories.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="brandHeader">
+        <img src="assets/dock_logo.png" class="brandLogo" alt="Dock" />
+        <div class="brandText">
+          <h1>Workspace Library</h1>
+          <p class="muted">Save memories. Build workspaces. Launch faster.</p>
+        </div>
+      </div>
+      <div class="actions">
+        
+        <div class="menuWrap">
+          <button id="shareMenuBtn" class="actionBtn">Share ▾</button>
+          <div id="shareMenu" class="menuPanel hidden">
+            <button id="createShareLinkBtn" class="menuItem">Create Share Link</button>
+          </div>
+        </div>
+        <div class="menuWrap">
+          <button id="themeMenuBtn" class="actionBtn">Theme ▾</button>
+          <div id="themeMenu" class="menuPanel hidden">
+            <button class="menuItem themeItem" data-theme="dock-green">Dock Green</button>
+            <button class="menuItem themeItem" data-theme="dock-blue">Dock Blue</button>
+            <button class="menuItem themeItem" data-theme="slate">Slate</button>
+            <button class="menuItem themeItem" data-theme="warm">Warm</button>
+            <button class="menuItem themeItem" data-theme="light">Light</button>
+            <button class="menuItem themeItem" data-theme="tie-dye">Tie Dye</button>
+          </div>
+        </div>
+        <div class="menuWrap">
+          <button id="actionsMenuBtn" class="actionBtn">Actions ▾</button>
+          <div id="actionsMenu" class="menuPanel hidden actionsMenuPanel">
+            <div class="menuGroup">
+              <button id="openMenuToggle" class="menuItem menuItemWithCaret">Open</button>
+              <div id="openSubmenu" class="subMenuPanel hidden">
+                <button id="openSelectedBtn" class="menuItem subMenuItem">Open Selected</button>
+                <button id="openAllBtn" class="menuItem subMenuItem">Open All</button>
+              </div>
+            </div>
+            <div class="menuGroup dangerGroup">
+              <button id="deleteMenuToggle" class="menuItem menuItemWithCaret dangerItem">Delete</button>
+              <div id="deleteSubmenu" class="subMenuPanel hidden">
+                <button id="deleteSelectedBtn" class="menuItem subMenuItem dangerItem">Delete Selected</button>
+                <button id="clearAllBtn" class="menuItem subMenuItem dangerItem">Delete All</button>
+              </div>
+            </div>
+            <button id="refreshBtn" class="menuItem">Refresh</button>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <!-- Groups row: under header, above memories grid -->
+    <div class="groupBar" id="groupBar">
+      <div class="groupPills" id="groupPills"></div>
+      <div class="groupBarRight">
+        <button class="groupCreateBtn addBtn" id="addBtn" type="button">Add</button>
+        <button class="groupCreateBtn" id="editGroupBtn" type="button">Edit</button>
+        <button class="groupCreateBtn" id="createGroupBtn" type="button">Workspace</button>
+        <button id="densityToggleBtn" class="densityToggle densityToggleSmall" type="button" aria-pressed="false" title="Switch between full and compact card view">
+          <span class="densityLabel densityLabelFull">Full</span>
+          <span class="densityKnob"></span>
+          <span class="densityLabel densityLabelCompact">Compact</span>
+        </button>
+      </div>
+    </div>
+
+    <main>
+      <div id="emptyState" class="empty hidden">
+        <h2>No memories yet</h2>
+        <p class="muted">Save a tab from the extension popup to see it here.</p>
+      </div>
+
+      <div id="grid" class="grid"></div>
+    </main>
+
+    <script type="module" src="memories.js"></script>
+  </body>
+</html>
