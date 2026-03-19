@@ -22,7 +22,7 @@ export async function GET(_: Request, { params }: { params: { orgCode: string } 
 
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('*')
+      .select('id,name,org_code,email_domain,plan,max_users,published_at')
       .eq('org_code', orgCode)
       .maybeSingle();
 
@@ -32,10 +32,13 @@ export async function GET(_: Request, { params }: { params: { orgCode: string } 
     if (!org) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
+    if (!org.published_at) {
+      return NextResponse.json({ error: 'No published workspace yet' }, { status: 404 });
+    }
 
     const { data: workspace, error: wsError } = await supabase
       .from('workspaces')
-      .select('*')
+      .select('id,name,org_code,email_domain,plan,max_users,published_at')
       .eq('organization_id', org.id)
       .order('updated_at', { ascending: false })
       .order('created_at', { ascending: false })
