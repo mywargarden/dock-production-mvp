@@ -88,7 +88,7 @@ export async function GET(_: Request, { params }: { params: { orgCode: string } 
       },
       workspace: {
         name: workspace.name,
-        updatedAt: workspace.updated_at || Date.now(),
+        updatedAt: Date.now(),
         tabs: normalizedTabs
       },
       debug: {
