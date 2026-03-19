@@ -76,15 +76,18 @@ export default function Home() {
   useEffect(() => {
     if (sessionState !== 'signed_in') return;
     let active = true;
+
     async function loadForUser() {
       const { data: authData } = await supabase.auth.getUser();
       const user = authData.user;
       if (!user) return;
+
       const { data: profile, error: profileError } = await supabase
         .from('profiles')
         .select('organization_id, email')
         .eq('id', user.id)
         .maybeSingle();
+
       if (!active) return;
       if (profileError) {
         setStatus(profileError.message);
@@ -100,6 +103,7 @@ export default function Home() {
         .select('*')
         .eq('id', profile.organization_id)
         .maybeSingle();
+
       if (!active) return;
       if (orgError) {
         setStatus(orgError.message);
@@ -110,9 +114,7 @@ export default function Home() {
         return;
       }
 
-      const draftTabs = Array.isArray(orgRow.draft_tabs) && orgRow.draft_tabs.length
-        ? orgRow.draft_tabs
-        : INITIAL_TABS;
+      const draftTabs = Array.isArray(orgRow.draft_tabs) && orgRow.draft_tabs.length ? orgRow.draft_tabs : INITIAL_TABS;
 
       setOrg({
         id: orgRow.id,
@@ -124,23 +126,39 @@ export default function Home() {
         published_at: orgRow.published_at || null
       });
       setWorkspaceName(orgRow.draft_workspace_name || 'District Workspace');
-      setTabs(draftTabs.map((t: any) => ({
-        title: String(t?.title || ''),
-        url: String(t?.url || ''),
-        icon_url: String(t?.icon_url || ''),
-        is_locked: t?.is_locked !== false
-      })));
-      setStatus(orgRow.published_at ? `Live workspace published ${new Date(orgRow.published_at).toLocaleString()}` : 'No published workspace yet. Save Draft, then Publish Live Workspace.');
+      setTabs(
+        draftTabs.map((t: any) => ({
+          title: String(t?.title || ''),
+          url: String(t?.url || ''),
+          icon_url: String(t?.icon_url || ''),
+          is_locked: t?.is_locked !== false
+        }))
+      );
+      setStatus(
+        orgRow.published_at
+          ? `Live workspace published ${new Date(orgRow.published_at).toLocaleString()}`
+          : 'No published workspace yet. Save Draft, then Publish Live Workspace.'
+      );
     }
+
     loadForUser();
-    return () => { active = false; };
+    return () => {
+      active = false;
+    };
   }, [sessionState]);
 
   function updateTab(index: number, key: keyof TabRow, value: string | boolean) {
-    setTabs((current) => current.map((tab, i) => i === index ? { ...tab, [key]: value } : tab));
+    setTabs((current) => current.map((tab, i) => (i === index ? { ...tab, [key]: value } : tab)));
   }
-  function addTab() { setTabs((current) => [...current, { title: '', url: '', icon_url: '', is_locked: true }]); }
-  function removeTab(index: number) { setTabs((current) => current.filter((_, i) => i !== index)); }
+
+  function addTab() {
+    setTabs((current) => [...current, { title: '', url: '', icon_url: '', is_locked: true }]);
+  }
+
+  function removeTab(index: number) {
+    setTabs((current) => current.filter((_, i) => i !== index));
+  }
+
   function moveTab(index: number, direction: -1 | 1) {
     setTabs((current) => {
       const next = [...current];
@@ -155,8 +173,9 @@ export default function Home() {
     const input = document.getElementById(`icon-upload-${index}`) as HTMLInputElement | null;
     input?.click();
   }
+
   function clearIcon(index: number) {
-    setTabs((current) => current.map((tab, i) => i === index ? { ...tab, icon_url: '' } : tab));
+    setTabs((current) => current.map((tab, i) => (i === index ? { ...tab, icon_url: '' } : tab)));
   }
 
   async function handleIconUpload(index: number, file?: File | null) {
@@ -176,8 +195,19 @@ export default function Home() {
       reader.onerror = () => reject(new Error('Could not read icon file.'));
       reader.readAsDataURL(file);
     });
-    setTabs((current) => current.map((tab, i) => i === index ? { ...tab, icon_url: dataUrl } : tab));
+    setTabs((current) => current.map((tab, i) => (i === index ? { ...tab, icon_url: dataUrl } : tab)));
     setStatus('Icon uploaded. Save Draft to keep this draft, then Publish Live Workspace to push it.');
+  }
+
+  function cleanTabs() {
+    return tabs
+      .map((tab) => ({
+        title: (tab.title || '').trim(),
+        url: (tab.url || '').trim(),
+        icon_url: (tab.icon_url || '').trim(),
+        is_locked: tab.is_locked !== false
+      }))
+      .filter((tab) => tab.url);
   }
 
   async function sendMagicLink() {
@@ -186,9 +216,7 @@ export default function Home() {
       const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || (typeof window !== 'undefined' ? window.location.origin : undefined);
       const { error } = await supabase.auth.signInWithOtp({
         email: email.trim(),
-        options: {
-          emailRedirectTo: siteUrl
-        }
+        options: { emailRedirectTo: siteUrl }
       });
       if (error) throw error;
       setStatus('Magic link sent. Open it from your email on this same browser.');
@@ -204,17 +232,6 @@ export default function Home() {
     setStatus('Signed out.');
   }
 
-  function cleanTabs() {
-    return tabs
-      .map((tab) => ({
-        title: (tab.title || '').trim(),
-        url: (tab.url || '').trim(),
-        icon_url: (tab.icon_url || '').trim(),
-        is_locked: tab.is_locked !== false
-      }))
-      .filter((tab) => tab.url);
-  }
-
   async function saveDraft() {
     try {
       if (!org.id) throw new Error('Your admin account is not linked to an organization yet.');
@@ -222,6 +239,7 @@ export default function Home() {
       const clean = cleanTabs();
       if (!workspaceName.trim()) throw new Error('Workspace name is required.');
       if (!clean.length) throw new Error('Add at least one tab before saving.');
+
       const { error } = await supabase
         .from('organizations')
         .update({
@@ -234,7 +252,8 @@ export default function Home() {
         })
         .eq('id', org.id);
       if (error) throw error;
-      setStatus(`Draft saved (${clean.length} tab(s)). Publish Live Workspace when ready.`);
+
+      setStatus(`Draft saved (${clean.length} tab${clean.length === 1 ? '' : 's'}). Publish Live Workspace when ready.`);
     } catch (error: any) {
       setStatus(error?.message || 'Draft save failed.');
     } finally {
@@ -280,7 +299,15 @@ export default function Home() {
 
       const rows = clean.map((tab, index) => ({
         workspace_id: workspaceId,
-        title: tab.title || (() => { try { return new URL(/^https?:\/\//i.test(tab.url) ? tab.url : `https://${tab.url}`).hostname; } catch { return 'Untitled'; } })(),
+        title:
+          tab.title ||
+          (() => {
+            try {
+              return new URL(/^https?:\/\//i.test(tab.url) ? tab.url : `https://${tab.url}`).hostname;
+            } catch {
+              return 'Untitled';
+            }
+          })(),
         url: /^https?:\/\//i.test(tab.url) ? tab.url : `https://${tab.url}`,
         icon_url: tab.icon_url || null,
         position: index,
@@ -305,7 +332,7 @@ export default function Home() {
       if (orgUpdateError) throw orgUpdateError;
 
       setOrg((current) => ({ ...current, published_at: nowIso }));
-      setStatus(`Published live workspace (${clean.length} tab(s)). Extension endpoint ready at ${apiPreview}`);
+      setStatus(`Published live workspace (${clean.length} tab${clean.length === 1 ? '' : 's'}). Extension endpoint ready at ${apiPreview}`);
     } catch (error: any) {
       setStatus(error?.message || 'Publish failed.');
     } finally {
@@ -314,111 +341,123 @@ export default function Home() {
   }
 
   if (sessionState === 'loading') {
-    return <main><div className="card"><h1>Dock Admin</h1><p>Loading…</p></div></main>;
+    return (
+      <main>
+        <section className="heroCard compactCard">
+          <h1>Dock Admin</h1>
+          <p className="muted">Loading…</p>
+        </section>
+      </main>
+    );
   }
 
   if (sessionState === 'signed_out') {
     return (
       <main>
-        <div className="card">
+        <section className="heroCard compactCard">
           <h1>Dock Admin Login</h1>
-          <p className="muted">Sign in with a magic link. After your first sign-in, attach your user UUID to an organization using the commented bootstrap SQL in <code>supabase-schema.sql</code>.</p>
-          <label>Email</label>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@henry.k12.va.us" />
-          <div className="toolbar">
-            <button onClick={sendMagicLink} disabled={loading || !email.trim()}>{loading ? 'Sending…' : 'Send Magic Link'}</button>
+          <p className="heroText">
+            Sign in with a magic link. After your first sign-in, attach your user UUID to an organization using the commented bootstrap SQL in <code>supabase-schema.sql</code>.
+          </p>
+          <div className="authStack">
+            <label>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@henry.k12.va.us" />
+            <div className="toolbar">
+              <button onClick={sendMagicLink} disabled={loading || !email.trim()}>{loading ? 'Sending…' : 'Send Magic Link'}</button>
+            </div>
+            <p className="statusText">{status}</p>
           </div>
-          <p id="status" className="muted">{status}</p>
-        </div>
+        </section>
       </main>
     );
   }
 
   return (
     <main>
-      <div className="card">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 16 }}>
+      <section className="heroCard">
+        <div className="heroHeader">
           <div>
             <h1>Dock Admin Phase 2</h1>
-            <p className="muted">Signed in as {userEmail || email}. This admin is scoped to one district via <code>profiles.organization_id</code>.</p>
+            <p className="heroText">
+              Signed in as <strong>{userEmail || email}</strong>. This admin is scoped to one district via <code>profiles.organization_id</code>.
+            </p>
           </div>
           <button className="secondary" onClick={signOut}>Sign Out</button>
         </div>
+      </section>
 
+      <section className="card">
+        <h2>Organization</h2>
         <div className="grid2">
-          <div>
-            <label>Organization Name</label>
-            <input value={org.name} onChange={(e) => setOrg((c) => ({ ...c, name: e.target.value }))} />
-          </div>
-          <div>
-            <label>Organization Code</label>
-            <input value={org.org_code} disabled />
-          </div>
-          <div>
-            <label>Email Domain</label>
-            <input value={org.email_domain} onChange={(e) => setOrg((c) => ({ ...c, email_domain: e.target.value }))} />
-          </div>
-          <div>
-            <label>Plan</label>
-            <input value={org.plan} onChange={(e) => setOrg((c) => ({ ...c, plan: e.target.value }))} />
-          </div>
-          <div>
-            <label>Max Users</label>
-            <input type="number" value={org.max_users} onChange={(e) => setOrg((c) => ({ ...c, max_users: Number(e.target.value) || 500 }))} />
-          </div>
-          <div>
-            <label>Published Endpoint</label>
-            <input value={apiPreview} disabled />
-          </div>
+          <label>Organization Name<input value={org.name} onChange={(e) => setOrg((c) => ({ ...c, name: e.target.value }))} /></label>
+          <label>Organization Code<input value={org.org_code} disabled /></label>
+          <label>Email Domain<input value={org.email_domain} onChange={(e) => setOrg((c) => ({ ...c, email_domain: e.target.value }))} /></label>
+          <label>Plan<input value={org.plan} onChange={(e) => setOrg((c) => ({ ...c, plan: e.target.value }))} /></label>
+          <label>Max Users<input type="number" value={org.max_users} onChange={(e) => setOrg((c) => ({ ...c, max_users: Number(e.target.value) || 500 }))} /></label>
+          <label>Published Endpoint<input value={apiPreview} disabled /></label>
         </div>
+      </section>
 
-        <label>Draft Workspace Name</label>
-        <input value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} />
-
-        <div className="toolbar">
-          <button onClick={saveDraft} disabled={loading}>{loading ? 'Working…' : 'Save Draft'}</button>
-          <button onClick={publishWorkspace} disabled={loading}>{loading ? 'Working…' : 'Publish Live Workspace'}</button>
+      <section className="card">
+        <h2>Workspace</h2>
+        <div className="singleField">
+          <label>Draft Workspace Name<input value={workspaceName} onChange={(e) => setWorkspaceName(e.target.value)} /></label>
         </div>
-        <p className="muted">{org.published_at ? `Live published at ${new Date(org.published_at).toLocaleString()}` : 'Nothing published yet.'}</p>
-
-        <div className="tabGrid">
-          {tabs.map((tab, index) => (
-            <div className="tabCard" key={index}>
-              <div className="row">
-                <h3>Tab {index + 1}</h3>
-                <div className="smallActions">
-                  <button type="button" onClick={() => moveTab(index, -1)}>↑</button>
-                  <button type="button" onClick={() => moveTab(index, 1)}>↓</button>
-                  <button type="button" onClick={() => removeTab(index)}>✕</button>
-                </div>
-              </div>
-              <label>Title</label>
-              <input value={tab.title} onChange={(e) => updateTab(index, 'title', e.target.value)} placeholder="Tab title" />
-              <label>URL</label>
-              <input value={tab.url} onChange={(e) => updateTab(index, 'url', e.target.value)} placeholder="https://example.com" />
-              <div className="iconTools">
-                <div className={`iconPreview ${tab.icon_url ? 'hasImage' : ''}`}>
-                  {tab.icon_url ? <img src={tab.icon_url} alt="Custom icon preview" /> : <div className="iconPreviewPlaceholder">No custom icon</div>}
-                </div>
-                <div className="iconControls">
-                  <div className="buttonRow">
-                    <button type="button" onClick={() => triggerIconPick(index)}>Upload Icon</button>
-                    <button type="button" className="secondary" onClick={() => clearIcon(index)}>Clear Icon</button>
-                  </div>
-                  <input id={`icon-upload-${index}`} type="file" accept="image/*" hidden onChange={(e) => handleIconUpload(index, e.target.files?.[0] || null)} />
-                  <p className="muted">Uploaded icons are stored with the draft and published to the live endpoint.</p>
-                </div>
-              </div>
-            </div>
-          ))}
+        <div className="toolbar toolbarSpaced">
+          <div className="row wrap">
+            <button onClick={saveDraft} disabled={loading}>{loading ? 'Working…' : 'Save Draft'}</button>
+            <button onClick={publishWorkspace} disabled={loading}>{loading ? 'Working…' : 'Publish Live Workspace'}</button>
+          </div>
+          <p className="publishMeta">{org.published_at ? `Live published ${new Date(org.published_at).toLocaleString()}` : 'Nothing published yet.'}</p>
         </div>
+      </section>
 
-        <div className="toolbar">
+      <section className="card">
+        <div className="sectionHeader">
+          <h2>Tabs</h2>
           <button onClick={addTab} className="secondary">Add Tab</button>
         </div>
 
-        <p id="status" className="muted">{status}</p>
-      </div>
+        <div className="tabGridList">
+          {tabs.map((tab, index) => (
+            <article className="tabCard" key={index}>
+              <div className="tabCardHeader">
+                <h3>Tab {index + 1}</h3>
+                <div className="smallActions">
+                  <button type="button" className="secondary iconBtn" onClick={() => moveTab(index, -1)}>↑</button>
+                  <button type="button" className="secondary iconBtn" onClick={() => moveTab(index, 1)}>↓</button>
+                  <button type="button" className="secondary iconBtn" onClick={() => removeTab(index)}>✕</button>
+                </div>
+              </div>
+
+              <div className="tabMainRow">
+                <label>Title<input value={tab.title} onChange={(e) => updateTab(index, 'title', e.target.value)} placeholder="Tab title" /></label>
+                <label>URL<input value={tab.url} onChange={(e) => updateTab(index, 'url', e.target.value)} placeholder="https://example.com" /></label>
+              </div>
+
+              <div className="iconUploadRow">
+                <div className={`iconPreviewBox ${tab.icon_url ? 'hasImage' : ''}`}>
+                  {tab.icon_url ? <img src={tab.icon_url} alt={`${tab.title || 'Tab'} icon preview`} /> : <div className="iconPreviewPlaceholder">No custom icon</div>}
+                </div>
+                <div className="iconControls">
+                  <div className="row wrap">
+                    <button type="button" onClick={() => triggerIconPick(index)}>Upload Icon</button>
+                    <button type="button" className="secondary" onClick={() => clearIcon(index)}>Clear Icon</button>
+                  </div>
+                  <input id={`icon-upload-${index}`} className="hiddenInput" type="file" accept="image/*" onChange={(e) => handleIconUpload(index, e.target.files?.[0] || null)} />
+                  <div className="dropZone" onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; }} onDrop={(e) => { e.preventDefault(); handleIconUpload(index, e.dataTransfer.files?.[0] || null); }}>
+                    <strong>Drag & drop icon here</strong>
+                    <span>or click Upload Icon</span>
+                  </div>
+                  <div className="helpText">Use a square PNG when possible. 256×256 or 512×512 works best. Uploaded icons are stored with the draft and published to the live endpoint.</div>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+
+        <p className="statusText">{status}</p>
+      </section>
     </main>
   );
 }
