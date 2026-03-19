@@ -15,7 +15,7 @@ const HARDCODED_MVP_ORG = {
   orgName: 'Henry County Public Schools',
   orgCode: 'henry-county',
   emailDomain: 'henry.k12.va.us',
-  configUrl: 'http://localhost:3003/api/org/henry-county/workspace',
+  configUrl: 'https://dock-production-mvp.vercel.app/api/org/henry-county/workspace',
   syncMode: 'hardcoded-mvp',
   joinedAt: Date.now(),
   lastSyncedAt: 0,
