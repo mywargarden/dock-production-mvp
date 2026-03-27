@@ -11,16 +11,6 @@ type TabRow = {
   is_locked?: boolean
 }
 
-type UserMemory = {
-  id: string
-  user_id: string
-  title: string | null
-  url: string
-  icon_url: string | null
-  created_at: string
-  updated_at: string
-}
-
 type Organization = {
   id?: string
   name: string
@@ -30,8 +20,7 @@ type Organization = {
   max_users: number
   published_at?: string | null
   updated_at?: string | null
-  draft_workspace_name?: string | null
-}
+  draft_workspace_name?: st
 
 const INITIAL_TABS: TabRow[] = [
   { title: 'Gmail', url: 'https://mail.google.com/' },
@@ -60,9 +49,6 @@ export default function Home() {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [liveVersion, setLiveVersion] = useState<number>(1)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [userMemories, setUserMemories] = useState<UserMemory[]>([])
-  const [userMemoriesLoading, setUserMemoriesLoading] = useState(false)
-  const [memoryForm, setMemoryForm] = useState({ title: '', url: '', icon_url: '' })
 
   const apiPreview = useMemo(
     () => `/api/org/${encodeURIComponent(org.org_code || 'district')}/workspace`,
@@ -77,25 +63,6 @@ export default function Home() {
     [org.org_code]
   )
 
-  async function loadUserMemories(userId: string) {
-    setUserMemoriesLoading(true)
-    try {
-      const res = await fetch('/api/user/memories', {
-        headers: {
-          'x-user-id': userId
-        }
-      })
-
-      const data = await res.json()
-      const memories = Array.isArray(data?.memories) ? data.memories : []
-      setUserMemories(memories)
-    } catch (error) {
-      console.error('Failed to load user memories', error)
-    } finally {
-      setUserMemoriesLoading(false)
-    }
-  }
-
   useEffect(() => {
     let active = true
 
@@ -106,10 +73,6 @@ export default function Home() {
 
       setUser(u)
       setCurrentUserId(u?.id || null)
-
-      if (u?.id) {
-        await loadUserMemories(u.id)
-      }
     }
 
     loadUser()
@@ -295,70 +258,6 @@ export default function Home() {
     setStatus('Icon uploaded. Save draft or publish live when ready.')
   }
 
-  async function savePersonalMemory() {
-    try {
-      if (!currentUserId) {
-        setStatus('Sign in to save personal memories.')
-        return
-      }
-
-      const title = memoryForm.title.trim()
-      const url = normalizedUrl(memoryForm.url)
-      const icon_url = memoryForm.icon_url.trim()
-
-      if (!url) {
-        setStatus('Personal memory URL is required.')
-        return
-      }
-
-      setLoading(true)
-      const response = await fetch('/api/user/memories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-user-id': currentUserId
-        },
-        body: JSON.stringify({ title, url, icon_url })
-      })
-
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(result?.error || 'Failed to save personal memory.')
-      }
-
-      setMemoryForm({ title: '', url: '', icon_url: '' })
-      await loadUserMemories(currentUserId)
-      setStatus('Personal memory saved to your hosted library.')
-    } catch (error: any) {
-      setStatus(error?.message || 'Failed to save personal memory.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function deletePersonalMemory(memoryId: string) {
-    try {
-      if (!currentUserId) return
-      setLoading(true)
-      const response = await fetch(`/api/user/memories?id=${encodeURIComponent(memoryId)}`, {
-        method: 'DELETE',
-        headers: {
-          'x-user-id': currentUserId
-        }
-      })
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(result?.error || 'Failed to delete personal memory.')
-      }
-      await loadUserMemories(currentUserId)
-      setStatus('Personal memory removed.')
-    } catch (error: any) {
-      setStatus(error?.message || 'Failed to delete personal memory.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   async function saveDraft() {
     try {
       setLoading(true)
@@ -407,6 +306,35 @@ export default function Home() {
       setStatus(error?.message || 'Draft save failed.')
     } finally {
       setLoading(false)
+    }
+  }
+
+  async function testSaveMemory() {
+    try {
+      if (!currentUserId) {
+        alert('No current user ID found.')
+        return
+      }
+
+      const response = await fetch('/api/user/memories', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-user-id': currentUserId
+        },
+        body: JSON.stringify({
+          title: 'Test Memory',
+          url: 'https://mail.google.com/',
+          icon_url: ''
+        })
+      })
+
+      const result = await response.json()
+      console.log('POST /api/user/memories result:', result)
+      alert(JSON.stringify(result, null, 2))
+    } catch (error) {
+      console.error(error)
+      alert('Failed to save memory.')
     }
   }
 
@@ -517,9 +445,7 @@ export default function Home() {
       setLastSavedDraftAt(publishTime)
       setLiveVersion(nextVersion || 1)
       setHasUnsavedChanges(false)
-      setStatus(
-        `Published live workspace v${nextVersion || 1}. Live endpoint ready at ${liveApiUrl}`
-      )
+      setStatus(`Published live workspace v${nextVersion || 1}. Live endpoint ready at ${liveApiUrl}`)
     } catch (error: any) {
       setStatus(error?.message || 'Publish failed.')
     } finally {
@@ -539,13 +465,21 @@ export default function Home() {
         {!user ? (
           <div className="row wrap" style={{ marginTop: 12 }}>
             <button type="button" onClick={signIn}>
-              Sign in with email
+              Login with Google
             </button>
           </div>
         ) : (
           <div style={{ marginTop: 12 }}>
-            <p style={{ fontSize: 12, color: '#667085' }}>Logged in as: {user.email}</p>
+            <p style={{ fontSize: 12, color: '#667085' }}>
+              Logged in as: {user.email}
+            </p>
+            <p style={{ fontSize: 12, color: '#667085' }}>
+              Current User ID: {currentUserId || 'Not logged in'}
+            </p>
             <div className="row wrap" style={{ marginTop: 12 }}>
+              <button type="button" className="secondary" onClick={testSaveMemory}>
+                Test Save Memory
+              </button>
               <button type="button" className="secondary" onClick={signOut}>
                 Logout
               </button>
@@ -801,10 +735,7 @@ export default function Home() {
       </div>
 
       <div className="card actionBarCard">
-        <div
-          className="row wrap"
-          style={{ justifyContent: 'space-between', alignItems: 'center' }}
-        >
+        <div className="row wrap" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
           <div className="row wrap">
             <button type="button" className="secondary" onClick={saveDraft} disabled={loading}>
               {loading ? 'Working…' : 'Save Draft'}
