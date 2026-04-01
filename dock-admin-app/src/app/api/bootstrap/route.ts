@@ -28,15 +28,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Missing domain or orgCode' }, { status: 400 });
     }
 
-    let query = supabase.from('organizations').select('id, name, org_code, email_domain, plan, max_users');
-    if (orgCode) query = query.eq('org_code', orgCode);
-    else query = query.eq('email_domain', domain);
+    let query = supabase
+      .from('organizations')
+      .select('id, name, org_code, email_domain, plan, max_users, created_at');
 
-    const { data: org, error } = await query.maybeSingle();
+    if (orgCode) {
+      query = query.eq('org_code', orgCode).limit(1);
+    } else {
+      query = query
+        .eq('email_domain', domain)
+        .order('created_at', { ascending: false })
+        .limit(1);
+    }
+
+    const { data: orgRows, error } = await query;
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
+
+    const org = Array.isArray(orgRows) ? orgRows[0] : null;
 
     if (!org) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
