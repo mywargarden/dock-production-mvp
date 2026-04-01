@@ -1,174 +1,58 @@
-import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
-function getServerSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabase = createClient(
+  process.env.SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+);
 
-  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
-  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
-
-  return createClient(url, serviceRoleKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
-
-function sanitizeText(value: unknown, max = 500) {
-  return String(value || '').trim().slice(0, max);
-}
-
-function sanitizeLongText(value: unknown, max = 2_000_000) {
-  return String(value || '').trim().slice(0, max);
-}
-
-export async function GET(request: NextRequest) {
+export async function GET(req: Request) {
   try {
-    const supabase = getServerSupabase();
-    const userId = request.headers.get('x-user-id');
+    const userId = new URL(req.url).searchParams.get('user_id');
 
     if (!userId) {
-      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing user_id' }, { status: 400 });
     }
 
     const { data, error } = await supabase
-      .from('user_memories')
+      .from('personal_memories') // ✅ FIXED TABLE
       .select('*')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (error) throw error;
 
-    return NextResponse.json({ memories: data || [] });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Unknown server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ memories: data });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
 
-export async function POST(request: NextRequest) {
+export async function POST(req: Request) {
   try {
-    const supabase = getServerSupabase();
-    const userId = request.headers.get('x-user-id');
+    const body = await req.json();
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
+    const { user_id, url, title, favicon, screenshot } = body;
+
+    if (!user_id || !url) {
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
     }
 
-    const body = await request.json();
-
-    const title = sanitizeText(body?.title, 120);
-    const url = sanitizeText(body?.url, 2000);
-    const icon_url = sanitizeLongText(body?.icon_url, 500000);
-    const screenshot_data_url = sanitizeLongText(body?.screenshot_data_url, 2_000_000);
-    const screenshot_blocked = Boolean(body?.screenshot_blocked);
-    const reason = sanitizeText(body?.reason, 500);
-    const local_id = sanitizeText(body?.local_id, 120);
-
-    if (!url) {
-      return NextResponse.json({ error: 'URL is required' }, { status: 400 });
-    }
-
-    const { data: existing, error: existingError } = await supabase
-      .from('user_memories')
-      .select('*')
-      .eq('user_id', userId)
-      .eq('url', url)
-      .order('updated_at', { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    if (existingError) {
-      return NextResponse.json({ error: existingError.message }, { status: 500 });
-    }
-
-    if (existing?.id) {
-      const { data, error } = await supabase
-        .from('user_memories')
-        .update({
-          title,
-          icon_url: icon_url || null,
-          screenshot_data_url: screenshot_data_url || null,
-          screenshot_blocked,
-          reason: reason || null,
-          local_id: local_id || existing.local_id || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', existing.id)
-        .eq('user_id', userId)
-        .select('*')
-        .single();
-
-      if (error) {
-        return NextResponse.json({ error: error.message }, { status: 500 });
-      }
-
-      return NextResponse.json({ memory: data, upserted: true });
-    }
-
-    const { data, error } = await supabase
-      .from('user_memories')
-      .insert({
-        user_id: userId,
-        title,
+    const { error } = await supabase.from('personal_memories').insert([
+      {
+        user_id,
         url,
-        icon_url: icon_url || null,
-        screenshot_data_url: screenshot_data_url || null,
-        screenshot_blocked,
-        reason: reason || null,
-        local_id: local_id || null
-      })
-      .select('*')
-      .single();
+        title,
+        icon_url: favicon,
+        screenshot_data_url: screenshot,
+        created_at: new Date().toISOString(),
+      },
+    ]);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+    if (error) throw error;
 
-    return NextResponse.json({ memory: data, upserted: false });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Unknown server error' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const supabase = getServerSupabase();
-    const userId = request.headers.get('x-user-id');
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
-    }
-
-    const memoryId = request.nextUrl.searchParams.get('id');
-
-    if (!memoryId) {
-      return NextResponse.json({ error: 'Missing memory id' }, { status: 400 });
-    }
-
-    const { data, error } = await supabase
-      .from('user_memories')
-      .delete()
-      .eq('id', memoryId)
-      .eq('user_id', userId)
-      .select('*')
-      .maybeSingle();
-
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
-    }
-
-    return NextResponse.json({ deleted: data || null, ok: true });
-  } catch (error: any) {
-    return NextResponse.json(
-      { error: error?.message || 'Unknown server error' },
-      { status: 500 }
-    );
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 }
