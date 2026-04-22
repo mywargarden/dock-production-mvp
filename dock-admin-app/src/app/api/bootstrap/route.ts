@@ -24,8 +24,49 @@ export async function GET(request: NextRequest) {
     const domain = sanitizeValue(request.nextUrl.searchParams.get('domain'));
     const orgCode = sanitizeValue(request.nextUrl.searchParams.get('orgCode'));
 
-    if (!domain && !orgCode) {
-      return NextResponse.json({ error: 'Missing domain or orgCode' }, { status: 400 });
+    const authHeader = request.headers.get('authorization') || '';
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+
+    let userId = '';
+    let userEmail = '';
+    let authChecked = false;
+
+    if (token) {
+      authChecked = true;
+
+      const {
+        data: { user },
+        error: authError
+      } = await supabase.auth.getUser(token);
+
+      if (authError || !user) {
+        return NextResponse.json(
+          {
+            error: authError?.message || 'Invalid user token',
+            buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+            liveRoutePatched: true,
+            profileSync: {
+              attempted: false,
+              success: false,
+              reason: 'invalid-user-token'
+            }
+          },
+          { status: 401 }
+        );
+      }
+
+      userId = String(user.id || '').trim();
+      userEmail = sanitizeValue(user.email);
+    }
+
+    const resolvedDomain =
+      domain || (userEmail.includes('@') ? userEmail.split('@')[1] : '');
+
+    if (!resolvedDomain && !orgCode) {
+      return NextResponse.json(
+        { error: 'Missing domain or orgCode' },
+        { status: 400 }
+      );
     }
 
     let query = supabase
@@ -36,21 +77,82 @@ export async function GET(request: NextRequest) {
       query = query.eq('org_code', orgCode).limit(1);
     } else {
       query = query
-        .eq('email_domain', domain)
+        .eq('email_domain', resolvedDomain)
         .order('created_at', { ascending: false })
         .limit(1);
     }
 
-    const { data: orgRows, error } = await query;
+    const { data: orgRows, error: orgError } = await query;
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (orgError) {
+      return NextResponse.json(
+        {
+          error: orgError.message,
+          buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+          liveRoutePatched: true
+        },
+        { status: 500 }
+      );
     }
 
     const org = Array.isArray(orgRows) ? orgRows[0] : null;
 
     if (!org) {
-      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+      return NextResponse.json(
+        {
+          error: 'Organization not found',
+          buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+          liveRoutePatched: true,
+          debug: {
+            requestedDomain: domain,
+            requestedOrgCode: orgCode,
+            resolvedDomain
+          }
+        },
+        { status: 404 }
+      );
+    }
+
+    let profileSync: Record<string, unknown> = {
+      attempted: false,
+      success: false
+    };
+
+    if (userId) {
+      const profilePayload = {
+        id: userId,
+        email: userEmail || null,
+        organization_id: org.id,
+        role: 'member'
+      };
+
+      const { data: upsertedProfile, error: profileError } = await supabase
+        .from('profiles')
+        .upsert(profilePayload, { onConflict: 'id' })
+        .select();
+
+      if (profileError) {
+        return NextResponse.json(
+          {
+            error: profileError.message,
+            buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+            liveRoutePatched: true,
+            profileSync: {
+              attempted: true,
+              success: false,
+              payload: profilePayload
+            }
+          },
+          { status: 500 }
+        );
+      }
+
+      profileSync = {
+        attempted: true,
+        success: true,
+        profileId: userId,
+        rowsReturned: Array.isArray(upsertedProfile) ? upsertedProfile.length : 0
+      };
     }
 
     const origin = request.nextUrl.origin;
@@ -58,6 +160,8 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json(
       {
+        buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+        liveRoutePatched: true,
         organization: {
           id: org.id,
           name: org.name,
@@ -71,7 +175,17 @@ export async function GET(request: NextRequest) {
         workspacePath,
         configUrl: `${origin}${workspacePath}`,
         apiBaseUrl: origin,
-        syncMode: orgCode ? 'org-code' : 'email-domain'
+        syncMode: orgCode ? 'org-code' : 'email-domain',
+        debug: {
+          authChecked,
+          hasToken: Boolean(token),
+          userId: userId || null,
+          userEmail: userEmail || null,
+          requestedDomain: domain,
+          requestedOrgCode: orgCode,
+          resolvedDomain
+        },
+        profileSync
       },
       {
         headers: {
@@ -84,7 +198,11 @@ export async function GET(request: NextRequest) {
     );
   } catch (error: any) {
     return NextResponse.json(
-      { error: error?.message || 'Unknown server error' },
+      {
+        error: error?.message || 'Unknown server error',
+        buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+        liveRoutePatched: true
+      },
       { status: 500 }
     );
   }
