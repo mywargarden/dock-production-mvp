@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-function getServiceSupabase() {
+function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
@@ -11,44 +11,6 @@ function getServiceSupabase() {
   return createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
-}
-
-function getAuthSupabase() {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
-  if (!anonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
-
-  return createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  });
-}
-
-async function requireUser(request: NextRequest) {
-  const authHeader =
-    request.headers.get('authorization') ||
-    request.headers.get('Authorization') ||
-    '';
-
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-
-  if (!token) {
-    return {
-      error: NextResponse.json({ error: 'Missing bearer token' }, { status: 401 })
-    };
-  }
-
-  const auth = getAuthSupabase();
-  const { data, error } = await auth.auth.getUser(token);
-
-  if (error || !data?.user?.id) {
-    return {
-      error: NextResponse.json({ error: 'Invalid auth token' }, { status: 401 })
-    };
-  }
-
-  return { user: data.user };
 }
 
 function sanitizeText(value: unknown, max = 500) {
@@ -61,27 +23,24 @@ function sanitizeLongText(value: unknown, max = 2_000_000) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireUser(request);
-    if ('error' in authResult) return authResult.error;
+    const supabase = getServerSupabase();
+    const userId = request.headers.get('x-user-id');
 
-    const supabase = getServiceSupabase();
-    const userId = authResult.user.id;
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
+    }
 
     const { data, error } = await supabase
-      .from('personal_memories')
+      .from('user_memories')
       .select('*')
       .eq('user_id', userId)
-      .is('deleted_at', null)
       .order('updated_at', { ascending: false });
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({
-      user_id: userId,
-      memories: data || []
-    });
+    return NextResponse.json({ memories: data || [] });
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || 'Unknown server error' },
@@ -92,11 +51,13 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requireUser(request);
-    if ('error' in authResult) return authResult.error;
+    const supabase = getServerSupabase();
+    const userId = request.headers.get('x-user-id');
 
-    const supabase = getServiceSupabase();
-    const userId = authResult.user.id;
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
+    }
+
     const body = await request.json();
 
     const title = sanitizeText(body?.title, 120);
@@ -112,11 +73,10 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: existing, error: existingError } = await supabase
-      .from('personal_memories')
+      .from('user_memories')
       .select('*')
       .eq('user_id', userId)
       .eq('url', url)
-      .is('deleted_at', null)
       .order('updated_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -127,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     if (existing?.id) {
       const { data, error } = await supabase
-        .from('personal_memories')
+        .from('user_memories')
         .update({
           title,
           icon_url: icon_url || null,
@@ -135,7 +95,6 @@ export async function POST(request: NextRequest) {
           screenshot_blocked,
           reason: reason || null,
           local_id: local_id || existing.local_id || null,
-          deleted_at: null,
           updated_at: new Date().toISOString()
         })
         .eq('id', existing.id)
@@ -147,11 +106,11 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: error.message }, { status: 500 });
       }
 
-      return NextResponse.json({ user_id: userId, memory: data, upserted: true });
+      return NextResponse.json({ memory: data, upserted: true });
     }
 
     const { data, error } = await supabase
-      .from('personal_memories')
+      .from('user_memories')
       .insert({
         user_id: userId,
         title,
@@ -169,7 +128,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ user_id: userId, memory: data, upserted: false });
+    return NextResponse.json({ memory: data, upserted: false });
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || 'Unknown server error' },
@@ -180,82 +139,32 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const supabase = getServerSupabase();
+    const userId = request.headers.get('x-user-id');
 
-
-    const requestUrl = new URL(request.url);
-
-// SHARE MODE (no auth)
-if (requestUrl.searchParams.get('share') === '1') {
-  const body = await request.json();
-  const payload = body?.payload || body;
-
-  if (!payload) {
-    return NextResponse.json({ error: 'Missing share payload' }, { status: 400 });
-  }
-
-  const supabase = getServiceSupabase();
-  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
-
-  const { error } = await supabase
-    .from('dock_shares')
-    .insert({
-      id,
-      payload,
-      created_by: null,
-      extension_id: null,
-      expires_at: null
-    });
-
-  if (error) {
-    return NextResponse.json(
-      { error: error.message, stage: 'share-insert' },
-      { status: 500 }
-    );
-  }
-
-  const appUrl =
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    'https://dock-production-mvp.vercel.app';
-
-  return NextResponse.json({
-    success: true,
-    id,
-    url: `${appUrl}/s/${id}`
-  });
-}
-    const authResult = await requireUser(request);
-    if ('error' in authResult) return authResult.error;
-
-    const supabase = getServiceSupabase();
-    const userId = authResult.user.id;
-
-    const memoryId = request.nextUrl.searchParams.get('id');
-    const memoryUrl = request.nextUrl.searchParams.get('url');
-
-    if (!memoryId && !memoryUrl) {
-      return NextResponse.json({ error: 'Missing memory id or url' }, { status: 400 });
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing x-user-id header' }, { status: 400 });
     }
 
-    let query = supabase
-      .from('personal_memories')
-      .update({
-        deleted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
-      })
+    const memoryId = request.nextUrl.searchParams.get('id');
+
+    if (!memoryId) {
+      return NextResponse.json({ error: 'Missing memory id' }, { status: 400 });
+    }
+
+    const { data, error } = await supabase
+      .from('user_memories')
+      .delete()
+      .eq('id', memoryId)
       .eq('user_id', userId)
-      .select('*');
-
-    if (memoryId) query = query.eq('id', memoryId);
-    if (memoryUrl) query = query.eq('url', memoryUrl);
-
-    const { data, error } = await query;
+      .select('*')
+      .maybeSingle();
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ user_id: userId, deleted: data || null, ok: true });
+    return NextResponse.json({ deleted: data || null, ok: true });
   } catch (error: any) {
     return NextResponse.json(
       { error: error?.message || 'Unknown server error' },
