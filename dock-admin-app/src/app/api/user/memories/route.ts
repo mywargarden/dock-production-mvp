@@ -180,6 +180,50 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+
+
+    const requestUrl = new URL(request.url);
+
+// SHARE MODE (no auth)
+if (requestUrl.searchParams.get('share') === '1') {
+  const body = await request.json();
+  const payload = body?.payload || body;
+
+  if (!payload) {
+    return NextResponse.json({ error: 'Missing share payload' }, { status: 400 });
+  }
+
+  const supabase = getServiceSupabase();
+  const id = crypto.randomUUID().replace(/-/g, '').slice(0, 10);
+
+  const { error } = await supabase
+    .from('dock_shares')
+    .insert({
+      id,
+      payload,
+      created_by: null,
+      extension_id: null,
+      expires_at: null
+    });
+
+  if (error) {
+    return NextResponse.json(
+      { error: error.message, stage: 'share-insert' },
+      { status: 500 }
+    );
+  }
+
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    'https://dock-production-mvp.vercel.app';
+
+  return NextResponse.json({
+    success: true,
+    id,
+    url: `${appUrl}/s/${id}`
+  });
+}
     const authResult = await requireUser(request);
     if ('error' in authResult) return authResult.error;
 
