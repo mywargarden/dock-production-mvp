@@ -21,6 +21,57 @@ function sanitizeLongText(value: unknown, max = 2_000_000) {
   return String(value || '').trim().slice(0, max);
 }
 
+async function uploadScreenshotToStorage(
+  supabase: ReturnType<typeof createClient>,
+  userId: string,
+  screenshotDataUrl: string
+) {
+  if (!screenshotDataUrl || !screenshotDataUrl.startsWith('data:image/')) {
+    return null;
+  }
+
+  const match = screenshotDataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/);
+
+  if (!match) {
+    return null;
+  }
+
+  const contentType = match[1];
+  const base64 = match[2];
+  const buffer = Buffer.from(base64, 'base64');
+
+  if (buffer.length > 1_500_000) {
+    return null;
+  }
+
+  const ext =
+    contentType.includes('jpeg') || contentType.includes('jpg')
+      ? 'jpg'
+      : contentType.includes('webp')
+        ? 'webp'
+        : 'png';
+
+  const filePath = `${userId}/${crypto.randomUUID()}.${ext}`;
+
+  const { error: uploadError } = await supabase.storage
+    .from('memory-screenshots')
+    .upload(filePath, buffer, {
+      contentType,
+      upsert: true
+    });
+
+  if (uploadError) {
+    console.error('Screenshot upload failed:', uploadError.message);
+    return null;
+  }
+
+  const { data } = supabase.storage
+    .from('memory-screenshots')
+    .getPublicUrl(filePath);
+
+  return data.publicUrl || null;
+}
+
 export async function GET(request: NextRequest) {
   try {
     const supabase = getServerSupabase();
@@ -64,7 +115,8 @@ export async function POST(request: NextRequest) {
     const title = sanitizeText(body?.title, 120);
     const url = sanitizeText(body?.url, 2000);
     const icon_url = sanitizeLongText(body?.icon_url, 500000);
-    const screenshot_url = sanitizeLongText(body?.screenshot_url, 2000);
+    const incomingScreenshotDataUrl = sanitizeLongText(body?.screenshot_data_url, 2_000_000);
+    let screenshot_url = sanitizeLongText(body?.screenshot_url, 2000);
     const screenshot_blocked = Boolean(body?.screenshot_blocked);
     const reason = sanitizeText(body?.reason, 500);
     const local_id = sanitizeText(body?.local_id, 120);
@@ -73,9 +125,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'URL is required' }, { status: 400 });
     }
 
+    if (!screenshot_url && incomingScreenshotDataUrl) {
+      const uploadedUrl = await uploadScreenshotToStorage(
+        supabase,
+        userId,
+        incomingScreenshotDataUrl
+      );
+
+      if (uploadedUrl) {
+        screenshot_url = uploadedUrl;
+      }
+    }
+
     const { data: existing, error: existingError } = await supabase
       .from('personal_memories')
-      .select('id, local_id')
+      .select('id, local_id, screenshot_url')
       .eq('user_id', userId)
       .eq('url', url)
       .order('updated_at', { ascending: false })
@@ -92,7 +156,7 @@ export async function POST(request: NextRequest) {
         .update({
           title,
           icon_url: icon_url || null,
-          screenshot_url: screenshot_url || null,
+          screenshot_url: screenshot_url || existing.screenshot_url || null,
           screenshot_blocked,
           reason: reason || null,
           local_id: local_id || existing.local_id || null,
