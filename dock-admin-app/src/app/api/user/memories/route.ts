@@ -32,9 +32,10 @@ export async function GET(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('personal_memories')
-      .select('*')
+      .select('id, user_id, title, url, icon_url, screenshot_url, screenshot_blocked, reason, local_id, created_at, updated_at')
       .eq('user_id', userId)
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false })
+      .limit(50);
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 });
@@ -63,7 +64,7 @@ export async function POST(request: NextRequest) {
     const title = sanitizeText(body?.title, 120);
     const url = sanitizeText(body?.url, 2000);
     const icon_url = sanitizeLongText(body?.icon_url, 500000);
-    const screenshot_data_url = sanitizeLongText(body?.screenshot_data_url, 2_000_000);
+    const screenshot_url = sanitizeLongText(body?.screenshot_url, 2000);
     const screenshot_blocked = Boolean(body?.screenshot_blocked);
     const reason = sanitizeText(body?.reason, 500);
     const local_id = sanitizeText(body?.local_id, 120);
@@ -74,7 +75,7 @@ export async function POST(request: NextRequest) {
 
     const { data: existing, error: existingError } = await supabase
       .from('personal_memories')
-      .select('*')
+      .select('id, local_id')
       .eq('user_id', userId)
       .eq('url', url)
       .order('updated_at', { ascending: false })
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
         .update({
           title,
           icon_url: icon_url || null,
-          screenshot_data_url: screenshot_data_url || null,
+          screenshot_url: screenshot_url || null,
           screenshot_blocked,
           reason: reason || null,
           local_id: local_id || existing.local_id || null,
@@ -99,7 +100,7 @@ export async function POST(request: NextRequest) {
         })
         .eq('id', existing.id)
         .eq('user_id', userId)
-        .select('*')
+        .select('id, user_id, title, url, icon_url, screenshot_url, screenshot_blocked, reason, local_id, created_at, updated_at')
         .single();
 
       if (error) {
@@ -116,12 +117,12 @@ export async function POST(request: NextRequest) {
         title,
         url,
         icon_url: icon_url || null,
-        screenshot_data_url: screenshot_data_url || null,
+        screenshot_url: screenshot_url || null,
         screenshot_blocked,
         reason: reason || null,
         local_id: local_id || null
       })
-      .select('*')
+      .select('id, user_id, title, url, icon_url, screenshot_url, screenshot_blocked, reason, local_id, created_at, updated_at')
       .single();
 
     if (error) {
@@ -157,7 +158,7 @@ export async function DELETE(request: NextRequest) {
       .delete()
       .eq('id', memoryId)
       .eq('user_id', userId)
-      .select('*')
+      .select('id, user_id, title, url')
       .maybeSingle();
 
     if (error) {
