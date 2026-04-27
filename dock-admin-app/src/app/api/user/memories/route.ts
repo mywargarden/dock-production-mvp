@@ -23,7 +23,7 @@ function sanitizeLongText(value: unknown, max = 2_000_000) {
 }
 
 async function uploadScreenshotToStorage(
-  supabase: ReturnType<typeof createClient>,
+  supabase: any,
   userId: string,
   screenshotDataUrl: string
 ) {
