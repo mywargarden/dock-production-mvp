@@ -31,7 +31,7 @@ export async function GET(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('user_memories')
+      .from('personal_memories')
       .select('*')
       .eq('user_id', userId)
       .order('updated_at', { ascending: false });
@@ -73,7 +73,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data: existing, error: existingError } = await supabase
-      .from('user_memories')
+      .from('personal_memories')
       .select('*')
       .eq('user_id', userId)
       .eq('url', url)
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     if (existing?.id) {
       const { data, error } = await supabase
-        .from('user_memories')
+        .from('personal_memories')
         .update({
           title,
           icon_url: icon_url || null,
@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('user_memories')
+      .from('personal_memories')
       .insert({
         user_id: userId,
         title,
@@ -153,7 +153,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     const { data, error } = await supabase
-      .from('user_memories')
+      .from('personal_memories')
       .delete()
       .eq('id', memoryId)
       .eq('user_id', userId)
