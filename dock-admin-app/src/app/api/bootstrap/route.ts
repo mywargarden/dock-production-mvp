@@ -1,207 +1,388 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-function getServerSupabase() {
+const BUILD_FINGERPRINT = 'bootstrap-verified-domain-debug-v2';
+const ORG_CACHE_TTL_MS = 60 * 1000;
+
+type OrgRow = {
+  id: string;
+  name: string;
+  org_code: string;
+  email_domain: string | null;
+  plan: string | null;
+  max_users: number | null;
+};
+
+type ProfileSyncResult = {
+  ok: boolean;
+  phase: string;
+  reason: string;
+  details?: Record<string, unknown> | null;
+};
+
+let serviceSupabaseSingleton: SupabaseClient | null = null;
+let authSupabaseSingleton: SupabaseClient | null = null;
+const orgCache = new Map<string, { ts: number; org: OrgRow }>();
+
+function getServiceSupabase() {
+  if (serviceSupabaseSingleton) return serviceSupabaseSingleton;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
+  if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY');
+
+  serviceSupabaseSingleton = createClient(url, serviceRoleKey, {
+    auth: { persistSession: false, autoRefreshToken: false }
+  });
+  return serviceSupabaseSingleton;
+}
+
+function getAuthSupabase() {
+  if (authSupabaseSingleton) return authSupabaseSingleton;
+
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL');
-  if (!serviceRoleKey && !anonKey) throw new Error('Missing Supabase key');
+  if (!anonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY');
 
-  return createClient(url, serviceRoleKey || anonKey!, {
+  authSupabaseSingleton = createClient(url, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
+  return authSupabaseSingleton;
 }
 
-function sanitizeValue(value: unknown) {
-  return String(value || '').trim().toLowerCase();
+function normalize(value: unknown): string {
+  return String(value || '').trim();
+}
+
+function normalizeDomain(value: unknown): string {
+  const raw = normalize(value).toLowerCase();
+  if (!raw) return '';
+  if (raw.includes('@')) {
+    const parts = raw.split('@');
+    return normalize(parts[parts.length - 1]).toLowerCase();
+  }
+  return raw;
+}
+
+function extractOrgFromDomainRecord(record: any): OrgRow | null {
+  const joined = record?.organizations;
+  if (Array.isArray(joined)) return (joined[0] || null) as OrgRow | null;
+  return (joined || null) as OrgRow | null;
+}
+
+function buildOrgCacheKey(requestedOrgCode: string, emailDomain: string) {
+  return requestedOrgCode ? `org:${requestedOrgCode}` : `domain:${emailDomain}`;
+}
+
+async function resolveOrganization(
+  supabase: SupabaseClient,
+  requestedOrgCode: string,
+  emailDomain: string
+) {
+  const normalizedEmailDomain = normalizeDomain(emailDomain);
+  const cacheKey = buildOrgCacheKey(requestedOrgCode, normalizedEmailDomain);
+  const cached = orgCache.get(cacheKey);
+  if (cached && (Date.now() - cached.ts) < ORG_CACHE_TTL_MS) {
+    return {
+      data: cached.org,
+      error: null,
+      cacheHit: true,
+      source: requestedOrgCode ? 'org-code' : 'verified-domain',
+      domainRecord: null as any
+    };
+  }
+
+  if (requestedOrgCode) {
+    const { data, error } = await supabase
+      .from('organizations')
+      .select('id, name, org_code, email_domain, plan, max_users')
+      .eq('org_code', requestedOrgCode)
+      .maybeSingle();
+
+    if (!error && data) {
+      orgCache.set(cacheKey, { ts: Date.now(), org: data as OrgRow });
+    }
+
+    return {
+      data: (data as OrgRow | null),
+      error,
+      cacheHit: false,
+      source: 'org-code',
+      domainRecord: null as any
+    };
+  }
+
+  if (!normalizedEmailDomain) {
+    return {
+      data: null,
+      error: null,
+      cacheHit: false,
+      source: 'missing-domain',
+      domainRecord: null as any
+    };
+  }
+
+  const { data: domainRecord, error } = await supabase
+    .from('organization_domains')
+    .select(`
+      organization_id,
+      domain,
+      normalized_domain,
+      status,
+      domain_type,
+      organizations (
+        id,
+        name,
+        org_code,
+        email_domain,
+        plan,
+        max_users
+      )
+    `)
+    .eq('normalized_domain', normalizedEmailDomain)
+    .eq('status', 'verified')
+    .maybeSingle();
+
+  if (error) {
+    return {
+      data: null,
+      error,
+      cacheHit: false,
+      source: 'verified-domain',
+      domainRecord: null as any
+    };
+  }
+
+  const org = extractOrgFromDomainRecord(domainRecord);
+  if (org) {
+    orgCache.set(cacheKey, { ts: Date.now(), org });
+  }
+
+  return {
+    data: org,
+    error: null,
+    cacheHit: false,
+    source: 'verified-domain',
+    domainRecord: domainRecord || null
+  };
+}
+
+async function syncProfileIfPossible(
+  supabase: SupabaseClient,
+  userId: string,
+  userEmail: string,
+  org: { id: string }
+): Promise<ProfileSyncResult> {
+  if (!userId || !org?.id) {
+    return {
+      ok: false,
+      phase: 'precheck',
+      reason: 'missing-user-or-org',
+      details: { userIdPresent: !!userId, orgIdPresent: !!org?.id }
+    };
+  }
+
+  const { data: existing, error: existingError } = await supabase
+    .from('profiles')
+    .select('id, role, organization_id, email')
+    .eq('id', userId)
+    .maybeSingle();
+
+  if (existingError) {
+    return {
+      ok: false,
+      phase: 'select-existing',
+      reason: existingError.message,
+      details: { code: (existingError as any)?.code || null, hint: (existingError as any)?.hint || null }
+    };
+  }
+
+  const normalizedEmail = userEmail || null;
+  const normalizedRole = normalize(existing?.role) || 'member';
+  const sameOrg = normalize(existing?.organization_id) === org.id;
+  const sameEmail = normalize(existing?.email) === normalize(normalizedEmail);
+  const sameRole = normalize(existing?.role) === normalizedRole;
+
+  if (existing?.id && sameOrg && sameEmail && sameRole) {
+    return {
+      ok: true,
+      phase: 'noop',
+      reason: 'unchanged',
+      details: { existing }
+    };
+  }
+
+  const payload = {
+    id: userId,
+    email: normalizedEmail,
+    organization_id: org.id,
+    role: normalizedRole,
+  };
+
+  const { data: upserted, error: profileError } = await supabase
+    .from('profiles')
+    .upsert(payload, { onConflict: 'id' })
+    .select('id, email, organization_id, role')
+    .maybeSingle();
+
+  if (profileError) {
+    return {
+      ok: false,
+      phase: 'upsert',
+      reason: profileError.message,
+      details: { code: (profileError as any)?.code || null, hint: (profileError as any)?.hint || null, payload }
+    };
+  }
+
+  return {
+    ok: true,
+    phase: existing?.id ? 'updated' : 'inserted',
+    reason: existing?.id ? 'updated' : 'inserted',
+    details: { payload, existing: existing || null, saved: upserted || null }
+  };
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const supabase = getServerSupabase();
-    const domain = sanitizeValue(request.nextUrl.searchParams.get('domain'));
-    const orgCode = sanitizeValue(request.nextUrl.searchParams.get('orgCode'));
+    const url = new URL(request.url);
+    const requestedOrgCode = normalize(url.searchParams.get('orgCode'));
+    const requestedDomain = normalizeDomain(url.searchParams.get('domain'));
 
-    const authHeader = request.headers.get('authorization') || '';
+    const supabase = getServiceSupabase();
+    const authSupabase = getAuthSupabase();
+
+    const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
     const token = authHeader.replace(/^Bearer\s+/i, '').trim();
 
-    let userId = '';
     let userEmail = '';
-    let authChecked = false;
+    let userId = '';
+    let authStatus = 'missing-token';
 
     if (token) {
-      authChecked = true;
+      const { data: { user }, error: userError } = await authSupabase.auth.getUser(token);
 
-      const {
-        data: { user },
-        error: authError
-      } = await supabase.auth.getUser(token);
-
-      if (authError || !user) {
-        return NextResponse.json(
-          {
-            error: authError?.message || 'Invalid user token',
-            buildFingerprint: 'bootstrap-auth-profile-sync-v1',
-            liveRoutePatched: true,
-            profileSync: {
-              attempted: false,
-              success: false,
-              reason: 'invalid-user-token'
-            }
-          },
-          { status: 401 }
-        );
+      if (userError || !user) {
+        authStatus = 'invalid-token';
+      } else {
+        authStatus = 'authenticated';
+        userId = normalize(user.id);
+        userEmail = normalize(user.email).toLowerCase();
       }
-
-      userId = String(user.id || '').trim();
-      userEmail = sanitizeValue(user.email);
     }
 
-    const resolvedDomain =
-      domain || (userEmail.includes('@') ? userEmail.split('@')[1] : '');
+    const emailDomain = requestedDomain || normalizeDomain(userEmail);
 
-    if (!resolvedDomain && !orgCode) {
-      return NextResponse.json(
-        { error: 'Missing domain or orgCode' },
-        { status: 400 }
-      );
+    if (!requestedOrgCode && !emailDomain) {
+      return NextResponse.json({ error: 'Missing orgCode or domain' }, { status: 400 });
     }
 
-    let query = supabase
-      .from('organizations')
-      .select('id, name, org_code, email_domain, plan, max_users, created_at');
-
-    if (orgCode) {
-      query = query.eq('org_code', orgCode).limit(1);
-    } else {
-      query = query
-        .eq('email_domain', resolvedDomain)
-        .order('created_at', { ascending: false })
-        .limit(1);
-    }
-
-    const { data: orgRows, error: orgError } = await query;
+    const { data: org, error: orgError, cacheHit, source: resolutionSource, domainRecord } = await resolveOrganization(supabase, requestedOrgCode, emailDomain);
 
     if (orgError) {
-      return NextResponse.json(
-        {
-          error: orgError.message,
-          buildFingerprint: 'bootstrap-auth-profile-sync-v1',
-          liveRoutePatched: true
-        },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: orgError.message }, { status: 500 });
     }
-
-    const org = Array.isArray(orgRows) ? orgRows[0] : null;
 
     if (!org) {
-      return NextResponse.json(
-        {
-          error: 'Organization not found',
-          buildFingerprint: 'bootstrap-auth-profile-sync-v1',
-          liveRoutePatched: true,
-          debug: {
-            requestedDomain: domain,
-            requestedOrgCode: orgCode,
-            resolvedDomain
-          }
-        },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
-    let profileSync: Record<string, unknown> = {
-      attempted: false,
-      success: false
+    let profileSync: ProfileSyncResult;
+    if (userId) {
+      profileSync = await syncProfileIfPossible(supabase, userId, userEmail, org);
+      if (!profileSync.ok) {
+        console.error('BOOTSTRAP profile sync failed:', profileSync.reason, profileSync.details || null);
+      }
+    } else {
+      profileSync = {
+        ok: false,
+        phase: 'skipped',
+        reason: authStatus,
+        details: {
+          hasAuthorizationHeader: !!authHeader,
+          tokenPresent: !!token,
+        }
+      };
+    }
+
+    const origin = url.origin;
+    const configUrl = `${origin}/api/org/${encodeURIComponent(org.org_code)}/workspace`;
+    const timestamp = new Date().toISOString();
+    const responsePayload = {
+      organization: {
+        id: org.id,
+        name: org.name,
+        orgCode: org.org_code,
+        emailDomain: org.email_domain || emailDomain,
+      },
+      organizationName: org.name,
+      orgCode: org.org_code,
+      emailDomain: org.email_domain || emailDomain,
+      configUrl,
+      workspacePath: `/api/org/${encodeURIComponent(org.org_code)}/workspace`,
+      apiBaseUrl: origin,
+      license: org.plan || 'free',
+      syncMode: resolutionSource,
+      buildFingerprint: BUILD_FINGERPRINT,
+      liveRoutePatched: true,
+      domainResolution: {
+        source: resolutionSource,
+        strategy: resolutionSource === 'verified-domain' ? 'verified-domain-registry' : resolutionSource,
+        lookupTable: resolutionSource === 'verified-domain' ? 'organization_domains' : 'organizations',
+        lookupColumn: resolutionSource === 'verified-domain' ? 'normalized_domain' : 'org_code',
+        requiredStatus: resolutionSource === 'verified-domain' ? 'verified' : null,
+        verified: resolutionSource === 'verified-domain',
+        domainRegistryMatched: resolutionSource === 'verified-domain',
+        domain: domainRecord?.normalized_domain || emailDomain || null,
+        domainType: domainRecord?.domain_type || null,
+        organizationId: domainRecord?.organization_id || org.id,
+      },
+      profileSync,
+      debug: {
+        route: '/api/bootstrap',
+        buildFingerprint: BUILD_FINGERPRINT,
+        liveRoutePatched: true,
+        requestedOrgCode: requestedOrgCode || null,
+        requestedDomain: requestedDomain || null,
+        resolvedEmailDomain: emailDomain || null,
+        resolutionSource,
+        verifiedDomainDebugLabel: resolutionSource === 'verified-domain' ? 'verified-domain-registry:organization_domains' : resolutionSource,
+        domainRegistryLookupTable: resolutionSource === 'verified-domain' ? 'organization_domains' : null,
+        domainRegistryLookupStatus: resolutionSource === 'verified-domain' ? 'verified' : null,
+        domainRegistryMatched: resolutionSource === 'verified-domain',
+        hasAuthorizationHeader: !!authHeader,
+        tokenPresent: !!token,
+        authStatus,
+        resolvedUserId: userId || null,
+        resolvedUserEmail: userEmail || null,
+        resolvedOrgId: org.id,
+        resolvedOrgCode: org.org_code,
+        profileSyncPhase: profileSync?.phase || null,
+        profileSyncReason: profileSync?.reason || null,
+        cacheHit,
+        hasAnonKey: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+        hasServiceRoleKey: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+        timestamp,
+      },
     };
 
-    if (userId) {
-      const profilePayload = {
-        id: userId,
-        email: userEmail || null,
-        organization_id: org.id,
-        role: 'member'
-      };
-
-      const { data: upsertedProfile, error: profileError } = await supabase
-        .from('profiles')
-        .upsert(profilePayload, { onConflict: 'id' })
-        .select();
-
-      if (profileError) {
-        return NextResponse.json(
-          {
-            error: profileError.message,
-            buildFingerprint: 'bootstrap-auth-profile-sync-v1',
-            liveRoutePatched: true,
-            profileSync: {
-              attempted: true,
-              success: false,
-              payload: profilePayload
-            }
-          },
-          { status: 500 }
-        );
+    return NextResponse.json(responsePayload, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'X-Dock-Build-Fingerprint': BUILD_FINGERPRINT,
+        'X-Dock-Live-Route': 'true',
       }
-
-      profileSync = {
-        attempted: true,
-        success: true,
-        profileId: userId,
-        rowsReturned: Array.isArray(upsertedProfile) ? upsertedProfile.length : 0
-      };
-    }
-
-    const origin = request.nextUrl.origin;
-    const workspacePath = `/api/org/${encodeURIComponent(org.org_code)}/workspace`;
-
+    });
+  } catch (err: any) {
+    console.error('BOOTSTRAP fatal error:', err);
     return NextResponse.json(
       {
-        buildFingerprint: 'bootstrap-auth-profile-sync-v1',
+        error: err?.message || 'Unknown error',
+        buildFingerprint: BUILD_FINGERPRINT,
         liveRoutePatched: true,
-        organization: {
-          id: org.id,
-          name: org.name,
-          orgCode: org.org_code,
-          emailDomain: org.email_domain || ''
-        },
-        license: {
-          plan: org.plan || 'district',
-          maxUsers: Number(org.max_users) || 500
-        },
-        workspacePath,
-        configUrl: `${origin}${workspacePath}`,
-        apiBaseUrl: origin,
-        syncMode: orgCode ? 'org-code' : 'email-domain',
-        debug: {
-          authChecked,
-          hasToken: Boolean(token),
-          userId: userId || null,
-          userEmail: userEmail || null,
-          requestedDomain: domain,
-          requestedOrgCode: orgCode,
-          resolvedDomain
-        },
-        profileSync
-      },
-      {
-        headers: {
-          'Cache-Control': 'no-store, max-age=0',
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, OPTIONS',
-          'Access-Control-Allow-Headers': '*'
-        }
-      }
-    );
-  } catch (error: any) {
-    return NextResponse.json(
-      {
-        error: error?.message || 'Unknown server error',
-        buildFingerprint: 'bootstrap-auth-profile-sync-v1',
-        liveRoutePatched: true
       },
       { status: 500 }
     );
