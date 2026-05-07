@@ -480,15 +480,14 @@ export default function Home() {
           </label>
 
           <label>
-            Organization Code
-            <input
-              value={org.org_code}
-              onChange={(e) => {
-                setOrg((current) => ({ ...current, org_code: e.target.value }))
-                setHasUnsavedChanges(true)
-              }}
-            />
-          </label>
+              Organization Code
+              <input
+                value={org.org_code}
+                readOnly
+                aria-readonly="true"
+                title="Organization code is locked after setup."
+              />
+            </label>
 
           <label>
             Email Domain
