@@ -11,15 +11,6 @@ type TabRow = {
   is_locked?: boolean
 }
 
-type UserMemory = {
-  id: string
-  user_id: string
-  title: string | null
-  url: string
-  icon_url: string | null
-  created_at: string
-  updated_at: string
-}
 
 type Organization = {
   id?: string
@@ -59,10 +50,6 @@ export default function Home() {
   const [lastSavedDraftAt, setLastSavedDraftAt] = useState<string | null>(null)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   const [liveVersion, setLiveVersion] = useState<number>(1)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [userMemories, setUserMemories] = useState<UserMemory[]>([])
-  const [userMemoriesLoading, setUserMemoriesLoading] = useState(false)
-  const [memoryForm, setMemoryForm] = useState({ title: '', url: '', icon_url: '' })
 
   const apiPreview = useMemo(
     () => `/api/org/${encodeURIComponent(org.org_code || 'district')}/workspace`,
@@ -82,26 +69,6 @@ export default function Home() {
     [org.org_code]
   )
 
-  async function loadUserMemories(userId: string) {
-    setUserMemoriesLoading(true)
-    try {
-      const accessToken = await getAccessToken()
-      const res = await fetch('/api/user/memories', {
-        headers: accessToken ? {
-          Authorization: `Bearer ${accessToken}`
-        } : {}
-      })
-
-      const data = await res.json()
-      const memories = Array.isArray(data?.memories) ? data.memories : []
-      setUserMemories(memories)
-    } catch (error) {
-      console.error('Failed to load user memories', error)
-    } finally {
-      setUserMemoriesLoading(false)
-    }
-  }
-
   useEffect(() => {
     let active = true
 
@@ -111,11 +78,7 @@ export default function Home() {
       if (!active) return
 
       setUser(u)
-      setCurrentUserId(u?.id || null)
 
-      if (u?.id) {
-        await loadUserMemories(u.id)
-      }
     }
 
     loadUser()
@@ -322,68 +285,6 @@ export default function Home() {
     )
     setHasUnsavedChanges(true)
     setStatus('Icon uploaded. Save draft or publish live when ready.')
-  }
-
-  async function savePersonalMemory() {
-    try {
-      if (!currentUserId) {
-        setStatus('Sign in to save personal memories.')
-        return
-      }
-
-      const title = memoryForm.title.trim()
-      const url = normalizedUrl(memoryForm.url)
-      const icon_url = memoryForm.icon_url.trim()
-
-      if (!url) {
-        setStatus('Personal memory URL is required.')
-        return
-      }
-
-      setLoading(true)
-      const response = await fetch('/api/user/memories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(await getAccessToken() ? { Authorization: `Bearer ${await getAccessToken()}` } : {})
-        },
-        body: JSON.stringify({ title, url, icon_url })
-      })
-
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(result?.error || 'Failed to save personal memory.')
-      }
-
-      setMemoryForm({ title: '', url: '', icon_url: '' })
-      await loadUserMemories(currentUserId)
-      setStatus('Personal memory saved to your hosted library.')
-    } catch (error: any) {
-      setStatus(error?.message || 'Failed to save personal memory.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  async function deletePersonalMemory(memoryId: string) {
-    try {
-      if (!currentUserId) return
-      setLoading(true)
-      const response = await fetch(`/api/user/memories?id=${encodeURIComponent(memoryId)}`, {
-        method: 'DELETE',
-        headers: (await getAccessToken()) ? { Authorization: `Bearer ${await getAccessToken()}` } : {}
-      })
-      const result = await response.json()
-      if (!response.ok) {
-        throw new Error(result?.error || 'Failed to delete personal memory.')
-      }
-      await loadUserMemories(currentUserId)
-      setStatus('Personal memory removed.')
-    } catch (error: any) {
-      setStatus(error?.message || 'Failed to delete personal memory.')
-    } finally {
-      setLoading(false)
-    }
   }
 
   async function saveDraft() {
