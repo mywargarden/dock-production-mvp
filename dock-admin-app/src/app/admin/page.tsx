@@ -397,27 +397,33 @@ export default function Home() {
       if (!workspaceName.trim()) throw new Error('HCPS Dock name is required.')
       if (!cleanTabs.length) throw new Error('Add at least one tab before saving.')
 
-      const draftTime = new Date().toISOString()
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again before saving draft.')
 
-      const { data: orgRow, error: orgError } = await supabase
-        .from('organizations')
-        .upsert(
-          {
+      const response = await fetch('/api/admin/save-draft', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          organization: {
             name: org.name.trim(),
             org_code: org.org_code.trim(),
             email_domain: org.email_domain.trim(),
             plan: org.plan,
-            max_users: Number(org.max_users) || 500,
-            draft_workspace_name: workspaceName.trim(),
-            draft_tabs: cleanTabs,
-            updated_at: draftTime
+            max_users: Number(org.max_users) || 500
           },
-          { onConflict: 'org_code' }
-        )
-        .select('*')
-        .single()
+          workspaceName: workspaceName.trim(),
+          tabs: cleanTabs
+        })
+      })
 
-      if (orgError) throw orgError
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Draft save failed.')
+
+      const orgRow = result.org
+      const draftTime = result.savedAt || new Date().toISOString()
 
       setOrg((current) => ({
         ...current,
@@ -448,105 +454,50 @@ export default function Home() {
       if (!workspaceName.trim()) throw new Error('HCPS Dock name is required.')
       if (!cleanTabs.length) throw new Error('Add at least one tab before publishing.')
 
-      const publishTime = new Date().toISOString()
+      const accessToken = await getAccessToken()
+      if (!accessToken) throw new Error('Sign in again before publishing.')
 
-      const { data: orgRow, error: orgError } = await supabase
-        .from('organizations')
-        .upsert(
-          {
+      const response = await fetch('/api/admin/publish', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`
+        },
+        body: JSON.stringify({
+          organization: {
             name: org.name.trim(),
             org_code: org.org_code.trim(),
             email_domain: org.email_domain.trim(),
             plan: org.plan,
-            max_users: Number(org.max_users) || 500,
-            draft_workspace_name: workspaceName.trim(),
-            draft_tabs: cleanTabs,
-            published_at: publishTime,
-            updated_at: publishTime
+            max_users: Number(org.max_users) || 500
           },
-          { onConflict: 'org_code' }
-        )
-        .select('*')
-        .single()
+          workspaceName: workspaceName.trim(),
+          tabs: cleanTabs
+        })
+      })
 
-      if (orgError) throw orgError
+      const result = await response.json()
+      if (!response.ok) throw new Error(result?.error || 'Publish failed.')
 
-      const { data: existingPublished } = await supabase
-        .from('workspaces')
-        .select('*')
-        .eq('organization_id', orgRow.id)
-        .eq('status', 'published')
-        .order('published_at', { ascending: false })
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const publishTime = result.publishedAt || new Date().toISOString()
+      const nextVersion = Number(result.version) || 1
+      const orgRow = result.org
 
-      let workspaceId = existingPublished?.id
-      const nextVersion = (Number(existingPublished?.version) || 0) + 1
-
-      if (workspaceId) {
-        const { error: updateError } = await supabase
-          .from('workspaces')
-          .update({
-            name: workspaceName.trim(),
-            status: 'published',
-            version: nextVersion,
-            is_locked: true,
-            updated_at: publishTime,
-            published_at: publishTime
-          })
-          .eq('id', workspaceId)
-
-        if (updateError) throw updateError
-      } else {
-        const { data: insertedWorkspace, error: insertWorkspaceError } = await supabase
-          .from('workspaces')
-          .insert({
-            organization_id: orgRow.id,
-            name: workspaceName.trim(),
-            status: 'published',
-            version: 1,
-            is_locked: true,
-            updated_at: publishTime,
-            published_at: publishTime
-          })
-          .select('*')
-          .single()
-
-        if (insertWorkspaceError) throw insertWorkspaceError
-        workspaceId = insertedWorkspace.id
-      }
-
-      if (!workspaceId) throw new Error('Could not resolve published workspace.')
-
-      const { error: deleteError } = await supabase
-        .from('workspace_tabs')
-        .delete()
-        .eq('workspace_id', workspaceId)
-
-      if (deleteError) throw deleteError
-
-      const { error: insertTabsError } = await supabase.from('workspace_tabs').insert(
-        cleanTabs.map((tab, index) => ({
-          workspace_id: workspaceId,
-          title: tab.title || new URL(tab.url).hostname,
-          url: tab.url,
-          icon_url: tab.icon_url || null,
-          position: index,
-          is_locked: tab.is_locked !== false,
-          updated_at: publishTime
+      if (orgRow?.id) {
+        setOrg((current) => ({
+          ...current,
+          id: orgRow.id,
+          published_at: orgRow.published_at || publishTime,
+          updated_at: orgRow.updated_at || publishTime,
+          draft_workspace_name: orgRow.draft_workspace_name || null
         }))
-      )
-
-      if (insertTabsError) throw insertTabsError
+      }
 
       setLastPublishedAt(publishTime)
       setLastSavedDraftAt(publishTime)
-      setLiveVersion(nextVersion || 1)
+      setLiveVersion(nextVersion)
       setHasUnsavedChanges(false)
-      setStatus(
-        `Published live workspace v${nextVersion || 1}. Live endpoint ready at ${liveApiUrl}`
-      )
+      setStatus(`Published live workspace v${nextVersion}. Live endpoint ready at ${liveApiUrl}`)
     } catch (error: any) {
       setStatus(error?.message || 'Publish failed.')
     } finally {
