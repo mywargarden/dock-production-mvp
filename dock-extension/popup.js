@@ -167,7 +167,7 @@ replaceBtn?.addEventListener("click", async () => {
 upgradeBtn?.addEventListener("click", () => { api.tabs.create({ url: "https://example.com/upgrade" }); });
 dismissBtn?.addEventListener("click", hideAllModals);
 cancelReplaceBtn?.addEventListener("click", hideAllModals);
-viewAllBtn?.addEventListener("click", () => { api.tabs.create({ url: api.runtime.getURL("memories.html") }); });
+viewAllBtn?.addEventListener("click", () => { api.runtime.sendMessage({ type: "OPEN_SAFE_HARBOR" }); });
 reasonInput?.addEventListener("keydown", (e) => { if (e.key === "Enter") saveBtn.click(); });
 
 async function bootManagedSync() {

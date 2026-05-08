@@ -344,7 +344,7 @@ async function openOrRefreshMemoriesTab() {
   }
 
   try {
-    return await api.tabs.create({ url: memoriesUrl, active: true });
+    return await api.tabs.create({ url: memoriesUrl, active: true, index: 0 });
   } catch {
     return null;
   }
@@ -524,3 +524,21 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 api.runtime.onInstalled?.addListener(() => { ensureManagedSyncAlarm().catch(() => {}); ensureBootstrapOrgState().then(() => backgroundSyncManagedWorkspace()).catch(() => {}); });
 api.runtime.onStartup?.addListener(() => { ensureManagedSyncAlarm().catch(() => {}); ensureBootstrapOrgState().then(() => backgroundSyncManagedWorkspace()).catch(() => {}); });
 api.alarms?.onAlarm?.addListener((alarm) => { if (alarm?.name === MANAGED_SYNC_ALARM) ensureBootstrapOrgState().then(() => backgroundSyncManagedWorkspace()).catch(() => {}); });
+
+
+// Canon: only one Safe Harbor tab may exist. Always reuse/focus it at tab zero.
+api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message?.type !== "OPEN_SAFE_HARBOR") return;
+
+  openOrRefreshMemoriesTab()
+    .then((tab) => sendResponse({ ok: true, tabId: tab?.id ?? null }))
+    .catch((error) =>
+      sendResponse({
+        ok: false,
+        error: error?.message || "Failed to open Safe Harbor"
+      })
+    );
+
+  return true;
+});
+

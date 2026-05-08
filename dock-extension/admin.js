@@ -172,7 +172,7 @@ clearBtn?.addEventListener("click", async () => {
 });
 
 backBtn?.addEventListener("click", () => {
-  api.tabs.create({ url: api.runtime.getURL("memories.html") });
+  api.runtime.sendMessage({ type: "OPEN_SAFE_HARBOR" });
 });
 
 load();
