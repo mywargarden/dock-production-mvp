@@ -51,8 +51,8 @@ async function importWorkspace(){
     reason: norm(tab.reason),
     faviconUrl: norm(tab.faviconUrl) || null,
     savedAt: tab.savedAt || Date.now(),
-    screenshot: null,
-    screenshotBlocked: true
+    screenshot: norm(tab.screenshot_url || tab.screenshotUrl || tab.screenshotThumb || tab.screenshot || tab.screenshot_data_url) || null,
+    screenshotBlocked: !norm(tab.screenshot_url || tab.screenshotUrl || tab.screenshotThumb || tab.screenshot || tab.screenshot_data_url) && Boolean(tab.screenshotBlocked)
   })).filter(t => t.url) : [];
 
   groups.push({ id, name, color: ensureColor(workspace.color), createdAt: Date.now(), importedAt: Date.now() });

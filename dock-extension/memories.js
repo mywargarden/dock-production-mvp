@@ -600,6 +600,8 @@ function buildWorkspaceSharePayload(group){
       url: sanitizeSharedUrl(tab.url),
       reason: norm(tab.reason),
       faviconUrl: norm(tab.faviconUrl) || null,
+      screenshot: norm(tab.screenshot_url || tab.screenshotUrl || tab.screenshotThumb || tab.screenshot || tab.screenshot_data_url) || null,
+      screenshotBlocked: Boolean(tab.screenshotBlocked),
       savedAt: tab.savedAt || Date.now()
     }))
     .filter((tab) => tab.url);
