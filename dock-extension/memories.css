@@ -2618,8 +2618,8 @@ main{
   background: linear-gradient(180deg, rgba(43,140,143,0.04), rgba(43,140,143,0.01));
 }
 .preview.adminPreview img {
-  width: min(72%, 220px);
-  height: min(72%, 220px);
+  width: min(64%, 190px);
+  height: min(64%, 190px);
   object-fit: contain;
   border-radius: 22px;
   box-shadow: none;
