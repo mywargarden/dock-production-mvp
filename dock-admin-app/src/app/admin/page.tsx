@@ -260,7 +260,7 @@ export default function Home() {
     const optimizedDataUrl = await new Promise<string>((resolve) => {
       const img = new Image()
       img.onload = () => {
-        const maxSize = 64
+        const maxSize = 512
         const scale = Math.min(1, maxSize / img.width, maxSize / img.height)
         const width = Math.max(1, Math.round(img.width * scale))
         const height = Math.max(1, Math.round(img.height * scale))
@@ -274,7 +274,7 @@ export default function Home() {
         }
         ctx.clearRect(0, 0, width, height)
         ctx.drawImage(img, 0, 0, width, height)
-        resolve(canvas.toDataURL('image/webp', 0.82) || sourceDataUrl)
+        resolve(canvas.toDataURL('image/png') || sourceDataUrl)
       }
       img.onerror = () => resolve(sourceDataUrl)
       img.src = sourceDataUrl
