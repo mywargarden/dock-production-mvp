@@ -85,15 +85,29 @@ async function loadWorkspaceOptions(){
 async function savePayloadToTarget(payload, targetId) {
   if (!targetId || targetId === "__all__") {
     await saveTab(payload);
-    return true;
+    return { ok: true, saved: true, target: "library" };
   }
-  await api.runtime.sendMessage({ type: "SAVE_TAB_TO_WORKSPACE", payload, targetGroupId: targetId });
-  return true;
+
+  const result = await api.runtime.sendMessage({
+    type: "SAVE_TAB_TO_WORKSPACE",
+    payload,
+    targetGroupId: targetId
+  });
+
+  if (!result?.ok) {
+    throw new Error(result?.error || result?.code || "SAVE_FAILED");
+  }
+
+  return {
+    ok: true,
+    saved: !result.skippedDuplicate,
+    skippedDuplicate: Boolean(result.skippedDuplicate),
+    target: "workspace"
+  };
 }
 async function trySavePayload(payload) {
   try {
-    await savePayloadToTarget(payload, selectedWorkspaceId());
-    return true;
+    return await savePayloadToTarget(payload, selectedWorkspaceId());
   } catch (e) {
     if (e === "LIMIT_REACHED") {
       pendingTabPayload = payload;
@@ -109,8 +123,13 @@ saveBtn?.addEventListener("click", async () => {
   const [tab] = await api.tabs.query({ active: true, currentWindow: true });
   const shot = await captureScreenshot();
   const payload = { title: tab.title, url: tab.url, reason: reasonInput.value.trim(), savedAt: Date.now(), screenshot: shot, faviconUrl: tab.favIconUrl || null };
-  const ok = await trySavePayload(payload);
-  if (ok) { pendingTabPayload = null; reasonInput.value = ""; await loadTabs(); }
+  const result = await trySavePayload(payload);
+  if (result?.ok) {
+    pendingTabPayload = null;
+    reasonInput.value = "";
+    showProgress(result.skippedDuplicate ? "Already in that Dock." : "Docked.");
+    await loadTabs();
+  }
 });
 
 api.runtime.onMessage.addListener((msg) => {
