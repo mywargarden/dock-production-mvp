@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { resolveLicensedAccess } from '@/lib/access';
 
 const BUILD_FINGERPRINT = 'bootstrap-verified-domain-debug-v2';
 const ORG_CACHE_TTL_MS = 60 * 1000;
@@ -290,22 +291,57 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
     }
 
-    let profileSync: ProfileSyncResult;
-    if (userId) {
-      profileSync = await syncProfileIfPossible(supabase, userId, userEmail, org);
-      if (!profileSync.ok) {
-        console.error('BOOTSTRAP profile sync failed:', profileSync.reason, profileSync.details || null);
-      }
-    } else {
-      profileSync = {
-        ok: false,
-        phase: 'skipped',
-        reason: authStatus,
-        details: {
-          hasAuthorizationHeader: !!authHeader,
-          tokenPresent: !!token,
+    const access = await resolveLicensedAccess({
+      supabase,
+      userId,
+      email: userEmail,
+      org,
+      domainRecord,
+    });
+
+    const accessCode = "code" in access ? access.code : null;
+    const accessDetails = "details" in access ? access.details : null;
+    const accessStatus = "status" in access ? access.status : 403;
+
+    const profileSync: ProfileSyncResult = access.ok
+      ? {
+          ok: true,
+          phase: access.reason,
+          reason: access.reason,
+          details: {
+            profile: access.profile,
+            activeSeatCount: access.activeSeatCount,
+            maxUsers: access.maxUsers,
+          },
         }
-      };
+      : {
+          ok: false,
+          phase: accessCode || "ACCESS_DENIED",
+          reason: access.reason,
+          details: accessDetails,
+        };
+
+    if (!access.ok) {
+      return NextResponse.json(
+        {
+          error: access.reason,
+          code: accessCode || "ACCESS_DENIED",
+          organization: {
+            id: org.id,
+            name: org.name,
+            orgCode: org.org_code,
+          },
+          debug: {
+            route: '/api/bootstrap',
+            authStatus,
+            userId: userId || null,
+            userEmail: userEmail || null,
+            accessCode,
+            accessDetails,
+          },
+        },
+        { status: accessStatus }
+      );
     }
 
     const origin = url.origin;
