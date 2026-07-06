@@ -6917,3 +6917,35 @@ body[data-managed-dock="true"] [data-hidden-managed-dock-watermark="true"] {
   visibility: hidden !important;
   opacity: 0 !important;
 }
+
+/* === District Dock: hide default center Dock watermark/logo ===
+   The large middle Dock logo is created by theme CSS, usually body::before/body::after.
+   When the managed district dock is active, remove those pseudo-elements completely.
+*/
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"][data-theme]::before,
+body[data-managed-dock="true"][data-theme]::after {
+  content: none !important;
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+/* Backup: hide common real DOM watermark/logo elements too */
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dock-watermark,
+body[data-managed-dock="true"] .centerLogo,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .defaultLogo,
+body[data-managed-dock="true"] .brandEmpty,
+body[data-managed-dock="true"] .emptyState,
+body[data-managed-dock="true"] .empty-state,
+body[data-managed-dock="true"] .emptyPanel {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
