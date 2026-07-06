@@ -1385,7 +1385,8 @@ async function renderAllQuick(){
   cleanupGridImageRefs();
   grid.innerHTML = "";
   setEmpty(tabs.length === 0);
-  if (!tabs.length) { updateActionButtons(); return; }
+  if (!tabs.length) { updateActionButtons();
+  try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
     const delHandler = async () => { await deleteTab(i); await load(); };
