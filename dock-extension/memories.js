@@ -1057,8 +1057,10 @@ function pill(label, id, opts = {}) {
   b.style.cssText = getPillStyles(opts.color || DEFAULT_GROUP_COLOR, activeGroup === id);
   b.addEventListener("click", async () => {
     activeGroup = id;
+    try { dockApplyDistrictBackgroundFinal(); } catch {}
     await saveState();
     await load();
+    try { dockApplyDistrictBackgroundFinal(); } catch {}
   });
   wrap.appendChild(b);
 
@@ -1142,6 +1144,97 @@ menuBtn.addEventListener("click", (e) => {
   }
   return wrap;
 }
+
+
+// === Managed district background final stable mode ===
+function dockFindDistrictBackgroundUrlFinal(){
+  const candidates = [];
+
+  const add = (value) => {
+    if (value && typeof value === "string") candidates.push(value.trim());
+  };
+
+  const scan = (obj, depth = 0) => {
+    if (!obj || typeof obj !== "object" || depth > 7) return;
+
+    add(obj.districtBackgroundUrl);
+    add(obj.district_background_url);
+    add(obj.backgroundUrl);
+    add(obj.background_url);
+    add(obj.background);
+    add(obj.bgUrl);
+    add(obj.bg_url);
+
+    if (obj.branding) scan(obj.branding, depth + 1);
+    if (obj.workspace) scan(obj.workspace, depth + 1);
+    if (obj.config) scan(obj.config, depth + 1);
+    if (obj.managedConfig) scan(obj.managedConfig, depth + 1);
+    if (obj.organization) scan(obj.organization, depth + 1);
+    if (obj.org) scan(obj.org, depth + 1);
+  };
+
+  scan(adminWorkspace);
+
+  try {
+    const cached = localStorage.getItem("dockManagedDistrictBackgroundUrl:last");
+    add(cached);
+  } catch {}
+
+  const found = candidates.find(v =>
+    v.startsWith("data:image/") ||
+    v.startsWith("https://") ||
+    v.startsWith("http://") ||
+    v.startsWith("chrome-extension://")
+  ) || "";
+
+  if (found) {
+    try { localStorage.setItem("dockManagedDistrictBackgroundUrl:last", found); } catch {}
+  }
+
+  return found;
+}
+
+function dockIsManagedDistrictViewFinal(){
+  return activeGroup === "__admin__";
+}
+
+function dockApplyDistrictBackgroundFinal(){
+  const url = dockFindDistrictBackgroundUrlFinal();
+  const active = dockIsManagedDistrictViewFinal() && !!url;
+
+  document.documentElement.classList.toggle("managedDistrictBackgroundActive", active);
+  document.body.classList.toggle("managedDistrictBackgroundActive", active);
+
+  if (active) {
+    const safeUrl = String(url).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    document.documentElement.style.setProperty("--managed-district-background-url", `url("${safeUrl}")`);
+  } else {
+    document.documentElement.style.removeProperty("--managed-district-background-url");
+  }
+}
+
+let dockManagedDistrictBackgroundTimerFinal = null;
+
+function dockStartDistrictBackgroundFinal(){
+  dockApplyDistrictBackgroundFinal();
+
+  if (dockManagedDistrictBackgroundTimerFinal) return;
+
+  dockManagedDistrictBackgroundTimerFinal = window.setInterval(() => {
+    dockApplyDistrictBackgroundFinal();
+  }, 250);
+
+  document.addEventListener("visibilitychange", dockApplyDistrictBackgroundFinal);
+  window.addEventListener("focus", dockApplyDistrictBackgroundFinal);
+  window.addEventListener("pageshow", dockApplyDistrictBackgroundFinal);
+  document.addEventListener("click", () => {
+    window.setTimeout(dockApplyDistrictBackgroundFinal, 0);
+    window.setTimeout(dockApplyDistrictBackgroundFinal, 120);
+  }, true);
+}
+
+dockStartDistrictBackgroundFinal();
+// === End managed district background final stable mode ===
 
 function renderPills(){
   if (!groupPills) return;
@@ -1381,6 +1474,7 @@ async function renderAllQuick(){
   const tabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (tabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
   visible = tabs;
+  try { dockApplyDistrictBackgroundFinal(); } catch {}
   if (!grid) return;
   cleanupGridImageRefs();
   grid.innerHTML = "";
@@ -1516,6 +1610,7 @@ async function renderAdmin(){
   applyManagedDockBranding(true);
   const items = getAdminCards();
   visible = items;
+  try { dockApplyDistrictBackgroundFinal(); } catch {}
   selectedMain.clear();
   clearVisibleSelection();
   if (!grid) return;

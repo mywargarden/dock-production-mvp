@@ -6729,3 +6729,108 @@ body[data-managed-dock="true"] .groupPill.active {
   color: #fff !important;
 }
 
+
+
+/* === Managed district background final polish === */
+html.managedDistrictBackgroundActive,
+body.managedDistrictBackgroundActive{
+  min-height: 100%;
+  background: var(--bg) !important;
+}
+
+body.managedDistrictBackgroundActive{
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* Dedicated fixed background layer. This keeps the image stable during dock switches. */
+body.managedDistrictBackgroundActive::before{
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.66), rgba(255,255,255,0.66)),
+    var(--managed-district-background-url);
+  background-repeat: no-repeat, no-repeat;
+  background-position: center center, center center;
+  background-size: 100% 100%, contain;
+  background-attachment: fixed, fixed;
+  transform: translateZ(0);
+}
+
+/* Keep app content above the district background layer. */
+body.managedDistrictBackgroundActive .header,
+body.managedDistrictBackgroundActive .groupBar,
+body.managedDistrictBackgroundActive main,
+body.managedDistrictBackgroundActive .grid,
+body.managedDistrictBackgroundActive .card,
+body.managedDistrictBackgroundActive .actions,
+body.managedDistrictBackgroundActive .menuWrap,
+body.managedDistrictBackgroundActive .menuPanel{
+  position: relative;
+}
+
+/* Clear top bars: buttons only, no frosted glass strip. */
+body.managedDistrictBackgroundActive .header,
+body.managedDistrictBackgroundActive .groupBar,
+body.managedDistrictBackgroundActive #groupBar.groupBar{
+  background: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-bottom: none !important;
+}
+
+body.managedDistrictBackgroundActive .header{
+  z-index: 2500 !important;
+}
+
+body.managedDistrictBackgroundActive .groupBar,
+body.managedDistrictBackgroundActive #groupBar.groupBar{
+  z-index: 2490 !important;
+}
+
+/* Remove the frosted library tray over the district background. */
+body.managedDistrictBackgroundActive .grid{
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Keep cards readable but not heavy. */
+body.managedDistrictBackgroundActive .card{
+  background: rgba(255,255,255,0.88) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+/* Remove middle/default Dock branding when a district background exists. */
+body.managedDistrictBackgroundActive main::before,
+body.managedDistrictBackgroundActive main::after,
+body.managedDistrictBackgroundActive .empty::before,
+body.managedDistrictBackgroundActive .empty::after,
+body.managedDistrictBackgroundActive .emptyState::before,
+body.managedDistrictBackgroundActive .emptyState::after,
+body.managedDistrictBackgroundActive .wordmark,
+body.managedDistrictBackgroundActive .centerLogo,
+body.managedDistrictBackgroundActive .centerDock,
+body.managedDistrictBackgroundActive .dockCenter,
+body.managedDistrictBackgroundActive .dockWatermark,
+body.managedDistrictBackgroundActive .dockDefaultCenter,
+body.managedDistrictBackgroundActive img[src*="dock-default-center"],
+body.managedDistrictBackgroundActive main img[src*="dock_logo"]{
+  display: none !important;
+  content: none !important;
+  opacity: 0 !important;
+}
+
+/* Let the district background breathe on the managed Dock page. */
+body.managedDistrictBackgroundActive main{
+  background: transparent !important;
+  min-height: calc(100vh - var(--dock-header-height, 96px));
+}
+/* === End managed district background final polish === */
