@@ -6772,3 +6772,91 @@ body[data-managed-dock="true"] .groupBarWrap::after {
   display: none !important;
   content: none !important;
 }
+
+/* === District Dock locked final behavior === */
+/* District Dock is controlled by admin branding only. User themes remain active everywhere else. */
+
+body[data-managed-dock="true"] #themeMenu,
+body[data-managed-dock="true"] .themeMenu,
+body[data-managed-dock="true"] .themeMenuPanel {
+  display: none !important;
+  pointer-events: none !important;
+}
+
+body[data-managed-dock="true"] #themeMenuBtn,
+body[data-managed-dock="true"] .themeBtn,
+body[data-managed-dock="true"] .theme-button {
+  opacity: .45 !important;
+  pointer-events: none !important;
+  cursor: not-allowed !important;
+}
+
+/* District background: centered, not giant, with soft matching side fill. */
+body[data-managed-dock="true"] {
+  --managed-dock-soft-bg: #eef6f1;
+  background-color: var(--managed-dock-soft-bg) !important;
+  background-image:
+    radial-gradient(circle at center, rgba(255,255,255,.86) 0%, rgba(255,255,255,.70) 44%, rgba(238,246,241,.96) 100%),
+    var(--managed-dock-bg) !important;
+  background-size: auto, min(78vw, 900px) auto !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Let district background show through. */
+body[data-managed-dock="true"] main,
+body[data-managed-dock="true"] .main,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .page,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .container {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+/* Clear top bars only on district dock. */
+body[data-managed-dock="true"] header,
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] .groupPillWrap,
+body[data-managed-dock="true"] .groupPillsRail,
+body[data-managed-dock="true"] nav {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+/* Hide center Dock watermark only while district branding is active. */
+body[data-managed-dock="true"] .empty,
+body[data-managed-dock="true"] .emptyState,
+body[data-managed-dock="true"] .empty-state,
+body[data-managed-dock="true"] .emptyPanel,
+body[data-managed-dock="true"] .brandEmpty,
+body[data-managed-dock="true"] .centerLogo,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .defaultLogo,
+body[data-managed-dock="true"] .dockWatermark {
+  display: none !important;
+}
+
+/* Keep cards readable. */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .menuPanel,
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .dockDrawer,
+body[data-managed-dock="true"] .saveDrawer {
+  background: rgba(255,255,255,.88) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}

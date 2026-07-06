@@ -337,6 +337,30 @@ function safeCssImageUrl(value){
   return '';
 }
 
+
+function dockIsManagedDistrictActive(){
+  return activeGroup === "__admin__" && !!adminWorkspace;
+}
+
+function dockLockDistrictBrandingIfNeeded(){
+  try {
+    if (dockIsManagedDistrictActive()) {
+      applyManagedDockBranding(true);
+      if (themeMenu) themeMenu.classList.add("hidden");
+      if (themeMenuBtn) {
+        themeMenuBtn.disabled = true;
+        themeMenuBtn.setAttribute("aria-disabled", "true");
+      }
+    } else {
+      applyManagedDockBranding(false);
+      if (themeMenuBtn) {
+        themeMenuBtn.disabled = false;
+        themeMenuBtn.removeAttribute("aria-disabled");
+      }
+    }
+  } catch {}
+}
+
 function applyManagedDockBranding(enabled){
   const body = document.body;
   if (!body) return;
@@ -1386,6 +1410,7 @@ async function renderAllQuick(){
   grid.innerHTML = "";
   setEmpty(tabs.length === 0);
   if (!tabs.length) { updateActionButtons();
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
@@ -1437,6 +1462,7 @@ async function ensureAllMemoriesPreviewsHydrated() {
 let renderAllFullPromise = null;
 
 async function renderAll(){
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (localTabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
@@ -1514,6 +1540,7 @@ async function renderAll(){
 }
 
 async function renderAdmin(){
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(true);
   const items = getAdminCards();
   visible = items;
@@ -1538,6 +1565,7 @@ async function renderAdmin(){
 }
 
 async function renderGroup(groupId){
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);
   groupItems[groupId] = arr;
@@ -2016,7 +2044,19 @@ clearAllBtn?.addEventListener("click", async () => {
 });
 
 createShareLinkBtn?.addEventListener("click", async (e) => { e.stopPropagation(); await createShareLinkForActiveWorkspace(); });
-themeMenuBtn?.addEventListener("click", (e) => { e.stopPropagation(); const willShow = themeMenu?.classList.contains("hidden"); closeMenus(); if (willShow) themeMenu?.classList.remove("hidden"); });
+themeMenuBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+
+  // District Dock is admin-branded. User theme menu is disabled there.
+  if (dockIsManagedDistrictActive()) {
+    dockLockDistrictBrandingIfNeeded();
+    return;
+  }
+
+  const willShow = themeMenu?.classList.contains("hidden");
+  closeMenus();
+  if (willShow) themeMenu?.classList.remove("hidden");
+});
 themeItems.forEach(btn => btn.addEventListener("click", async (e) => { e.stopPropagation(); await saveTheme(btn.dataset.theme || DEFAULT_THEME); closeMenus(); }));
 actionsMenuBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
