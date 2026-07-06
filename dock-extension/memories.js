@@ -100,6 +100,27 @@ function canDeleteCurrentView(){ return activeGroup !== "__admin__"; }
 function currentGroupRecord(){ return (groups || []).find(g => g.id === activeGroup) || null; }
 function ensureGroupColor(group){ return norm(group?.color) || DEFAULT_GROUP_COLOR; }
 
+
+/* === District theme visual cleanup helper === */
+function dockClearVisualThemeForDistrict(){
+  try {
+    document.body.removeAttribute("data-theme");
+    document.documentElement.style.removeProperty("--dock-theme-scene");
+    document.documentElement.style.removeProperty("--dock-theme-bg");
+    document.documentElement.style.removeProperty("--dock-theme-card");
+    document.documentElement.style.removeProperty("--dock-theme-accent");
+    document.documentElement.style.removeProperty("--theme-bg");
+    document.documentElement.style.removeProperty("--theme-scene");
+    document.documentElement.style.removeProperty("--theme-accent");
+  } catch {}
+}
+
+function dockRestoreSavedThemeOutsideDistrict(){
+  try {
+    if (typeof loadTheme === "function") loadTheme();
+  } catch {}
+}
+
 function applyTheme(theme){
   const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
   document.body.dataset.theme = next;
@@ -335,6 +356,30 @@ function safeCssImageUrl(value){
   if (!raw) return '';
   if (raw.startsWith('data:image/') || /^https?:\/\//i.test(raw)) return raw.replace(/["\\\n\r]/g, '');
   return '';
+}
+
+
+function dockIsManagedDistrictActive(){
+  return activeGroup === "__admin__" && !!adminWorkspace;
+}
+
+function dockLockDistrictBrandingIfNeeded(){
+  try {
+    if (dockIsManagedDistrictActive()) {
+      applyManagedDockBranding(true);
+      if (themeMenu) themeMenu.classList.add("hidden");
+      if (themeMenuBtn) {
+        themeMenuBtn.disabled = true;
+        themeMenuBtn.setAttribute("aria-disabled", "true");
+      }
+    } else {
+      applyManagedDockBranding(false);
+      if (themeMenuBtn) {
+        themeMenuBtn.disabled = false;
+        themeMenuBtn.removeAttribute("aria-disabled");
+      }
+    }
+  } catch {}
 }
 
 function applyManagedDockBranding(enabled){
@@ -1479,7 +1524,9 @@ async function renderAllQuick(){
   cleanupGridImageRefs();
   grid.innerHTML = "";
   setEmpty(tabs.length === 0);
-  if (!tabs.length) { updateActionButtons(); return; }
+  if (!tabs.length) { updateActionButtons();
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
+  try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
     const delHandler = async () => { await deleteTab(i); await load(); };
@@ -1530,6 +1577,8 @@ async function ensureAllMemoriesPreviewsHydrated() {
 let renderAllFullPromise = null;
 
 async function renderAll(){
+  try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (localTabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
@@ -1607,6 +1656,8 @@ async function renderAll(){
 }
 
 async function renderAdmin(){
+  try { dockClearVisualThemeForDistrict(); } catch {}
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(true);
   const items = getAdminCards();
   visible = items;
@@ -1632,6 +1683,8 @@ async function renderAdmin(){
 }
 
 async function renderGroup(groupId){
+  try { if (groupId === "__admin__") dockClearVisualThemeForDistrict(); } catch {}
+  try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);
   groupItems[groupId] = arr;
@@ -2110,7 +2163,19 @@ clearAllBtn?.addEventListener("click", async () => {
 });
 
 createShareLinkBtn?.addEventListener("click", async (e) => { e.stopPropagation(); await createShareLinkForActiveWorkspace(); });
-themeMenuBtn?.addEventListener("click", (e) => { e.stopPropagation(); const willShow = themeMenu?.classList.contains("hidden"); closeMenus(); if (willShow) themeMenu?.classList.remove("hidden"); });
+themeMenuBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+
+  // District Dock is admin-branded. User theme menu is disabled there.
+  if (dockIsManagedDistrictActive()) {
+    dockLockDistrictBrandingIfNeeded();
+    return;
+  }
+
+  const willShow = themeMenu?.classList.contains("hidden");
+  closeMenus();
+  if (willShow) themeMenu?.classList.remove("hidden");
+});
 themeItems.forEach(btn => btn.addEventListener("click", async (e) => { e.stopPropagation(); await saveTheme(btn.dataset.theme || DEFAULT_THEME); closeMenus(); }));
 actionsMenuBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
@@ -2363,3 +2428,87 @@ async function init() {
 }
 
 init().catch(() => {});
+
+
+
+/* === Hide centered Dock watermark on managed district dock === */
+(function(){
+  function isManagedDistrictDock(){
+    return document.body && document.body.dataset.managedDock === "true";
+  }
+
+  function looksLikeCenterDockWatermark(el){
+    if (!el || !el.getBoundingClientRect) return false;
+
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    if (!vw || !vh) return false;
+
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    const isBigEnough = rect.width >= 160 && rect.height >= 90;
+    const isCenteredX = cx > vw * 0.30 && cx < vw * 0.72;
+    const isLowerThanHeader = cy > vh * 0.28;
+    const isNotCard = !el.closest(".card,.memoryCard,.previewCard,.menuPanel,.dockModal,.dockDrawer,.saveDrawer,#themeMenu,.themeMenuPanel,header,.header,.topBar,.groupBar,.groupPillWrap,.groupPillsRail,nav");
+
+    const txt = String(el.textContent || "").trim().toLowerCase();
+    const alt = String(el.getAttribute?.("alt") || "").toLowerCase();
+    const src = String(el.getAttribute?.("src") || el.currentSrc || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+
+    const looksDock =
+      txt === "dock" ||
+      alt.includes("dock") ||
+      src.includes("dock") ||
+      cls.includes("dock") ||
+      cls.includes("logo") ||
+      cls.includes("empty") ||
+      cls.includes("watermark");
+
+    return isBigEnough && isCenteredX && isLowerThanHeader && isNotCard && looksDock;
+  }
+
+  function hideCenterDockWatermark(){
+    if (!isManagedDistrictDock()) return;
+
+    const els = Array.from(document.querySelectorAll("img, svg, picture, canvas, div, section, main"));
+    for (const el of els) {
+      if (looksLikeCenterDockWatermark(el)) {
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.setAttribute("data-hidden-managed-dock-watermark", "true");
+      }
+    }
+  }
+
+  function start(){
+    hideCenterDockWatermark();
+
+    if (window.__dockHideCenterWatermarkTimer) return;
+
+    window.__dockHideCenterWatermarkTimer = window.setInterval(() => {
+      try { hideCenterDockWatermark(); } catch {}
+    }, 350);
+
+    try {
+      const obs = new MutationObserver(() => {
+        try { hideCenterDockWatermark(); } catch {}
+      });
+      obs.observe(document.body, { childList: true, subtree: true, attributes: true });
+      window.__dockHideCenterWatermarkObserver = obs;
+    } catch {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+
+  window.dockHideCenterDockWatermark = hideCenterDockWatermark;
+})();
+
