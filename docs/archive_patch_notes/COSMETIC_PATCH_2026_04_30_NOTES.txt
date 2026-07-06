@@ -1,0 +1,18 @@
+Dock Cosmetic Patch - 2026-04-30
+
+Scope: CSS-only surgical polish.
+
+Changes made:
+1. Popup button sheen/gloss now stretches across the full pill width on Dock 1 Tab, Dock'em All, and top popup buttons.
+   File: dock-extension/popup.css
+
+2. Cozy Quilt delete/danger buttons changed from harsh red/orange styling to a soft lavender/periwinkle treatment that fits the quilt palette while still reading as an action.
+   File: dock-extension/memories.css
+
+3. Theme waffle section labels (Coastal / Playful) changed from stark white bars to small translucent rounded chips with blur.
+   File: dock-extension/memories.css
+
+4. Theme waffle tile text contrast improved: image/color-heavy theme tiles now use white text with subtle shadow; lighter plain tiles keep dark navy text.
+   File: dock-extension/memories.css
+
+No JavaScript, manifest, API, admin, storage, auth, or backend behavior was changed.

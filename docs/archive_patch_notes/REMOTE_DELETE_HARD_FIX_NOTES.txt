@@ -1,0 +1,5 @@
+Remote delete hard fix:
+- DELETE /api/user/memories now accepts url/id from query, JSON body, or X-Dock-Memory-Url headers.
+- DELETE resolves rows by authenticated user and exact/normalized URL, then hard-deletes matching personal_memories rows.
+- Extension delete sync now sends url in query + JSON body + X-Dock-Memory-Url header.
+- Removed startup grace skip for explicit user-initiated deletes so immediate deletes after reload are not ignored.

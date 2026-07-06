@@ -1,0 +1,13 @@
+Dock Theme Waffle Text/Depth Patch - 2026-04-30
+
+Scope: cosmetic CSS only.
+
+Changed:
+- Forced all Safe Harbor theme waffle tiles to use white text with soft shadow.
+- Added a subtle shared glossy/depth treatment to theme tiles.
+- Richened the formerly flat solid-color tile backgrounds: Dock Default, Sand, Slate, and Grape Tide.
+
+Behavior intentionally untouched:
+- No JavaScript changed.
+- No storage/auth/sync behavior changed.
+- No Safe Harbor tab behavior changed.

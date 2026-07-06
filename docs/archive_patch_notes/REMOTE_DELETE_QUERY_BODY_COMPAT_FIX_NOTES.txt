@@ -1,0 +1,17 @@
+Remote delete compatibility hardening
+
+Surgical changes:
+- dock-extension/core/auth.js
+  - Primary DELETE now sends url as a query parameter with auth/user headers and no JSON body.
+  - Fallback DELETE sends { url } JSON body for older backend contracts.
+  - Both X-Dock-Memory-Url and X-Memory-Url headers are included.
+
+- dock-admin-app/src/app/api/user/memories/route.ts
+  - DELETE now accepts id/url from query params, JSON body, or memory-url headers.
+  - DELETE manually parses request.url as a fallback if nextUrl params are unavailable.
+  - DELETE performs exact user_id + url/id deletion first, then a user-scoped normalized URL fallback lookup.
+
+Expected test:
+- BEFORE DELETE COUNT: N
+- Delete one card
+- AFTER DELETE COUNT: N-1

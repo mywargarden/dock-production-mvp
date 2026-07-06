@@ -1,0 +1,15 @@
+Dock Google Auth runtime setup
+
+This build is prewired to Supabase project URL:
+https://mcqohghghfxtchxpaddj.supabase.co
+
+Before Google sign-in will work in the extension, set the Supabase anon key in ONE of these places:
+1. Managed storage key: supabaseAnonKey
+2. Local storage key: dockAuthConfig.supabaseAnonKey
+3. dock-extension/core/auth.js AUTH_CONFIG.supabaseAnonKey
+
+Optional managed/local override keys also supported:
+- supabaseUrl
+- apiBaseUrl
+
+Nothing else in extension/admin behavior was intentionally changed.

@@ -1,0 +1,19 @@
+Dock memory hydration fix applied
+
+Changed files:
+- dock-extension/core/storage.js
+  - Personal memory GET/hydration now sends both modern and legacy user headers:
+    X-Dock-User-Id, X-Dock-User-Email, X-User-Id, X-User-Email.
+  - This fixes the observed 400 response: Missing x-user-id header.
+
+- dock-extension/core/auth.js
+  - buildBearerHeaders now sends both modern and legacy user headers.
+  - Fixed syncSavedTabsDiff POST bug where Authorization was accidentally sent as "Bearer " with no token.
+  - Fixed POST endpoint to call the configured production API base URL instead of relative /api/user/memories.
+
+- dock-extension/background.js
+  - Background/bulk auth headers now also send legacy X-User-Id/X-User-Email for compatibility.
+
+Important:
+- The included backend route already derives user_id from the Supabase bearer token.
+- The extension compatibility headers allow hydration to work against the currently deployed API that still expects x-user-id.

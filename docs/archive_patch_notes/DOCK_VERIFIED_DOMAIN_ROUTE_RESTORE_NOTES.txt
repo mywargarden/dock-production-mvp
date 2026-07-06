@@ -1,0 +1,47 @@
+Dock verified-domain + route-restore surgical patch
+
+Patched build: awake.zip baseline
+
+Changes made:
+1. Added explicit verified-domain debug labels in dock-admin-app/src/app/api/bootstrap/route.ts:
+   - buildFingerprint: bootstrap-verified-domain-debug-v2
+   - domainResolution.strategy
+   - domainResolution.lookupTable
+   - domainResolution.lookupColumn
+   - domainResolution.requiredStatus
+   - domainResolution.domainRegistryMatched
+   - debug.verifiedDomainDebugLabel
+   - debug.domainRegistryLookupTable
+   - debug.domainRegistryLookupStatus
+
+2. Restored route split:
+   - / is now a public Dock for Schools homepage.
+   - /admin is the existing admin editor copied intact from the previous root page.
+   - /district is a district workspace entry page.
+   - /district/[orgCode] is a public district workspace preview page.
+
+3. Admin app improvements:
+   - Admin sign-in now redirects back to the current page instead of root.
+   - /admin now shows a District Workspace Page URL and Open Preview button.
+
+Preserved:
+- No dock-extension files changed.
+- No popup/background/Safe Harbor/storage/theme behavior changed.
+- No Supabase schema changes included in runtime code.
+
+Post-deploy tests:
+1. /api/bootstrap?domain=henry.k12.va.us
+   Confirm:
+   - syncMode: verified-domain
+   - domainResolution.strategy: verified-domain-registry
+   - domainResolution.lookupTable: organization_domains
+   - domainResolution.requiredStatus: verified
+
+2. /admin
+   Confirm admin editor loads.
+
+3. /district/henry-county
+   Confirm public workspace preview loads.
+
+4. Dock extension Safe Harbor
+   Confirm HCPS Dock still loads and locked workspace tabs still display.

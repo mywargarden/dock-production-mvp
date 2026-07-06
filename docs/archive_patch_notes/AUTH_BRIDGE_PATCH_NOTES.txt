@@ -1,0 +1,26 @@
+Dock auth bridge hardening patch
+
+What changed
+- Extension background managed workspace fetch now forwards Authorization, X-Dock-User-Id, X-Dock-User-Email, and X-Dock-Org-Code.
+- Extension background personal memory sync now uses the same auth-header builder.
+- Extension auth bootstrap/workspace debug sync now forwards user identity headers too.
+- Added dockLastManagedWorkspaceDebug local-storage debug breadcrumb on managed workspace fetch failure.
+- getAuthSummary now returns userId as well as userEmail.
+
+Why
+- The live workspace endpoint was being fetched from the background worker without the user bearer token.
+- That let bootstrap authenticate correctly in one path while workspace sync still behaved like a guest in another path.
+- This patch makes the auth bridge consistent across popup, memories page, and background service worker.
+
+How to test
+1. Reload the extension.
+2. Sign in from the extension.
+3. Open:
+   - https://dock-production-mvp.vercel.app/api/bootstrap?domain=henry.k12.va.us
+   - https://dock-production-mvp.vercel.app/api/org/henry-county/workspace
+4. In the extension UI, confirm managed tabs still render and personal saves still work.
+5. In DevTools Application > Local Storage / Extension storage, inspect:
+   - dockAuthSession
+   - dockAuthUser
+   - dockLastProfileSyncDebug
+   - dockLastManagedWorkspaceDebug

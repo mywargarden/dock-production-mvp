@@ -1,0 +1,185 @@
+/*
+  Skipper Theme Layer v1
+  Purpose: isolate future Skipper theme work from the legacy memories.css file.
+  This file intentionally avoids layout surgery and only normalizes scene/background
+  presentation so future Skipper art can be swapped in safely.
+*/
+
+:root{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.00), rgba(255,255,255,0.00));
+  --skipper-bar-wash: transparent;
+}
+
+/* default / coastal base */
+body[data-theme="dock-green"]{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(251,247,242,0.00), rgba(251,247,242,0.00));
+  --skipper-bar-wash: transparent;
+}
+
+body[data-theme="slate"]{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(238,244,250,0.00), rgba(238,244,250,0.00));
+  --skipper-bar-wash: transparent;
+}
+
+body[data-theme="warm"]{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(250,244,235,0.00), rgba(250,244,235,0.00));
+  --skipper-bar-wash: transparent;
+}
+
+body[data-theme="violet-harbor"]{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(248,242,252,0.00), rgba(248,242,252,0.00));
+  --skipper-bar-wash: transparent;
+}
+
+/* signature scene themes */
+body[data-theme="sunset"]{
+  --skipper-scene-image: var(--dock-theme-scene, none);
+  --skipper-scene-overlay: linear-gradient(rgba(255,245,237,0.16), rgba(255,245,237,0.12));
+  --skipper-bar-wash: rgba(255,244,237,0.08);
+}
+
+body[data-theme="rubber-ducky"]{
+  --skipper-scene-image: var(--dock-theme-scene, none);
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.16), rgba(255,255,255,0.12));
+  --skipper-bar-wash: rgba(255,255,255,0.06);
+}
+
+body[data-theme="crazy-ducky"]{
+  --skipper-scene-image: var(--dock-theme-scene, none);
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10));
+  --skipper-bar-wash: rgba(255,255,255,0.04);
+}
+
+body[data-theme="tie-dye"]{
+  --skipper-scene-image: var(--dock-theme-scene, none);
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.04), rgba(255,255,255,0.04));
+  --skipper-bar-wash: rgba(255,255,255,0.18);
+}
+
+/* Apply only to scene themes so future art swaps happen in one place. */
+body[data-theme="sunset"],
+body[data-theme="rubber-ducky"],
+body[data-theme="crazy-ducky"],
+body[data-theme="tie-dye"]{
+  background-image: var(--skipper-scene-overlay), var(--skipper-scene-image) !important;
+  background-position: center center !important;
+  background-size: cover !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Keep bars visually consistent without touching structure. */
+body[data-theme="sunset"] .header,
+body[data-theme="sunset"] #groupBar,
+body[data-theme="sunset"] .groupBar,
+body[data-theme="rubber-ducky"] .header,
+body[data-theme="rubber-ducky"] #groupBar,
+body[data-theme="rubber-ducky"] .groupBar,
+body[data-theme="crazy-ducky"] .header,
+body[data-theme="crazy-ducky"] #groupBar,
+body[data-theme="crazy-ducky"] .groupBar,
+body[data-theme="tie-dye"] .header,
+body[data-theme="tie-dye"] #groupBar,
+body[data-theme="tie-dye"] .groupBar{
+  background: var(--skipper-bar-wash) !important;
+}
+
+/* Future-safe hook: Skipper scene art can replace the asset above without touching memories.css. */
+body[data-theme^="skipper-"]{
+  --skipper-scene-image: none;
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.16), rgba(255,255,255,0.12));
+  --skipper-bar-wash: rgba(255,255,255,0.06);
+}
+/* ===== SKIPPER HARBOR THEME (visual only) ===== */
+body[data-theme="skipper-harbor"]{
+  --skipper-scene-image: var(--dock-theme-scene, none);
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0.10), rgba(255,255,255,0.10));
+  --skipper-bar-wash: rgba(255,255,255,0.22);
+
+  background:
+    var(--skipper-scene-overlay),
+    var(--skipper-scene-image) center center / cover no-repeat fixed !important;
+}
+
+/* top bars readable, but still let Skipper scene show through */
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] .groupBar{
+  background: var(--skipper-bar-wash) !important;
+  backdrop-filter: blur(14px) saturate(1.06) !important;
+  -webkit-backdrop-filter: blur(14px) saturate(1.06) !important;
+}
+
+/* keep cards calm and premium */
+body[data-theme="skipper-harbor"] .memoryCard,
+body[data-theme="skipper-harbor"] .memory,
+body[data-theme="skipper-harbor"] .dockCard{
+  background: rgba(255,255,255,0.86) !important;
+  box-shadow:
+    0 12px 28px rgba(28,42,58,0.10),
+    0 0 0 1px rgba(255,255,255,0.34) inset !important;
+}
+
+/* keep text readable */
+body[data-theme="skipper-harbor"] .memoryCard,
+body[data-theme="skipper-harbor"] .memory,
+body[data-theme="skipper-harbor"] .dockCard,
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] .groupBar{
+  color: rgba(34,48,64,0.96) !important;
+}
+
+/* button system aligned to Skipper palette */
+body[data-theme="skipper-harbor"] .actionBtn,
+body[data-theme="skipper-harbor"] .linkBtn,
+body[data-theme="skipper-harbor"] .saveBtn,
+body[data-theme="skipper-harbor"] .openBtn{
+  background: linear-gradient(135deg, #6fc6df, #6f90e6) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.30) !important;
+}
+
+/* workspace and dock pills */
+body[data-theme="skipper-harbor"] .pill,
+body[data-theme="skipper-harbor"] .groupPill{
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ws-color, #92ded9) 88%, white 12%),
+      color-mix(in srgb, var(--ws-color, #92ded9) 72%, white 28%)
+    ) !important;
+  color: rgba(255,255,255,0.98) !important;
+  box-shadow:
+    0 10px 20px rgba(61,118,141,0.12),
+    0 0 0 1px rgba(255,255,255,0.32) inset !important;
+}
+
+body[data-theme="skipper-harbor"] .groupPill.active,
+body[data-theme="skipper-harbor"] .pill.active{
+  background:
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--ws-color, #73c6df) 90%, white 10%),
+      color-mix(in srgb, var(--ws-color, #73c6df) 76%, #17324a 24%)
+    ) !important;
+  box-shadow:
+    0 0 0 2px rgba(255,255,255,0.72),
+    0 0 0 6px color-mix(in srgb, var(--ws-color, #73c6df) 24%, transparent),
+    0 12px 28px rgba(76,120,177,0.20) !important;
+}
+
+/* full / compact toggle ring */
+body[data-theme="skipper-harbor"] .densityToggle,
+body[data-theme="skipper-harbor"] .viewToggle,
+body[data-theme="skipper-harbor"] .toggleShell{
+  border-color: rgba(67,111,204,0.92) !important;
+}
+
+/* theme should stay clean, no global muting */
+body[data-theme="skipper-harbor"] *{
+  filter: none !important;
+}

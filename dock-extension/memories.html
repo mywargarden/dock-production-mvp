@@ -1,0 +1,97 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Dock — Library</title>
+    <link rel="stylesheet" href="memories.css" />
+    <link rel="stylesheet" href="themes-skipper.css" />
+  </head>
+  <body>
+    <header class="header">
+      <div class="headerLeft">
+        <div class="brandHeader">
+          <img src="assets/dock_logo.png" class="brandLogo" alt="Dock" />
+          <div class="brandText safeHarborText">
+            <h1>Safe Harbor</h1>
+            <p class="muted">Quiet the storm. Anchor what matters.</p>
+          </div>
+        </div>
+      </div>
+      <div class="actions">
+        <button id="authBtn" class="actionBtn authInlineBtn" type="button">Signed in</button>
+        <div class="menuWrap menuWrapTheme">
+          <button id="themeMenuBtn" class="actionBtn">Theme ▾</button>
+          <div id="themeMenu" class="menuPanel hidden themeMenuPanel">
+            <div class="themeWaffleSection">
+              <div class="themeSectionLabel">Coastal</div>
+              <div class="themeWaffleGrid">
+                  <button class="menuItem themeItem themeTile" data-theme="dock-green">Dock Default</button>
+                  <button class="menuItem themeItem themeTile" data-theme="skipper-harbor">Skipper</button>
+                  <button class="menuItem themeItem themeTile" data-theme="sunset">Beach Sunset</button>
+                  <button class="menuItem themeItem themeTile" data-theme="warm">Sand</button>
+                  <button class="menuItem themeItem themeTile" data-theme="slate">Slate</button>
+                  <button class="menuItem themeItem themeTile" data-theme="violet-harbor">Grape Tide</button>
+              </div>
+            </div>
+            <div class="themeWaffleSection">
+              <div class="themeSectionLabel">Playful</div>
+              <div class="themeWaffleGrid">
+                <button class="menuItem themeItem themeTile" data-theme="tie-dye">Tie Dye</button>
+                <button class="menuItem themeItem themeTile" data-theme="rubber-ducky">Rubber Ducky</button>
+                <button class="menuItem themeItem themeTile" data-theme="crazy-ducky">Cozy Quilt</button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="menuWrap menuWrapActions">
+          <button id="actionsMenuBtn" class="actionBtn">Actions ▾</button>
+          <div id="actionsMenu" class="menuPanel hidden actionsMenuPanel">
+            <div class="menuGroup">
+              <button id="openMenuToggle" class="menuItem menuItemWithCaret">Open</button>
+              <div id="openSubmenu" class="subMenuPanel hidden">
+                <button id="openSelectedBtn" class="menuItem subMenuItem">Open Selected</button>
+                <button id="openAllBtn" class="menuItem subMenuItem">Open All</button>
+              </div>
+            </div>
+            <div class="menuGroup dangerGroup">
+              <button id="deleteMenuToggle" class="menuItem menuItemWithCaret dangerItem">Delete</button>
+              <div id="deleteSubmenu" class="subMenuPanel hidden">
+                <button id="deleteSelectedBtn" class="menuItem subMenuItem dangerItem">Delete Selected</button>
+                <button id="clearAllBtn" class="menuItem subMenuItem dangerItem">Delete All</button>
+              </div>
+            </div>
+            <button id="refreshBtn" class="menuItem">Refresh</button>
+          </div>
+        </div>
+        <button class="actionBtn" id="createGroupBtn" type="button">Dock It!</button>
+        <button id="closeOtherTabsBtn" class="actionBtn relaxBtn" type="button">Relax</button>
+      </div>
+    </header>
+
+    <div class="groupBar" id="groupBar">
+      <div class="groupPillsRail">
+        <div class="groupPills" id="groupPills"></div>
+      </div>
+      <div class="groupBarRight">
+        <button id="densityToggleBtn" class="densityToggle densityToggleSmall" type="button" aria-pressed="false" title="Switch between full and compact card view">
+          <span class="densityLabel densityLabelFull">Full</span>
+          <span class="densityKnob"></span>
+          <span class="densityLabel densityLabelCompact">Compact</span>
+        </button>
+      </div>
+    </div>
+
+    <main>
+      <div id="emptyState" class="empty hidden">
+        <h2>No Docks yet</h2>
+        <p class="muted">Dock a tab from the extension popup to see it here.</p>
+      </div>
+
+      <div id="grid" class="grid"></div>
+    </main>
+
+    <div id="calmToast" class="calmToast hidden" aria-live="polite" aria-atomic="true"></div>
+    <script type="module" src="memories.js"></script>
+  </body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "type": "object",
+  "properties": {
+    "orgCode": {
+      "type": "string",
+      "title": "Dock organization code"
+    },
+    "organizationName": {
+      "type": "string",
+      "title": "Dock organization name"
+    },
+    "emailDomain": {
+      "type": "string",
+      "title": "Dock organization email domain"
+    },
+    "apiBaseUrl": {
+      "type": "string",
+      "title": "Dock API base URL"
+    },
+    "configUrl": {
+      "type": "string",
+      "title": "Dock managed workspace config URL"
+    },
+    "forceManagedMode": {
+      "type": "boolean",
+      "title": "Force Dock managed mode"
+    },
+    "allowLegacyFallback": {
+      "type": "boolean",
+      "title": "Allow legacy local fallback when bootstrap cannot resolve a district"
+    },
+    "supabaseUrl": {
+      "type": "string",
+      "title": "Dock Supabase project URL"
+    },
+    "supabaseAnonKey": {
+      "type": "string",
+      "title": "Dock Supabase anon key"
+    }
+  }
+}

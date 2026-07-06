@@ -1,0 +1,17 @@
+Relax surgical fix
+
+What changed:
+- memories.js now sends CLOSE_ALL_OTHER_TABS through a safe runtime message wrapper.
+- If the background/service-worker message fails or returns no response, Relax falls back to direct chrome.tabs cleanup from the Dock Library page.
+- The fallback keeps the Dock tab open, closes other tabs one-by-one, and reports success as long as it can close tabs.
+
+Why:
+- Some Chrome profiles were getting no usable background response, causing Relax to show "Still here / Failed to close tabs" even though the same build worked in another profile.
+
+Test:
+1. Load this unpacked extension folder.
+2. Sign in with personal Gmail.
+3. Open 3-5 normal tabs.
+4. Open Dock Library.
+5. Click Relax > OK.
+6. Expected: other tabs close and Dock remains open.

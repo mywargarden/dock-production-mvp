@@ -1,0 +1,13 @@
+Dock remote delete sync fix
+
+Patched dock-extension/core/auth.js so user-initiated deletes send the same auth identity headers used by save/hydrate:
+- Authorization: Bearer <token>
+- X-Dock-User-Id / X-User-Id
+- X-Dock-User-Email / X-User-Email
+
+Remote delete failures are no longer silently swallowed. They are logged and the result reports failure instead of marking the delete signature as completed.
+
+Expected test:
+1. Delete a memory in Dock.
+2. GET /api/user/memories should no longer include that URL.
+3. Sign out/unload/reload/sign in: deleted memories should not return.

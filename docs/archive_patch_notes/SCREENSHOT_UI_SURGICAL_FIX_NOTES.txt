@@ -1,0 +1,11 @@
+Surgical screenshot UI fix
+
+Changed dock-extension/memories.js only.
+
+Fix:
+- The memory card renderer now prefers tab.screenshot_url first.
+- Direct http/https/data:image preview URLs are used directly instead of going through local cache.
+- The card data-preview-source is preserved for debugging for any real preview source.
+- Added img.referrerPolicy = "no-referrer".
+
+This targets the confirmed issue where Supabase had screenshot_url values and the image URLs loaded, but the Library UI was still rendering the screenshot-unavailable fallback.

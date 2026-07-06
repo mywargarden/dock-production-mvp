@@ -1,0 +1,42 @@
+Dock Domain Registry Patch — 2026-05-01
+
+Scope: surgical backend/API patch only.
+
+Changed files:
+- dock-admin-app/src/app/api/bootstrap/route.ts
+- dock-admin-app/src/app/api/user/memories/route.ts
+
+What changed:
+1. /api/bootstrap now resolves email-domain based organizations through organization_domains.
+2. Domain lookup only accepts organization_domains rows where status = 'verified'.
+3. orgCode lookup still works exactly as before.
+4. Signed-in user email is preserved as the full email for profile sync.
+5. Email domain extraction is normalized centrally, including support for either a raw domain or full email.
+6. /api/user/memories profile attachment now also resolves organization_id through verified organization_domains.
+7. Extension core, Safe Harbor, popup UI, theme CSS, and admin page UI were not changed.
+
+Required database shape:
+organization_domains must include:
+- id uuid primary key
+- organization_id uuid references organizations(id)
+- domain text
+- normalized_domain text unique
+- domain_type text
+- status text
+- verified_at timestamptz
+- verification_method text
+- verification_token text
+- created_at timestamptz
+- updated_at timestamptz
+
+Expected test:
+/api/bootstrap?domain=henry.k12.va.us
+
+Expected result:
+- organization.orgCode = henry-county
+- syncMode = verified-domain
+- domainResolution.verified = true
+- domainResolution.domain = henry.k12.va.us
+
+If testing signed-in users:
+A user signing in with an email ending in @henry.k12.va.us should attach to the Henry County organization through organization_domains.

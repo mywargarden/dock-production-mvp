@@ -1,0 +1,16 @@
+Remote delete ID contract fix
+
+Changes made surgically:
+- Preserved Supabase memory id/memory_id during remote hydration in dock-extension/core/storage.js.
+- Passed removed tab objects into delete sync instead of URL-only strings.
+- Updated dock-extension/core/auth.js delete sync to:
+  - prefer memory id for DELETE /api/user/memories?id=<uuid>
+  - fall back to resolving id by URL through GET /api/user/memories?includeScreenshots=0
+  - log "Deleting memory:" with id/url/title before the DELETE request
+  - keep userInitiated safety guard and tombstone behavior intact.
+
+Expected test:
+- BEFORE DELETE COUNT: 14
+- Delete one hydrated card
+- Console should log Deleting memory: { id: '<real uuid>', ... }
+- AFTER DELETE COUNT should be 13

@@ -1,0 +1,15 @@
+Dock bliss 10 surgical patch notes
+
+Patched deployment blockers:
+1. Dock'em All now passes openMemories: true so background owns final Safe Harbor focus.
+2. Background Safe Harbor open/refresh now enforces singleton behavior, removes duplicates, anchors index 0, focuses window/tab, and refreshes existing Safe Harbor.
+3. Local savedTabs writes now store pruned/lite memory records immediately so full base64 screenshots do not remain in chrome.storage.local when backend sync fails.
+4. Background setSavedTabs also stores lite records immediately while still syncing full screenshot payloads asynchronously.
+5. Supabase anon key config now allows local/managed overrides before bundled defaults.
+6. Legacy Henry County fallback is replaced with neutral local-only Dock fallback.
+7. User-facing HCPS lock copy is replaced with neutral Dock lock copy.
+8. Placeholder example.com upgrade button no longer opens an external fake URL.
+
+Static checks performed:
+- manifest.json parsed successfully.
+- node --check passed for popup.js, background.js, memories.js, core/auth.js, core/orgResolver.js, core/storage.js, admin.js, import.js.
