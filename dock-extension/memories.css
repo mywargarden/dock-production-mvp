@@ -6683,3 +6683,49 @@ body[data-managed-dock="true"] .previewPill {
 body[data-managed-dock="true"] .card {
   backdrop-filter: blur(6px);
 }
+
+/* Managed District Dock background display */
+body[data-managed-dock="true"] {
+  background-color: var(--bg) !important;
+  background-image:
+    linear-gradient(rgba(251,247,242,0.42), rgba(251,247,242,0.42)),
+    var(--managed-dock-bg) !important;
+  background-size: cover !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+  min-height: 100vh;
+}
+
+/* Keep Dock controls readable over district background */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .groupBar {
+  background: rgba(251,247,242,0.76) !important;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Let the background show through the page */
+body[data-managed-dock="true"] main {
+  background: transparent !important;
+}
+
+/* Keep cards clean/readable */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .empty,
+body[data-managed-dock="true"] .menuPanel {
+  background: rgba(255,255,255,0.88) !important;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+/* District accent color */
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #refreshBtn,
+body[data-managed-dock="true"] #adminWorkspaceBtn,
+body[data-managed-dock="true"] .groupCreateBtn,
+body[data-managed-dock="true"] .groupPill.active {
+  background: var(--managed-dock-accent, var(--primary)) !important;
+  color: #fff !important;
+}
+
