@@ -6890,3 +6890,23 @@ body[data-managed-dock="true"] .defaultLogo,
 body[data-managed-dock="true"] .dockWatermark {
   display: none !important;
 }
+
+/* === Final safety: hide central default Dock watermark only on managed district dock === */
+body[data-managed-dock="true"] [data-district-hidden-watermark="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
+
+body[data-managed-dock="true"] .empty,
+body[data-managed-dock="true"] .emptyState,
+body[data-managed-dock="true"] .empty-state,
+body[data-managed-dock="true"] .brandEmpty,
+body[data-managed-dock="true"] .centerLogo,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .defaultLogo,
+body[data-managed-dock="true"] .dockWatermark {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}
