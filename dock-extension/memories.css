@@ -6949,3 +6949,49 @@ body[data-managed-dock="true"] .emptyPanel {
   opacity: 0 !important;
   pointer-events: none !important;
 }
+
+/* === District Dock: full-strength admin background image ===
+   Keep the admin-selected background visible at full opacity.
+   This removes the soft white wash/gradient over the district image only.
+*/
+body[data-managed-dock="true"] {
+  background-color: var(--managed-dock-soft-bg, #eef6f1) !important;
+  background-image: var(--managed-dock-bg) !important;
+  background-size: auto min(78vw, 900px) !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
+
+/* Make sure no theme/pseudo overlay fades the district image */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"][data-theme]::before,
+body[data-managed-dock="true"][data-theme]::after {
+  content: none !important;
+  display: none !important;
+  opacity: 0 !important;
+  background: none !important;
+  background-image: none !important;
+}
+
+/* Keep the page surface clear so the district background shows through */
+body[data-managed-dock="true"] main,
+body[data-managed-dock="true"] .main,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .page,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .container {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Keep cards readable without washing out the entire page */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .menuPanel {
+  background: rgba(255,255,255,0.88) !important;
+}
