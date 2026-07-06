@@ -6860,3 +6860,33 @@ body[data-managed-dock="true"] .saveDrawer {
   backdrop-filter: blur(4px);
   -webkit-backdrop-filter: blur(4px);
 }
+
+/* === Hide default center Dock logo on managed district dock === */
+/* Only applies when the HCPS / managed district dock is active. */
+body[data-managed-dock="true"] img[src*="dock_logo"],
+body[data-managed-dock="true"] img[src*="dock-logo"],
+body[data-managed-dock="true"] img[src*="logo.png"],
+body[data-managed-dock="true"] img[alt="Dock"],
+body[data-managed-dock="true"] img[alt="DOCK"],
+body[data-managed-dock="true"] .empty img,
+body[data-managed-dock="true"] .emptyState img,
+body[data-managed-dock="true"] .empty-state img,
+body[data-managed-dock="true"] .brandEmpty img,
+body[data-managed-dock="true"] .centerLogo img,
+body[data-managed-dock="true"] .dockCenterLogo img,
+body[data-managed-dock="true"] .defaultLogo img,
+body[data-managed-dock="true"] .dockWatermark img {
+  display: none !important;
+}
+
+/* Also hide the surrounding logo/watermark block if it is only holding the big Dock logo. */
+body[data-managed-dock="true"] .empty,
+body[data-managed-dock="true"] .emptyState,
+body[data-managed-dock="true"] .empty-state,
+body[data-managed-dock="true"] .brandEmpty,
+body[data-managed-dock="true"] .centerLogo,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .defaultLogo,
+body[data-managed-dock="true"] .dockWatermark {
+  display: none !important;
+}
