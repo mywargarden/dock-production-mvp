@@ -6910,3 +6910,10 @@ body[data-managed-dock="true"] .dockWatermark {
   visibility: hidden !important;
   opacity: 0 !important;
 }
+
+/* Backup hide flag for managed district center watermark */
+body[data-managed-dock="true"] [data-hidden-managed-dock-watermark="true"] {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
+}

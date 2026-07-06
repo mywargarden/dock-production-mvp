@@ -2309,3 +2309,87 @@ async function init() {
 }
 
 init().catch(() => {});
+
+
+
+/* === Hide centered Dock watermark on managed district dock === */
+(function(){
+  function isManagedDistrictDock(){
+    return document.body && document.body.dataset.managedDock === "true";
+  }
+
+  function looksLikeCenterDockWatermark(el){
+    if (!el || !el.getBoundingClientRect) return false;
+
+    const rect = el.getBoundingClientRect();
+    const vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    const vh = window.innerHeight || document.documentElement.clientHeight || 0;
+
+    if (!vw || !vh) return false;
+
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+
+    const isBigEnough = rect.width >= 160 && rect.height >= 90;
+    const isCenteredX = cx > vw * 0.30 && cx < vw * 0.72;
+    const isLowerThanHeader = cy > vh * 0.28;
+    const isNotCard = !el.closest(".card,.memoryCard,.previewCard,.menuPanel,.dockModal,.dockDrawer,.saveDrawer,#themeMenu,.themeMenuPanel,header,.header,.topBar,.groupBar,.groupPillWrap,.groupPillsRail,nav");
+
+    const txt = String(el.textContent || "").trim().toLowerCase();
+    const alt = String(el.getAttribute?.("alt") || "").toLowerCase();
+    const src = String(el.getAttribute?.("src") || el.currentSrc || "").toLowerCase();
+    const cls = String(el.className || "").toLowerCase();
+
+    const looksDock =
+      txt === "dock" ||
+      alt.includes("dock") ||
+      src.includes("dock") ||
+      cls.includes("dock") ||
+      cls.includes("logo") ||
+      cls.includes("empty") ||
+      cls.includes("watermark");
+
+    return isBigEnough && isCenteredX && isLowerThanHeader && isNotCard && looksDock;
+  }
+
+  function hideCenterDockWatermark(){
+    if (!isManagedDistrictDock()) return;
+
+    const els = Array.from(document.querySelectorAll("img, svg, picture, canvas, div, section, main"));
+    for (const el of els) {
+      if (looksLikeCenterDockWatermark(el)) {
+        el.style.setProperty("display", "none", "important");
+        el.style.setProperty("visibility", "hidden", "important");
+        el.style.setProperty("opacity", "0", "important");
+        el.setAttribute("data-hidden-managed-dock-watermark", "true");
+      }
+    }
+  }
+
+  function start(){
+    hideCenterDockWatermark();
+
+    if (window.__dockHideCenterWatermarkTimer) return;
+
+    window.__dockHideCenterWatermarkTimer = window.setInterval(() => {
+      try { hideCenterDockWatermark(); } catch {}
+    }, 350);
+
+    try {
+      const obs = new MutationObserver(() => {
+        try { hideCenterDockWatermark(); } catch {}
+      });
+      obs.observe(document.body, { childList: true, subtree: true, attributes: true });
+      window.__dockHideCenterWatermarkObserver = obs;
+    } catch {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", start);
+  } else {
+    start();
+  }
+
+  window.dockHideCenterDockWatermark = hideCenterDockWatermark;
+})();
+
