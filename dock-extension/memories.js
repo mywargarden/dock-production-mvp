@@ -100,6 +100,27 @@ function canDeleteCurrentView(){ return activeGroup !== "__admin__"; }
 function currentGroupRecord(){ return (groups || []).find(g => g.id === activeGroup) || null; }
 function ensureGroupColor(group){ return norm(group?.color) || DEFAULT_GROUP_COLOR; }
 
+
+/* === District theme visual cleanup helper === */
+function dockClearVisualThemeForDistrict(){
+  try {
+    document.body.removeAttribute("data-theme");
+    document.documentElement.style.removeProperty("--dock-theme-scene");
+    document.documentElement.style.removeProperty("--dock-theme-bg");
+    document.documentElement.style.removeProperty("--dock-theme-card");
+    document.documentElement.style.removeProperty("--dock-theme-accent");
+    document.documentElement.style.removeProperty("--theme-bg");
+    document.documentElement.style.removeProperty("--theme-scene");
+    document.documentElement.style.removeProperty("--theme-accent");
+  } catch {}
+}
+
+function dockRestoreSavedThemeOutsideDistrict(){
+  try {
+    if (typeof loadTheme === "function") loadTheme();
+  } catch {}
+}
+
 function applyTheme(theme){
   const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
   document.body.dataset.theme = next;
@@ -1462,6 +1483,7 @@ async function ensureAllMemoriesPreviewsHydrated() {
 let renderAllFullPromise = null;
 
 async function renderAll(){
+  try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
@@ -1540,6 +1562,7 @@ async function renderAll(){
 }
 
 async function renderAdmin(){
+  try { dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(true);
   const items = getAdminCards();
@@ -1565,6 +1588,7 @@ async function renderAdmin(){
 }
 
 async function renderGroup(groupId){
+  try { if (groupId === "__admin__") dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);

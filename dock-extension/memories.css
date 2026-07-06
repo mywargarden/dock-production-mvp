@@ -6995,3 +6995,27 @@ body[data-managed-dock="true"] .previewCard,
 body[data-managed-dock="true"] .menuPanel {
   background: rgba(255,255,255,0.88) !important;
 }
+
+
+/* === District Dock: block user theme bleed ===
+   District/admin dock always uses admin branding.
+   User themes only apply on Library and personal docks.
+*/
+body[data-managed-dock="true"][data-theme],
+body[data-managed-dock="true"] {
+  background-image: var(--managed-dock-bg) !important;
+  background-color: var(--managed-dock-soft-bg, #eef6f1) !important;
+}
+
+body[data-managed-dock="true"][data-theme]::before,
+body[data-managed-dock="true"][data-theme]::after,
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeScene,
+body[data-managed-dock="true"] .themeBackdrop {
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  background-image: none !important;
+  opacity: 0 !important;
+}
