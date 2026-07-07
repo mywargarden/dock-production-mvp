@@ -2048,8 +2048,16 @@ window.addEventListener("scroll", () => {
     positionDockPillMenu(activeDockPillMenu, activeDockPillMenu.__dockAnchorBtn);
   }
 }, true);
-createGroupBtn?.addEventListener("click", async () => {
-  await createDockFromSelection();
+createGroupBtn?.addEventListener("click", async (event) => {
+  if (event && typeof event.preventDefault === "function") event.preventDefault();
+  if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+
+  try {
+    await createDockFromSelection();
+  } catch (err) {
+    console.error("Dock It create failed:", err);
+    alert("Dock creation failed. Check the console for details.");
+  }
 });
 
 addBtn?.addEventListener("click", async () => {
@@ -2657,16 +2665,8 @@ init().catch(() => {});
 
 
 /* === Admin dock create click hardening v1 === */
-if (createGroupBtn && !createGroupBtn.dataset.adminDockCreateHardening) {
-  createGroupBtn.dataset.adminDockCreateHardening = "true";
-  createGroupBtn.addEventListener("click", async (e) => {
-    if (createGroupBtn.disabled) return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    try { closeMenus(); } catch {}
-    await createDockFromSelection();
-  }, true);
-}
+
+
 
 
 
@@ -2727,237 +2727,17 @@ document.addEventListener("click", async (e) => {
 }, true);
 
 
-/* === Admin district Dock It click rescue ===
-   District/admin background can visually sit behind the page, but on some builds
-   it interferes with the normal Dock It click path. This capture handler only
-   activates while viewing the locked admin/district dock and only when the click
-   lands inside the visible Dock It button rectangle.
-*/
-function installAdminDockItClickRescue(){
-  if (!createGroupBtn || createGroupBtn.__adminDockItClickRescueInstalled) return;
-  createGroupBtn.__adminDockItClickRescueInstalled = true;
-
-  document.addEventListener("click", async (event) => {
-    try {
-      if (activeGroup !== "__admin__") return;
-
-      const btn = document.getElementById("createGroupBtn") || createGroupBtn;
-      if (!btn) return;
-
-      const rect = btn.getBoundingClientRect();
-      const clickedButton =
-        event.target === btn ||
-        btn.contains(event.target) ||
-        (
-          event.clientX >= rect.left &&
-          event.clientX <= rect.right &&
-          event.clientY >= rect.top &&
-          event.clientY <= rect.bottom
-        );
-
-      if (!clickedButton) return;
-
-      const selected = getSelectedCloneItems();
-      if (!selected.length) return;
-
-      if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
-      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-      if (typeof event.stopImmediatePropagation === "function") {
-        if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
-      }
-
-      await createDockFromSelection();
-    } catch (err) {
-      console.error("Admin Dock It rescue failed:", err);
-      alert("Dock creation failed. Check the console for details.");
-    }
-  }, true);
-}
-
-installAdminDockItClickRescue();
 
 
-/* === Dock It admin diagnostic rescue v2 ===
-   Narrow diagnostic + rescue for admin/district Dock It when district background is active.
-*/
-(function installDockItAdminDiagnosticRescue(){
-  if (window.__dockItAdminDiagnosticRescueInstalled) return;
-  window.__dockItAdminDiagnosticRescueInstalled = true;
-
-  function adminSelectedCount(){
-    try {
-      if (typeof getSelectedCloneItems === "function") {
-        return getSelectedCloneItems().length;
-      }
-    } catch (e) {}
-    try {
-      if (typeof getSelectedVisibleItems === "function") {
-        return getSelectedVisibleItems().length;
-      }
-    } catch (e) {}
-    return -1;
-  }
-
-  function isInsideDockItButton(x, y){
-    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
-    if (!btn) return false;
-
-    const r = btn.getBoundingClientRect();
-    return (
-      x >= r.left &&
-      x <= r.right &&
-      y >= r.top &&
-      y <= r.bottom
-    );
-  }
-
-  async function forceAdminDockItFromPointer(event = null) {
-  event = event || window.event || null;
-
-  try {
-    if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
-
-    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn || null;
-    if (!btn) return;
-
-    // Only rescue real clicks/pointers on or near Dock It.
-    let onDockIt = false;
-
-    const target = event?.target || null;
-    if (target && (target === btn || btn.contains(target))) {
-      onDockIt = true;
-    } else if (
-      event &&
-      Number.isFinite(Number(event.clientX)) &&
-      Number.isFinite(Number(event.clientY))
-    ) {
-      const r = btn.getBoundingClientRect();
-      const pad = 18;
-      const x = Number(event.clientX);
-      const y = Number(event.clientY);
-      onDockIt =
-        x >= r.left - pad &&
-        x <= r.right + pad &&
-        y >= r.top - pad &&
-        y <= r.bottom + pad;
-    }
-
-    if (!onDockIt) return;
-
-    const selected = getSelectedCloneItems();
-    if (!selected.length) return;
-
-    if (event && typeof event.preventDefault === "function") event.preventDefault();
-    if (event && typeof event.stopPropagation === "function") event.stopPropagation();
-    if (event && typeof event.stopImmediatePropagation === "function") {
-      event.stopImmediatePropagation();
-    }
-
-    await createDockFromSelection();
-  } catch (err) {
-    console.error("Admin Dock It rescue failed:", err);
-    alert("Dock creation failed. Check the console for details.");
-  }
-}
-})();
 
 
-/* === FINAL ADMIN BACKGROUND DOCK IT BRIDGE ===
-   Problem fixed:
-   - Admin/District Dock with managed background can swallow or misroute the normal Dock It click.
-   - The old rescue handler became the active path and could fail before the Create Dock modal opened.
-   - This bridge removes the old rescue listener and directly invokes the same create flow only when:
-     1) activeGroup is "__admin__"
-     2) selected admin memories exist
-     3) the click/pointer is actually on or near the Dock It button.
-*/
-try {
-  if (typeof forceAdminDockItFromPointer === "function") {
-    window.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
-    window.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
-    window.removeEventListener("click", forceAdminDockItFromPointer, true);
-    document.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
-    document.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
-    document.removeEventListener("click", forceAdminDockItFromPointer, true);
-  }
-} catch {}
 
-let __finalAdminDockItBridgeBusy = false;
 
-function __finalDockItButton(){
-  return document.getElementById("createGroupBtn") || createGroupBtn || null;
-}
 
-function __finalPointInsideButton(btn, event){
-  if (!btn || !event) return false;
-
-  const target = event.target || null;
-  if (target && (target === btn || btn.contains(target))) return true;
-
-  const x = Number(event.clientX);
-  const y = Number(event.clientY);
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
-
-  const r = btn.getBoundingClientRect();
-  const pad = 12;
-
-  return (
-    x >= r.left - pad &&
-    x <= r.right + pad &&
-    y >= r.top - pad &&
-    y <= r.bottom + pad
-  );
-}
-
-async function __finalRunAdminDockItBridge(){
-  if (__finalAdminDockItBridgeBusy) return;
-  __finalAdminDockItBridgeBusy = true;
-
-  try {
-    if (activeGroup !== "__admin__") return;
-
-    const selected = getSelectedCloneItems();
-    if (!selected.length) {
-      alert("Select one or more memories first.");
-      return;
-    }
-
-    await createDockFromSelection();
-  } catch (err) {
-    console.error("[Final admin Dock It bridge failed]", err);
-    alert("Dock creation failed. Open chrome://extensions errors and send the new error.");
-  } finally {
-    setTimeout(() => {
-      __finalAdminDockItBridgeBusy = false;
-    }, 350);
-  }
-}
-
-function __finalAdminDockItBridge(event){
-  try {
-    if (activeGroup !== "__admin__") return;
-
-    const btn = __finalDockItButton();
-    if (!btn || btn.disabled) return;
-    if (!__finalPointInsideButton(btn, event)) return;
-
-    if (event && typeof event.preventDefault === "function") event.preventDefault();
-    if (event && typeof event.stopPropagation === "function") event.stopPropagation();
-    if (event && typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
-
-    __finalRunAdminDockItBridge();
-  } catch (err) {
-    console.error("[Final admin Dock It bridge handler failed]", err);
-  }
-}
-
-window.addEventListener("pointerdown", __finalAdminDockItBridge, true);
-window.addEventListener("mousedown", __finalAdminDockItBridge, true);
-window.addEventListener("click", __finalAdminDockItBridge, true);
 
 
 /* === FINAL ADMIN DOCK IT RESCUE INSTALL === */
-window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
-window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
-window.addEventListener("click", forceAdminDockItFromPointer, true);
+
+
+
 
