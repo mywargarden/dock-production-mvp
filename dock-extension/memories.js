@@ -2857,3 +2857,97 @@ installAdminDockItClickRescue();
   window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
 })();
 
+
+/* === FINAL ADMIN BACKGROUND DOCK IT BRIDGE ===
+   Problem fixed:
+   - Admin/District Dock with managed background can swallow or misroute the normal Dock It click.
+   - The old rescue handler became the active path and could fail before the Create Dock modal opened.
+   - This bridge removes the old rescue listener and directly invokes the same create flow only when:
+     1) activeGroup is "__admin__"
+     2) selected admin memories exist
+     3) the click/pointer is actually on or near the Dock It button.
+*/
+try {
+  if (typeof forceAdminDockItFromPointer === "function") {
+    window.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
+    window.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
+    window.removeEventListener("click", forceAdminDockItFromPointer, true);
+    document.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
+    document.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
+    document.removeEventListener("click", forceAdminDockItFromPointer, true);
+  }
+} catch {}
+
+let __finalAdminDockItBridgeBusy = false;
+
+function __finalDockItButton(){
+  return document.getElementById("createGroupBtn") || createGroupBtn || null;
+}
+
+function __finalPointInsideButton(btn, event){
+  if (!btn || !event) return false;
+
+  const target = event.target || null;
+  if (target && (target === btn || btn.contains(target))) return true;
+
+  const x = Number(event.clientX);
+  const y = Number(event.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+
+  const r = btn.getBoundingClientRect();
+  const pad = 12;
+
+  return (
+    x >= r.left - pad &&
+    x <= r.right + pad &&
+    y >= r.top - pad &&
+    y <= r.bottom + pad
+  );
+}
+
+async function __finalRunAdminDockItBridge(){
+  if (__finalAdminDockItBridgeBusy) return;
+  __finalAdminDockItBridgeBusy = true;
+
+  try {
+    if (activeGroup !== "__admin__") return;
+
+    const selected = getSelectedCloneItems();
+    if (!selected.length) {
+      alert("Select one or more memories first.");
+      return;
+    }
+
+    await createDockFromSelection();
+  } catch (err) {
+    console.error("[Final admin Dock It bridge failed]", err);
+    alert("Dock creation failed. Open chrome://extensions errors and send the new error.");
+  } finally {
+    setTimeout(() => {
+      __finalAdminDockItBridgeBusy = false;
+    }, 350);
+  }
+}
+
+function __finalAdminDockItBridge(event){
+  try {
+    if (activeGroup !== "__admin__") return;
+
+    const btn = __finalDockItButton();
+    if (!btn || btn.disabled) return;
+    if (!__finalPointInsideButton(btn, event)) return;
+
+    if (event && typeof event.preventDefault === "function") event.preventDefault();
+    if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+    if (event && typeof event.stopImmediatePropagation === "function") event.stopImmediatePropagation();
+
+    __finalRunAdminDockItBridge();
+  } catch (err) {
+    console.error("[Final admin Dock It bridge handler failed]", err);
+  }
+}
+
+window.addEventListener("pointerdown", __finalAdminDockItBridge, true);
+window.addEventListener("mousedown", __finalAdminDockItBridge, true);
+window.addEventListener("click", __finalAdminDockItBridge, true);
+
