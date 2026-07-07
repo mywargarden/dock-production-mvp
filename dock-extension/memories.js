@@ -1659,6 +1659,10 @@ async function ensureAllMemoriesPreviewsHydrated() {
   allMemoriesPreviewHydratedThisSession = true;
   return false;
 }
+
+// Safety fallback: older Dock It handlers may reference __dockSafeEvtFallback in rare paths.
+const __dockSafeEvtFallback = null;
+
 let renderAllFullPromise = null;
 
 
@@ -1674,8 +1678,8 @@ function dockBindCreateButtonDirectly(){
       try {
         if (activeGroup !== "__admin__") return;
 
-        if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
-        if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
+        if (typeof event !== "undefined" && event && typeof event.preventDefault === "function") event.preventDefault();
+        if (typeof event !== "undefined" && event && typeof event.stopPropagation === "function") event.stopPropagation();
 
         const selected = getAdminSelectedCloneItemsSafe();
         if (!selected.length) {
