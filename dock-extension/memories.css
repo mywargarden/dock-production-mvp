@@ -7115,9 +7115,13 @@ body[data-managed-dock="true"] .groupPillMenu * {
   pointer-events: auto !important;
 }
 
-/* === Final fix: admin background must never cover Dock creation modal === */
 
-/* District/admin branding backgrounds are visual only */
+/* === Safe district/admin layering fix ===
+   Background branding must be visual-only.
+   Do NOT reposition checkboxes/buttons/cards globally.
+*/
+
+/* Only district/admin visual background layers are non-clickable */
 body[data-managed-dock="true"]::before,
 body[data-managed-dock="true"]::after,
 body[data-managed-dock="true"] .themeBackdrop,
@@ -7130,11 +7134,12 @@ body[data-managed-dock="true"] .dockCenterLogo::before,
 body[data-managed-dock="true"] .dockCenterLogo::after,
 body[data-managed-dock="true"] .dockWatermark,
 body[data-managed-dock="true"] .dockWatermark::before,
-body[data-managed-dock="true"] .dockWatermark::after {
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"][data-district-hidden-watermark="true"] {
   pointer-events: none !important;
 }
 
-/* Keep normal page controls above district background */
+/* The actual app shell remains clickable, but we do not alter child positioning */
 body[data-managed-dock="true"] .header,
 body[data-managed-dock="true"] .topBar,
 body[data-managed-dock="true"] .groupBar,
@@ -7145,55 +7150,47 @@ body[data-managed-dock="true"] .workspace,
 body[data-managed-dock="true"] .library,
 body[data-managed-dock="true"] .content,
 body[data-managed-dock="true"] .container,
-body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .grid {
+  z-index: 20 !important;
+}
+
+/* Cards stay above the district background without moving internal checkbox layout */
 body[data-managed-dock="true"] .card,
 body[data-managed-dock="true"] .memoryCard,
-body[data-managed-dock="true"] .previewCard,
-body[data-managed-dock="true"] .selWrap,
-body[data-managed-dock="true"] .cardSelect,
-body[data-managed-dock="true"] input[type="checkbox"],
-body[data-managed-dock="true"] button,
-body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] .previewCard {
+  z-index: 30 !important;
+  pointer-events: auto !important;
+}
+
+/* Buttons/pills stay clickable, but no forced positioning on checkboxes */
 body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .actionBtn,
 body[data-managed-dock="true"] .groupPill,
 body[data-managed-dock="true"] .groupPill button,
 body[data-managed-dock="true"] .groupPillMenu,
 body[data-managed-dock="true"] .groupPillMenu * {
-  position: relative !important;
-  z-index: 100 !important;
+  z-index: 50 !important;
   pointer-events: auto !important;
 }
 
-/* The Create Dock modal/backdrop must always be above everything */
-body[data-managed-dock="true"] .modalBackdrop,
-body[data-managed-dock="true"] .dockModalBackdrop,
-body[data-managed-dock="true"] .workspaceModalBackdrop,
-body[data-managed-dock="true"] .createDockBackdrop,
-body[data-managed-dock="true"] .backdrop,
-body[data-managed-dock="true"] .overlay {
-  position: fixed !important;
-  z-index: 999998 !important;
+/* Create/Edit Dock modal must always sit above district branding */
+.modalBackdrop,
+.dockModalBackdrop,
+.workspaceModalBackdrop,
+.createDockBackdrop,
+.backdrop,
+.overlay {
+  z-index: 99998 !important;
   pointer-events: auto !important;
 }
 
-body[data-managed-dock="true"] .modal,
-body[data-managed-dock="true"] .dockModal,
-body[data-managed-dock="true"] .workspaceModal,
-body[data-managed-dock="true"] .createDockModal,
-body[data-managed-dock="true"] .dialog,
-body[data-managed-dock="true"] [role="dialog"] {
-  position: fixed !important;
-  z-index: 999999 !important;
-  pointer-events: auto !important;
-}
-
-/* Inputs/buttons inside modal must stay clickable */
-body[data-managed-dock="true"] .modal *,
-body[data-managed-dock="true"] .dockModal *,
-body[data-managed-dock="true"] .workspaceModal *,
-body[data-managed-dock="true"] .createDockModal *,
-body[data-managed-dock="true"] .dialog *,
-body[data-managed-dock="true"] [role="dialog"] * {
+.modal,
+.dockModal,
+.workspaceModal,
+.createDockModal,
+.dialog,
+[role="dialog"] {
+  z-index: 99999 !important;
   pointer-events: auto !important;
 }
 
