@@ -2811,7 +2811,9 @@ installAdminDockItClickRescue();
     );
   }
 
-  async function forceAdminDockItFromPointer(event){
+  async function forceAdminDockItFromPointer(event = null){
+  event = event || window.event || null;
+
   try {
     if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
 
