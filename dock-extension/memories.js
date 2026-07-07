@@ -2811,50 +2811,54 @@ installAdminDockItClickRescue();
     );
   }
 
-  async function forceAdminDockItFromPointer(event = null){
+  async function forceAdminDockItFromPointer(event = null) {
   event = event || window.event || null;
 
   try {
     if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
 
-    const e = event || window.event || {};
-    const x = typeof e.clientX === "number" ? e.clientX : NaN;
-    const y = typeof e.clientY === "number" ? e.clientY : NaN;
+    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn || null;
+    if (!btn) return;
 
-    if (
-      Number.isFinite(x) &&
-      Number.isFinite(y) &&
-      typeof isInsideDockItButton === "function" &&
-      !isInsideDockItButton(x, y)
+    // Only rescue real clicks/pointers on or near Dock It.
+    let onDockIt = false;
+
+    const target = event?.target || null;
+    if (target && (target === btn || btn.contains(target))) {
+      onDockIt = true;
+    } else if (
+      event &&
+      Number.isFinite(Number(event.clientX)) &&
+      Number.isFinite(Number(event.clientY))
     ) {
-      return;
+      const r = btn.getBoundingClientRect();
+      const pad = 18;
+      const x = Number(event.clientX);
+      const y = Number(event.clientY);
+      onDockIt =
+        x >= r.left - pad &&
+        x <= r.right + pad &&
+        y >= r.top - pad &&
+        y <= r.bottom + pad;
     }
 
-    const selected = typeof getSelectedCloneItems === "function"
-      ? getSelectedCloneItems()
-      : [];
+    if (!onDockIt) return;
 
+    const selected = getSelectedCloneItems();
     if (!selected.length) return;
 
-    if (typeof e.preventDefault === "function") e.preventDefault();
-    if (typeof e.stopPropagation === "function") e.stopPropagation();
-    if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
-
-    if (typeof createDockFromSelection === "function") {
-      await createDockFromSelection();
-      return;
+    if (event && typeof event.preventDefault === "function") event.preventDefault();
+    if (event && typeof event.stopPropagation === "function") event.stopPropagation();
+    if (event && typeof event.stopImmediatePropagation === "function") {
+      event.stopImmediatePropagation();
     }
 
-    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
-    if (btn && typeof btn.click === "function") btn.click();
+    await createDockFromSelection();
   } catch (err) {
-    console.error("[DockIt rescue failed]", err);
-    alert("Dock creation failed. Check console for details.");
+    console.error("Admin Dock It rescue failed:", err);
+    alert("Dock creation failed. Check the console for details.");
   }
 }
-
-  window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
-  window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
 })();
 
 
@@ -2950,4 +2954,10 @@ function __finalAdminDockItBridge(event){
 window.addEventListener("pointerdown", __finalAdminDockItBridge, true);
 window.addEventListener("mousedown", __finalAdminDockItBridge, true);
 window.addEventListener("click", __finalAdminDockItBridge, true);
+
+
+/* === FINAL ADMIN DOCK IT RESCUE INSTALL === */
+window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
+window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
+window.addEventListener("click", forceAdminDockItFromPointer, true);
 
