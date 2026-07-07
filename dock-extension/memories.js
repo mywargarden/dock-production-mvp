@@ -2811,49 +2811,46 @@ installAdminDockItClickRescue();
     );
   }
 
-  async function forceAdminDockItFromPointer(event){
-    try {
-      if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
-      if (!isInsideDockItButton(event.clientX, event.clientY)) return;
+  async function forceAdminDockItFromPointer(evt){
+  try {
+    if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
 
-      const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
-      const selectedCount = adminSelectedCount();
+    const x = evt && typeof evt.clientX === "number" ? evt.clientX : NaN;
+    const y = evt && typeof evt.clientY === "number" ? evt.clientY : NaN;
 
-      console.warn("[DockIt diagnostic]", {
-        eventType: event.type,
-        activeGroup,
-        selectedCount,
-        buttonFound: !!btn,
-        buttonDisabled: !!btn?.disabled,
-        buttonClass: btn?.className,
-        target: event.target,
-        targetClass: event.target?.className
-      });
-
-      if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
-      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-      if (typeof event.stopImmediatePropagation === "function") {
-        if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
-      }
-
-      if (selectedCount <= 0) {
-        alert("Dock It reached the rescue handler, but no admin memories are selected.");
-        return;
-      }
-
-      if (btn) btn.disabled = false;
-
-      if (typeof createDockFromSelection === "function") {
-        await createDockFromSelection();
-        return;
-      }
-
-      alert("Dock It reached the rescue handler, but createDockFromSelection is not available.");
-    } catch (err) {
-      console.error("[DockIt diagnostic] create failed", err);
-      alert("Dock It reached the rescue handler but failed before opening the popup. Check console.");
+    // Only rescue clicks that are actually on/near Dock It.
+    if (
+      Number.isFinite(x) &&
+      Number.isFinite(y) &&
+      typeof isInsideDockItButton === "function" &&
+      !isInsideDockItButton(x, y)
+    ) {
+      return;
     }
+
+    const selected = typeof getSelectedCloneItems === "function"
+      ? getSelectedCloneItems()
+      : [];
+
+    if (!selected.length) return;
+
+    if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
+    if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
+    if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
+
+    // Do not fake-click the button. Directly run the same working create flow.
+    if (typeof createDockFromSelection === "function") {
+      await createDockFromSelection();
+      return;
+    }
+
+    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
+    if (btn && typeof btn.click === "function") btn.click();
+  } catch (err) {
+    console.error("[DockIt rescue failed]", err);
+    alert("Dock It reached the rescue handler but failed before opening the popup: " + (err && err.message ? err.message : err));
   }
+}
 
   window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
   window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
