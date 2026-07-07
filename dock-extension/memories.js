@@ -439,24 +439,9 @@ function mergePreviewFields(item, source){
 }
 
 function getSelectedCloneItems(){
-  const savedByUrl = new Map(
-    (savedTabs || [])
-      .filter((tab) => tab && tab.url)
-      .map((tab) => [tab.url, tab])
-  );
-
-  const workspaceByUrl = new Map();
-  Object.values(groupItems || {}).forEach((items) => {
-    if (!Array.isArray(items)) return;
-    items.forEach((tab) => {
-      if (tab && tab.url && previewValue(tab)) workspaceByUrl.set(tab.url, tab);
-    });
-  });
-
   return getSelectedVisibleItems()
-    .map((item) => mergePreviewFields(item, workspaceByUrl.get(item?.url)))
-    .map((item) => mergePreviewFields(item, savedByUrl.get(item?.url)))
-    .map(cloneMemoryItem);
+    .map(cloneMemoryItem)
+    .filter(item => item && (item.url || item.title));
 }
 function addItemsToGroup(groupId, items){
   if (!groupId || !Array.isArray(items) || !items.length) return;
@@ -1025,9 +1010,8 @@ function updateWorkspaceButtons(){
 
   if (addBtn){
     const eligibleTargetCount = Math.max(0, (groups || []).length - (activeGroup && activeGroup !== "__all__" && activeGroup !== "__admin__" ? 1 : 0));
-    addBtn.disabled = locked || selectedCount === 0 || eligibleTargetCount === 0;
-    if (locked) addBtn.title = "Dock is locked";
-    else if (!selectedCount) addBtn.title = "Select one or more cards first";
+    addBtn.disabled = selectedCount === 0 || eligibleTargetCount === 0;
+    if (!selectedCount) addBtn.title = "Select one or more cards first";
     else if (!eligibleTargetCount) addBtn.title = "Create another Dock first";
     else addBtn.title = `Add ${selectedCount} selected to another Dock`;
   }
@@ -1729,7 +1713,7 @@ async function createDockFromSelection() {
   await loadState();
   const selected = getSelectedCloneItems();
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
   openWorkspaceModal({
@@ -1757,7 +1741,7 @@ async function addSelectedToDock(targetDockId) {
   await loadState();
   const selected = getSelectedCloneItems();
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
   addItemsToGroup(targetDockId, selected);
@@ -1919,7 +1903,7 @@ addBtn?.addEventListener("click", async () => {
   }
   const selected = getSelectedCloneItems();
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
   const targetChoices = (groups || [])
