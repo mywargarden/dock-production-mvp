@@ -7019,3 +7019,34 @@ body[data-managed-dock="true"] .themeBackdrop {
   background-image: none !important;
   opacity: 0 !important;
 }
+
+/* === Safety: district/admin branding background must never block memory clicks === */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"] [data-district-hidden-watermark="true"] {
+  pointer-events: none !important;
+}
+
+/* Cards and controls must stay clickable above district branding. */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .cardSelect,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button {
+  pointer-events: auto !important;
+}

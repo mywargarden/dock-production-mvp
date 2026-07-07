@@ -407,11 +407,105 @@ function getFaviconUrl(rawUrl){
     return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(u.hostname)}&sz=128`;
   } catch { return ""; }
 }
+
+function pickMemoryVisual(item){
+  if (!item) return "";
+
+  // Keep this broad because admin-assigned cards, library cards, imported
+  // cards, and saved tabs have used different field names over time.
+  return (
+    item.screenshot ||
+    item.screenshotUrl ||
+    item.screenshot_url ||
+    item.screenshotDataUrl ||
+    item.screenshotDataURI ||
+    item.screenshot_data_url ||
+    item.previewImage ||
+    item.previewUrl ||
+    item.preview_url ||
+    item.thumbnail ||
+    item.thumbnailUrl ||
+    item.thumbnail_url ||
+    item.image ||
+    item.imageUrl ||
+    item.image_url ||
+    item.uploadedImage ||
+    item.uploadedImageUrl ||
+    item.uploaded_image_url ||
+    item.cardImage ||
+    item.cardImageUrl ||
+    item.card_image_url ||
+    item.customImage ||
+    item.customImageUrl ||
+    item.custom_image_url ||
+    item.icon ||
+    item.iconUrl ||
+    item.faviconUrl ||
+    item.favIconUrl ||
+    ""
+  );
+}
+
 function cloneMemoryItem(item){
-  const out = { ...item };
-  delete out.__kind;
-  delete out.__index;
-  return out;
+  const visual = pickMemoryVisual(item);
+
+  const cloned = {
+    ...item,
+
+    // Personal copy, not an admin-locked source card.
+    _kind: "main",
+    sourceKind: item?._kind || item?.sourceKind || "admin",
+    sourceScope: item?.scope || item?.sourceScope || activeGroup || "__admin__",
+    sourceId: item?.id || item?.key || item?.url || "",
+    copiedFromAdmin: item?._kind === "admin" || activeGroup === "__admin__",
+
+    // Promote whatever visual the admin card had into the fields the
+    // normal personal dock card renderer usually checks first.
+    screenshot: item?.screenshot || visual,
+    screenshotUrl: item?.screenshotUrl || visual,
+    screenshot_url: item?.screenshot_url || visual,
+    screenshotDataUrl: item?.screenshotDataUrl || visual,
+    screenshotDataURI: item?.screenshotDataURI || visual,
+    screenshot_data_url: item?.screenshot_data_url || visual,
+
+    // Also preserve the rest for older/newer render paths.
+    image: item?.image || visual,
+    imageUrl: item?.imageUrl || visual,
+    image_url: item?.image_url || visual,
+    previewImage: item?.previewImage || visual,
+    previewUrl: item?.previewUrl || visual,
+    preview_url: item?.preview_url || visual,
+    thumbnail: item?.thumbnail || visual,
+    thumbnailUrl: item?.thumbnailUrl || visual,
+    thumbnail_url: item?.thumbnail_url || visual,
+    uploadedImage: item?.uploadedImage || visual,
+    uploadedImageUrl: item?.uploadedImageUrl || visual,
+    uploaded_image_url: item?.uploaded_image_url || visual,
+    cardImage: item?.cardImage || visual,
+    cardImageUrl: item?.cardImageUrl || visual,
+    card_image_url: item?.card_image_url || visual,
+    customImage: item?.customImage || visual,
+    customImageUrl: item?.customImageUrl || visual,
+    custom_image_url: item?.custom_image_url || visual,
+    favIconUrl: item?.favIconUrl || visual,
+    faviconUrl: item?.faviconUrl || visual,
+    icon: item?.icon || visual,
+    iconUrl: item?.iconUrl || visual
+  };
+
+  delete cloned.workspaceId;
+  delete cloned.groupId;
+  delete cloned.scope;
+  delete cloned.__kind;
+  delete cloned.__index;
+  delete cloned.__adminIndex;
+  delete cloned.previewCheckedAt;
+
+  cloned.id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  cloned.createdAt = Date.now();
+  cloned.updatedAt = Date.now();
+
+  return cloned;
 }
 
 function previewValue(item){
