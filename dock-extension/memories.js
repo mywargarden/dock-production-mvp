@@ -1674,8 +1674,8 @@ function dockBindCreateButtonDirectly(){
       try {
         if (activeGroup !== "__admin__") return;
 
-        event.preventDefault();
-        event.stopPropagation();
+        if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
+        if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
 
         const selected = getAdminSelectedCloneItemsSafe();
         if (!selected.length) {
@@ -2760,10 +2760,10 @@ function installAdminDockItClickRescue(){
       const selected = getSelectedCloneItems();
       if (!selected.length) return;
 
-      event.preventDefault();
-      event.stopPropagation();
+      if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
+      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
       if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
+        if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
       }
 
       await createDockFromSelection();
@@ -2830,10 +2830,10 @@ installAdminDockItClickRescue();
         targetClass: event.target?.className
       });
 
-      event.preventDefault();
-      event.stopPropagation();
+      if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
+      if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
       if (typeof event.stopImmediatePropagation === "function") {
-        event.stopImmediatePropagation();
+        if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
       }
 
       if (selectedCount <= 0) {
