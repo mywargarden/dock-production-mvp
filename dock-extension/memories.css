@@ -7114,3 +7114,86 @@ body[data-managed-dock="true"] .groupPillMenu * {
   z-index: 2147483001 !important;
   pointer-events: auto !important;
 }
+
+/* === Final fix: admin background must never cover Dock creation modal === */
+
+/* District/admin branding backgrounds are visual only */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+/* Keep normal page controls above district background */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupPillsRail,
+body[data-managed-dock="true"] .groupBarRight,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .container,
+body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .selWrap,
+body[data-managed-dock="true"] .cardSelect,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button,
+body[data-managed-dock="true"] .groupPillMenu,
+body[data-managed-dock="true"] .groupPillMenu * {
+  position: relative !important;
+  z-index: 100 !important;
+  pointer-events: auto !important;
+}
+
+/* The Create Dock modal/backdrop must always be above everything */
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .dockModalBackdrop,
+body[data-managed-dock="true"] .workspaceModalBackdrop,
+body[data-managed-dock="true"] .createDockBackdrop,
+body[data-managed-dock="true"] .backdrop,
+body[data-managed-dock="true"] .overlay {
+  position: fixed !important;
+  z-index: 999998 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .workspaceModal,
+body[data-managed-dock="true"] .createDockModal,
+body[data-managed-dock="true"] .dialog,
+body[data-managed-dock="true"] [role="dialog"] {
+  position: fixed !important;
+  z-index: 999999 !important;
+  pointer-events: auto !important;
+}
+
+/* Inputs/buttons inside modal must stay clickable */
+body[data-managed-dock="true"] .modal *,
+body[data-managed-dock="true"] .dockModal *,
+body[data-managed-dock="true"] .workspaceModal *,
+body[data-managed-dock="true"] .createDockModal *,
+body[data-managed-dock="true"] .dialog *,
+body[data-managed-dock="true"] [role="dialog"] * {
+  pointer-events: auto !important;
+}
+
