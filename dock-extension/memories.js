@@ -2811,14 +2811,14 @@ installAdminDockItClickRescue();
     );
   }
 
-  async function forceAdminDockItFromPointer(evt){
+  async function forceAdminDockItFromPointer(event){
   try {
     if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
 
-    const x = evt && typeof evt.clientX === "number" ? evt.clientX : NaN;
-    const y = evt && typeof evt.clientY === "number" ? evt.clientY : NaN;
+    const e = event || window.event || {};
+    const x = typeof e.clientX === "number" ? e.clientX : NaN;
+    const y = typeof e.clientY === "number" ? e.clientY : NaN;
 
-    // Only rescue clicks that are actually on/near Dock It.
     if (
       Number.isFinite(x) &&
       Number.isFinite(y) &&
@@ -2834,11 +2834,10 @@ installAdminDockItClickRescue();
 
     if (!selected.length) return;
 
-    if (evt && typeof evt.preventDefault === "function") evt.preventDefault();
-    if (evt && typeof evt.stopPropagation === "function") evt.stopPropagation();
-    if (evt && typeof evt.stopImmediatePropagation === "function") evt.stopImmediatePropagation();
+    if (typeof e.preventDefault === "function") e.preventDefault();
+    if (typeof e.stopPropagation === "function") e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
 
-    // Do not fake-click the button. Directly run the same working create flow.
     if (typeof createDockFromSelection === "function") {
       await createDockFromSelection();
       return;
@@ -2848,7 +2847,7 @@ installAdminDockItClickRescue();
     if (btn && typeof btn.click === "function") btn.click();
   } catch (err) {
     console.error("[DockIt rescue failed]", err);
-    alert("Dock It reached the rescue handler but failed before opening the popup: " + (err && err.message ? err.message : err));
+    alert("Dock creation failed. Check console for details.");
   }
 }
 
