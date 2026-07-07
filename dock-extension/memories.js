@@ -2667,3 +2667,53 @@ document.addEventListener("click", async (e) => {
   await dockRunCreateFromGuard(e);
 }, true);
 
+
+/* === Admin district Dock It click rescue ===
+   District/admin background can visually sit behind the page, but on some builds
+   it interferes with the normal Dock It click path. This capture handler only
+   activates while viewing the locked admin/district dock and only when the click
+   lands inside the visible Dock It button rectangle.
+*/
+function installAdminDockItClickRescue(){
+  if (!createGroupBtn || createGroupBtn.__adminDockItClickRescueInstalled) return;
+  createGroupBtn.__adminDockItClickRescueInstalled = true;
+
+  document.addEventListener("click", async (event) => {
+    try {
+      if (activeGroup !== "__admin__") return;
+
+      const btn = document.getElementById("createGroupBtn") || createGroupBtn;
+      if (!btn) return;
+
+      const rect = btn.getBoundingClientRect();
+      const clickedButton =
+        event.target === btn ||
+        btn.contains(event.target) ||
+        (
+          event.clientX >= rect.left &&
+          event.clientX <= rect.right &&
+          event.clientY >= rect.top &&
+          event.clientY <= rect.bottom
+        );
+
+      if (!clickedButton) return;
+
+      const selected = getSelectedCloneItems();
+      if (!selected.length) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      await createDockFromSelection();
+    } catch (err) {
+      console.error("Admin Dock It rescue failed:", err);
+      alert("Dock creation failed. Check the console for details.");
+    }
+  }, true);
+}
+
+installAdminDockItClickRescue();
+
