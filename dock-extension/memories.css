@@ -7194,3 +7194,18 @@ body[data-managed-dock="true"] .groupPillMenu * {
   pointer-events: auto !important;
 }
 
+
+/* === Final admin Dock It click safety === */
+body[data-managed-dock="true"] #createGroupBtn {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 999999 !important;
+}
+
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground {
+  pointer-events: none !important;
+}

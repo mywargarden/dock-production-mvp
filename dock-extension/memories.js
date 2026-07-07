@@ -367,6 +367,7 @@ function dockLockDistrictBrandingIfNeeded(){
   try {
     if (dockIsManagedDistrictActive()) {
       applyManagedDockBranding(true);
+  try { dockBindCreateButtonDirectly(); } catch {}
       if (themeMenu) themeMenu.classList.add("hidden");
       if (themeMenuBtn) {
         themeMenuBtn.disabled = true;
@@ -1088,11 +1089,11 @@ function updateWorkspaceButtons(){
 
   if (createGroupBtn){
     const canCreateWorkspace = selectedCount > 0;
-    createGroupBtn.disabled = !canCreateWorkspace;
+    createGroupBtn.disabled = activeGroup === "__admin__" ? selectedCount <= 0 : !canCreateWorkspace;
     createGroupBtn.title = canCreateWorkspace
       ? `Create Dock from ${selectedCount} selected`
       : "Select one or more cards to create a Dock";
-    createGroupBtn.classList.toggle("needsSelection", !canCreateWorkspace);
+    createGroupBtn.classList.toggle("needsSelection", activeGroup === "__admin__" ? selectedCount <= 0 : !canCreateWorkspace);
   }
 
   if (editGroupBtn){
@@ -1609,6 +1610,7 @@ async function renderAllQuick(){
   setEmpty(tabs.length === 0);
   if (!tabs.length) { updateActionButtons();
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
+  try { dockBindCreateButtonDirectly(); } catch {}
   try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
@@ -1659,9 +1661,44 @@ async function ensureAllMemoriesPreviewsHydrated() {
 }
 let renderAllFullPromise = null;
 
+
+/* === Final admin Dock It direct binder === */
+function dockBindCreateButtonDirectly(){
+  try {
+    const btn = document.getElementById("createGroupBtn");
+    if (!btn || btn.dataset.directAdminDockBind === "true") return;
+
+    btn.dataset.directAdminDockBind = "true";
+
+    btn.addEventListener("click", async (event) => {
+      try {
+        if (activeGroup !== "__admin__") return;
+
+        event.preventDefault();
+        event.stopPropagation();
+
+        const selected = getAdminSelectedCloneItemsSafe();
+        if (!selected.length) {
+          alert("Select one or more memories first.");
+          return;
+        }
+
+        btn.disabled = false;
+        await createDockFromSelection();
+      } catch (err) {
+        console.error("Admin Dock It direct create failed:", err);
+        alert("Dock It failed before opening the Create Dock popup. Check console.");
+      }
+    }, true);
+  } catch (err) {
+    console.error("Failed to bind admin Dock It button:", err);
+  }
+}
+
 async function renderAll(){
   try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
+  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (localTabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
@@ -1741,7 +1778,9 @@ async function renderAll(){
 async function renderAdmin(){
   try { dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
+  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(true);
+  try { dockBindCreateButtonDirectly(); } catch {}
   const items = getAdminCards();
   visible = items;
   try { dockApplyDistrictBackgroundFinal(); } catch {}
@@ -1768,6 +1807,7 @@ async function renderAdmin(){
 async function renderGroup(groupId){
   try { if (groupId === "__admin__") dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
+  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);
   groupItems[groupId] = arr;
@@ -1806,6 +1846,25 @@ async function renderGroup(groupId){
   updateActionButtons();
 }
 
+
+
+function getAdminSelectedCloneItemsSafe(){
+  try {
+    if (typeof getSelectedCloneItems === "function") {
+      const selected = getSelectedCloneItems();
+      if (Array.isArray(selected) && selected.length) return selected;
+    }
+  } catch {}
+
+  try {
+    const source = Array.isArray(adminWorkspace?.tabs) ? adminWorkspace.tabs : [];
+    return source
+      .filter(t => isSelectedVisible(t))
+      .map(t => cloneMemoryItem(t));
+  } catch {}
+
+  return [];
+}
 
 async function createDockFromSelection() {
   if (!(await requirePersonalSignIn())) return;
