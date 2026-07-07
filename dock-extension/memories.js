@@ -2609,3 +2609,61 @@ if (createGroupBtn && !createGroupBtn.dataset.adminDockCreateHardening) {
   }, true);
 }
 
+
+
+
+/* === Final admin background Dock It click guard v1 === */
+let dockCreateClickGuardAt = 0;
+
+function dockPointInsideCreateButton(e){
+  if (!createGroupBtn) return false;
+  const rect = createGroupBtn.getBoundingClientRect();
+  const x = Number(e.clientX);
+  const y = Number(e.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  return (
+    x >= rect.left &&
+    x <= rect.right &&
+    y >= rect.top &&
+    y <= rect.bottom
+  );
+}
+
+async function dockRunCreateFromGuard(e){
+  if (!createGroupBtn || createGroupBtn.disabled) return false;
+  if (!dockPointInsideCreateButton(e)) return false;
+
+  const now = Date.now();
+  if (now - dockCreateClickGuardAt < 700) return true;
+  dockCreateClickGuardAt = now;
+
+  try {
+    e.preventDefault();
+    e.stopPropagation();
+    if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
+  } catch {}
+
+  try { closeMenus?.(); } catch {}
+  try { closeDockPillMenus?.(); } catch {}
+
+  await createDockFromSelection();
+  return true;
+}
+
+/*
+  Capture-phase fallback:
+  When district/admin background branding is active, the background can visually sit
+  underneath the page but still disturb the normal Dock It click path in some Chrome
+  extension layouts. This catches the physical click inside the button rectangle
+  before anything else can swallow it.
+*/
+document.addEventListener("pointerdown", async (e) => {
+  if (activeGroup !== "__admin__") return;
+  await dockRunCreateFromGuard(e);
+}, true);
+
+document.addEventListener("click", async (e) => {
+  if (activeGroup !== "__admin__") return;
+  await dockRunCreateFromGuard(e);
+}, true);
+
