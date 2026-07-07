@@ -2717,3 +2717,86 @@ function installAdminDockItClickRescue(){
 
 installAdminDockItClickRescue();
 
+
+/* === Dock It admin diagnostic rescue v2 ===
+   Narrow diagnostic + rescue for admin/district Dock It when district background is active.
+*/
+(function installDockItAdminDiagnosticRescue(){
+  if (window.__dockItAdminDiagnosticRescueInstalled) return;
+  window.__dockItAdminDiagnosticRescueInstalled = true;
+
+  function adminSelectedCount(){
+    try {
+      if (typeof getSelectedCloneItems === "function") {
+        return getSelectedCloneItems().length;
+      }
+    } catch (e) {}
+    try {
+      if (typeof getSelectedVisibleItems === "function") {
+        return getSelectedVisibleItems().length;
+      }
+    } catch (e) {}
+    return -1;
+  }
+
+  function isInsideDockItButton(x, y){
+    const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
+    if (!btn) return false;
+
+    const r = btn.getBoundingClientRect();
+    return (
+      x >= r.left &&
+      x <= r.right &&
+      y >= r.top &&
+      y <= r.bottom
+    );
+  }
+
+  async function forceAdminDockItFromPointer(event){
+    try {
+      if (typeof activeGroup === "undefined" || activeGroup !== "__admin__") return;
+      if (!isInsideDockItButton(event.clientX, event.clientY)) return;
+
+      const btn = document.getElementById("createGroupBtn") || window.createGroupBtn;
+      const selectedCount = adminSelectedCount();
+
+      console.warn("[DockIt diagnostic]", {
+        eventType: event.type,
+        activeGroup,
+        selectedCount,
+        buttonFound: !!btn,
+        buttonDisabled: !!btn?.disabled,
+        buttonClass: btn?.className,
+        target: event.target,
+        targetClass: event.target?.className
+      });
+
+      event.preventDefault();
+      event.stopPropagation();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+
+      if (selectedCount <= 0) {
+        alert("Dock It reached the rescue handler, but no admin memories are selected.");
+        return;
+      }
+
+      if (btn) btn.disabled = false;
+
+      if (typeof createDockFromSelection === "function") {
+        await createDockFromSelection();
+        return;
+      }
+
+      alert("Dock It reached the rescue handler, but createDockFromSelection is not available.");
+    } catch (err) {
+      console.error("[DockIt diagnostic] create failed", err);
+      alert("Dock It reached the rescue handler but failed before opening the popup. Check console.");
+    }
+  }
+
+  window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
+  window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
+})();
+
