@@ -7050,3 +7050,67 @@ body[data-managed-dock="true"] .groupPill,
 body[data-managed-dock="true"] .groupPill button {
   pointer-events: auto !important;
 }
+
+/* === Admin/District Dock click + visual safety v1 === */
+
+/* District branding must be visual-only. It must never intercept card checks or Dock It. */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"] [data-district-hidden-watermark="true"] {
+  pointer-events: none !important;
+}
+
+/* Keep all controls above district branding. */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupPillsRail,
+body[data-managed-dock="true"] .groupBarRight,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .container,
+body[data-managed-dock="true"] .grid {
+  position: relative !important;
+  z-index: 20 !important;
+}
+
+/* Cards and buttons stay clickable. */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .selWrap,
+body[data-managed-dock="true"] .cardSelect,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button,
+body[data-managed-dock="true"] .groupPillMenu,
+body[data-managed-dock="true"] .groupPillMenu * {
+  pointer-events: auto !important;
+}
+
+/* Modal must always appear above district/admin branding. */
+.dockModalBackdrop {
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+}
+.dockModal {
+  position: relative !important;
+  z-index: 2147483001 !important;
+  pointer-events: auto !important;
+}

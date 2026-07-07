@@ -448,27 +448,31 @@ function pickMemoryVisual(item){
 
 function cloneMemoryItem(item){
   const visual = pickMemoryVisual(item);
-
-  const cloned = {
+  const out = {
     ...item,
 
-    // Personal copy, not an admin-locked source card.
-    _kind: "main",
-    sourceKind: item?._kind || item?.sourceKind || "admin",
-    sourceScope: item?.scope || item?.sourceScope || activeGroup || "__admin__",
-    sourceId: item?.id || item?.key || item?.url || "",
-    copiedFromAdmin: item?._kind === "admin" || activeGroup === "__admin__",
+    // Once copied into a personal dock, this should behave like a normal
+    // personal memory, not like a locked admin card.
+    __kind: "main",
 
-    // Promote whatever visual the admin card had into the fields the
-    // normal personal dock card renderer usually checks first.
-    screenshot: item?.screenshot || visual,
-    screenshotUrl: item?.screenshotUrl || visual,
+    // Preserve where it came from for future debugging/support.
+    sourceKind: item?.__kind || item?.sourceKind || "",
+    sourceId: item?.id || item?.local_id || item?.url || "",
+    copiedFromAdmin: item?.__kind === "admin" || activeGroup === "__admin__",
+
+    // Critical: personal cards do not render admin customIcon directly.
+    // So promote the admin customIcon into all screenshot/preview fields.
     screenshot_url: item?.screenshot_url || visual,
+    screenshotUrl: item?.screenshotUrl || visual,
+    screenshotThumb: item?.screenshotThumb || visual,
+    screenshot: item?.screenshot || visual,
+    screenshot_data_url: item?.screenshot_data_url || visual,
     screenshotDataUrl: item?.screenshotDataUrl || visual,
     screenshotDataURI: item?.screenshotDataURI || visual,
-    screenshot_data_url: item?.screenshot_data_url || visual,
 
-    // Also preserve the rest for older/newer render paths.
+    // Preserve image aliases too.
+    customIcon: item?.customIcon || visual,
+    icon_url: item?.icon_url || visual,
     image: item?.image || visual,
     imageUrl: item?.imageUrl || visual,
     image_url: item?.image_url || visual,
@@ -478,42 +482,37 @@ function cloneMemoryItem(item){
     thumbnail: item?.thumbnail || visual,
     thumbnailUrl: item?.thumbnailUrl || visual,
     thumbnail_url: item?.thumbnail_url || visual,
-    uploadedImage: item?.uploadedImage || visual,
-    uploadedImageUrl: item?.uploadedImageUrl || visual,
-    uploaded_image_url: item?.uploaded_image_url || visual,
-    cardImage: item?.cardImage || visual,
-    cardImageUrl: item?.cardImageUrl || visual,
-    card_image_url: item?.card_image_url || visual,
-    customImage: item?.customImage || visual,
-    customImageUrl: item?.customImageUrl || visual,
-    custom_image_url: item?.custom_image_url || visual,
-    favIconUrl: item?.favIconUrl || visual,
-    faviconUrl: item?.faviconUrl || visual,
-    icon: item?.icon || visual,
-    iconUrl: item?.iconUrl || visual
+    faviconUrl: item?.faviconUrl || item?.favIconUrl || ""
   };
 
-  delete cloned.workspaceId;
-  delete cloned.groupId;
-  delete cloned.scope;
-  delete cloned.__kind;
-  delete cloned.__index;
-  delete cloned.__adminIndex;
-  delete cloned.previewCheckedAt;
+  delete out.__kind;
+  delete out.__index;
+  delete out.__adminIndex;
+  delete out.groupId;
+  delete out.scope;
+  delete out.workspaceId;
+  delete out.previewCheckedAt;
 
-  cloned.id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  cloned.createdAt = Date.now();
-  cloned.updatedAt = Date.now();
+  out.id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  out.createdAt = Date.now();
+  out.updatedAt = Date.now();
+  out.screenshotBlocked = false;
 
-  return cloned;
+  return out;
 }
 
 function previewValue(item){
-  return item?.screenshot_url
+  return item?.customIcon
+    || item?.icon_url
+    || item?.screenshot_url
     || item?.screenshotUrl
     || item?.screenshotThumb
     || item?.screenshot
     || item?.screenshot_data_url
+    || item?.previewImage
+    || item?.previewUrl
+    || item?.thumbnail
+    || item?.image
     || null;
 }
 
@@ -1484,6 +1483,12 @@ const previewSource = String(
   tab.screenshotThumb ||
   tab.screenshot ||
   tab.screenshot_data_url ||
+  tab.customIcon ||
+  tab.icon_url ||
+  tab.previewImage ||
+  tab.previewUrl ||
+  tab.thumbnail ||
+  tab.image ||
   ''
 ).trim();
 
@@ -2589,4 +2594,18 @@ init().catch(() => {});
 
   window.dockHideCenterDockWatermark = hideCenterDockWatermark;
 })();
+
+
+
+/* === Admin dock create click hardening v1 === */
+if (createGroupBtn && !createGroupBtn.dataset.adminDockCreateHardening) {
+  createGroupBtn.dataset.adminDockCreateHardening = "true";
+  createGroupBtn.addEventListener("click", async (e) => {
+    if (createGroupBtn.disabled) return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    try { closeMenus(); } catch {}
+    await createDockFromSelection();
+  }, true);
+}
 
