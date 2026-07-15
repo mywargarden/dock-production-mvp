@@ -367,7 +367,6 @@ function dockLockDistrictBrandingIfNeeded(){
   try {
     if (dockIsManagedDistrictActive()) {
       applyManagedDockBranding(true);
-  try { dockBindCreateButtonDirectly(); } catch {}
       if (themeMenu) themeMenu.classList.add("hidden");
       if (themeMenuBtn) {
         themeMenuBtn.disabled = true;
@@ -1610,7 +1609,6 @@ async function renderAllQuick(){
   setEmpty(tabs.length === 0);
   if (!tabs.length) { updateActionButtons();
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
@@ -1663,7 +1661,6 @@ let renderAllFullPromise = null;
 
 
 /* === Final admin Dock It direct binder === */
-function dockBindCreateButtonDirectly(){
   try {
     const btn = document.getElementById("createGroupBtn");
     if (!btn || btn.dataset.directAdminDockBind === "true") return;
@@ -1698,7 +1695,6 @@ function dockBindCreateButtonDirectly(){
 async function renderAll(){
   try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (localTabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
@@ -1778,9 +1774,7 @@ async function renderAll(){
 async function renderAdmin(){
   try { dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(true);
-  try { dockBindCreateButtonDirectly(); } catch {}
   const items = getAdminCards();
   visible = items;
   try { dockApplyDistrictBackgroundFinal(); } catch {}
@@ -1807,7 +1801,6 @@ async function renderAdmin(){
 async function renderGroup(groupId){
   try { if (groupId === "__admin__") dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);
   groupItems[groupId] = arr;
@@ -2657,8 +2650,6 @@ init().catch(() => {});
 
 
 /* === Admin dock create click hardening v1 === */
-if (createGroupBtn && !createGroupBtn.dataset.adminDockCreateHardening) {
-  createGroupBtn.dataset.adminDockCreateHardening = "true";
   createGroupBtn.addEventListener("click", async (e) => {
     if (createGroupBtn.disabled) return;
     e.preventDefault();
@@ -2768,7 +2759,6 @@ function installAdminDockItClickRescue(){
 
       await createDockFromSelection();
     } catch (err) {
-      console.error("Admin Dock It rescue failed:", err);
       alert("Dock creation failed. Check the console for details.");
     }
   }, true);
@@ -2777,7 +2767,6 @@ function installAdminDockItClickRescue(){
 installAdminDockItClickRescue();
 
 
-/* === Dock It admin diagnostic rescue v2 ===
    Narrow diagnostic + rescue for admin/district Dock It when district background is active.
 */
 (function installDockItAdminDiagnosticRescue(){
@@ -2811,7 +2800,6 @@ installAdminDockItClickRescue();
     );
   }
 
-  async function forceAdminDockItFromPointer(event = null) {
   event = event || window.event || null;
 
   try {
@@ -2855,14 +2843,12 @@ installAdminDockItClickRescue();
 
     await createDockFromSelection();
   } catch (err) {
-    console.error("Admin Dock It rescue failed:", err);
     alert("Dock creation failed. Check the console for details.");
   }
 }
 })();
 
 
-/* === FINAL ADMIN BACKGROUND DOCK IT BRIDGE ===
    Problem fixed:
    - Admin/District Dock with managed background can swallow or misroute the normal Dock It click.
    - The old rescue handler became the active path and could fail before the Create Dock modal opened.
@@ -2872,13 +2858,6 @@ installAdminDockItClickRescue();
      3) the click/pointer is actually on or near the Dock It button.
 */
 try {
-  if (typeof forceAdminDockItFromPointer === "function") {
-    window.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
-    window.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
-    window.removeEventListener("click", forceAdminDockItFromPointer, true);
-    document.removeEventListener("pointerdown", forceAdminDockItFromPointer, true);
-    document.removeEventListener("mousedown", forceAdminDockItFromPointer, true);
-    document.removeEventListener("click", forceAdminDockItFromPointer, true);
   }
 } catch {}
 
@@ -2957,7 +2936,4 @@ window.addEventListener("click", __finalAdminDockItBridge, true);
 
 
 /* === FINAL ADMIN DOCK IT RESCUE INSTALL === */
-window.addEventListener("pointerdown", forceAdminDockItFromPointer, true);
-window.addEventListener("mousedown", forceAdminDockItFromPointer, true);
-window.addEventListener("click", forceAdminDockItFromPointer, true);
 
