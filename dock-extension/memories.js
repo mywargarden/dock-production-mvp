@@ -367,7 +367,6 @@ function dockLockDistrictBrandingIfNeeded(){
   try {
     if (dockIsManagedDistrictActive()) {
       applyManagedDockBranding(true);
-  try { dockBindCreateButtonDirectly(); } catch {}
       if (themeMenu) themeMenu.classList.add("hidden");
       if (themeMenuBtn) {
         themeMenuBtn.disabled = true;
@@ -1610,7 +1609,6 @@ async function renderAllQuick(){
   setEmpty(tabs.length === 0);
   if (!tabs.length) { updateActionButtons();
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   try { applyManagedDockBranding(activeGroup === "__admin__"); } catch {} return; }
   tabs.forEach(t => {
     const i = t.__index;
@@ -1660,49 +1658,16 @@ async function ensureAllMemoriesPreviewsHydrated() {
   return false;
 }
 
-// Safety fallback: older Dock It handlers may reference __dockSafeEvtFallback in rare paths.
-const __dockSafeEvtFallback = null;
 
 let renderAllFullPromise = null;
 
 
 /* === Final admin Dock It direct binder === */
-function dockBindCreateButtonDirectly(){
-  try {
-    const btn = document.getElementById("createGroupBtn");
-    if (!btn || btn.dataset.directAdminDockBind === "true") return;
-
-    btn.dataset.directAdminDockBind = "true";
-
-    btn.addEventListener("click", async (event) => {
-      try {
-        if (activeGroup !== "__admin__") return;
-
-        if (typeof event !== "undefined" && event && typeof event.preventDefault === "function") event.preventDefault();
-        if (typeof event !== "undefined" && event && typeof event.stopPropagation === "function") event.stopPropagation();
-
-        const selected = getAdminSelectedCloneItemsSafe();
-        if (!selected.length) {
-          alert("Select one or more memories first.");
-          return;
-        }
-
-        btn.disabled = false;
-        await createDockFromSelection();
-      } catch (err) {
-      }
-    }, true);
-  } catch (err) {
-    console.error("Failed to bind admin Dock It button:", err);
-  }
-}
 
 async function renderAll(){
-  try { setTimeout(dockInstallSingleDockItHandler, 0); } catch {}
 
   try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const localTabsRaw = await getSavedTabs({ localOnly: true });
   const tabs = (localTabsRaw || []).map((t, idx) => ({ ...t, __kind: "main", __index: idx }));
@@ -1780,13 +1745,10 @@ async function renderAll(){
 }
 
 async function renderAdmin(){
-  try { setTimeout(dockInstallSingleDockItHandler, 0); } catch {}
 
   try { dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(true);
-  try { dockBindCreateButtonDirectly(); } catch {}
   const items = getAdminCards();
   visible = items;
   try { dockApplyDistrictBackgroundFinal(); } catch {}
@@ -1811,11 +1773,9 @@ async function renderAdmin(){
 }
 
 async function renderGroup(groupId){
-  try { setTimeout(dockInstallSingleDockItHandler, 0); } catch {}
 
   try { if (groupId === "__admin__") dockClearVisualThemeForDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
-  try { dockBindCreateButtonDirectly(); } catch {}
   applyManagedDockBranding(false);
   const arr = normalizeOrderedItems(Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [], groupId);
   groupItems[groupId] = arr;
@@ -2751,42 +2711,11 @@ document.addEventListener("click", async (e) => {
 
 
 
-/* === FINAL SINGLE DOCK IT PATH ===
    Purpose:
    - The admin/district background can interfere with older click handlers.
    - This handler ignores background overlays and binds the actual Dock It button.
    - It only acts on #createGroupBtn.
    - It keeps district branding/theme behavior untouched.
 */
-function dockInstallSingleDockItHandler(){
-  const btn = document.getElementById("createGroupBtn");
-  if (!btn || btn.dataset.singleDockItHandler === "true") return;
 
-  btn.dataset.singleDockItHandler = "true";
-
-  btn.addEventListener("click", async function(e){
-    try {
-      e.preventDefault();
-      e.stopPropagation();
-      if (typeof e.stopImmediatePropagation === "function") e.stopImmediatePropagation();
-
-      const selected =
-        typeof getSelectedCloneItems === "function"
-          ? getSelectedCloneItems()
-          : [];
-
-      if (!selected || !selected.length) {
-        alert("Select one or more memories first.");
-        return;
-      }
-
-      await createDockFromSelection();
-    } catch (err) {
-      console.error("Single Dock It handler failed:", err);
-      alert("Dock It failed before opening the Create Dock popup. Check extension errors.");
-    }
-  }, true);
-}
-
-dockInstallSingleDockItHandler();
 
