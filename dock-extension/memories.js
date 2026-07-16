@@ -2935,5 +2935,4 @@ window.addEventListener("mousedown", __finalAdminDockItBridge, true);
 window.addEventListener("click", __finalAdminDockItBridge, true);
 
 
-/* === FINAL ADMIN DOCK IT RESCUE INSTALL === */
 
