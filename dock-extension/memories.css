@@ -7256,3 +7256,21 @@ body[data-managed-dock="true"] .groupBar {
   z-index: 100000 !important;
   pointer-events: auto !important;
 }
+
+/* === FINAL: managed admin background must never cover Action open submenu === */
+body[data-managed-dock="true"] #actionsMenu,
+body[data-managed-dock="true"] #openSubmenu,
+body[data-managed-dock="true"] #deleteSubmenu,
+body[data-managed-dock="true"] .actionsMenuPanel,
+body[data-managed-dock="true"] .subMenuPanel {
+  position: relative;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+  visibility: visible;
+}
+
+body[data-managed-dock="true"] #actionsMenu.hidden,
+body[data-managed-dock="true"] #openSubmenu.hidden,
+body[data-managed-dock="true"] #deleteSubmenu.hidden {
+  display: none !important;
+}

@@ -33,6 +33,7 @@ const addBtn = document.getElementById("addBtn");
 const editGroupBtn = document.getElementById("editGroupBtn");
 const authBtn = document.getElementById("authBtn");
 const calmToast = document.getElementById("calmToast");
+try { dockTagActionMenuUi(); } catch {}
 
 const THEME_KEY = "dockTheme";
 const DENSITY_KEY = "dockDensity";
@@ -95,7 +96,59 @@ function itemKey(tab){ return `${tab.__kind}:${tab.__index}:${tab.url || ''}:${t
 function isSelectedVisible(tab){ return selectedVisible.has(itemKey(tab)); }
 function toggleVisibleSelection(tab, checked){ const key = itemKey(tab); if (checked) selectedVisible.add(key); else selectedVisible.delete(key); }
 function clearVisibleSelection(){ selectedVisible.clear(); }
-function getSelectedVisibleItems(){ return (visible || []).filter(v => isSelectedVisible(v)); }
+
+/* === FINAL: action menu must use live visible card selection under managed admin background === */
+function dockLiveVisibleItemsNow(){
+  const source = Array.isArray(visible) ? visible : [];
+  if (!grid) return source.slice();
+
+  const cards = Array.from(grid.querySelectorAll(".card"));
+  if (!cards.length) return source.slice();
+
+  return cards.map((card, index) => {
+    const item = source[index];
+    if (item && (item.url || item.title)) return item;
+
+    const title = card.querySelector(".title")?.textContent?.trim() || "";
+    const link = card.querySelector("a.url, a[href]")?.getAttribute("href") || "";
+    const url = link && link !== "#" ? link : "";
+    return { title, url };
+  }).filter(item => item && (item.url || item.title));
+}
+
+function dockLiveSelectedVisibleItemsNow(){
+  const source = dockLiveVisibleItemsNow();
+  if (!grid) return [];
+
+  const cards = Array.from(grid.querySelectorAll(".card"));
+  if (!cards.length) return source.filter(v => isSelectedVisible(v));
+
+  return cards.map((card, index) => {
+    const cb = card.querySelector('input.selBox[type="checkbox"], input.cardSelect[type="checkbox"], .cardSelect input[type="checkbox"], input[type="checkbox"]');
+    return cb?.checked ? source[index] : null;
+  }).filter(item => item && item.url);
+}
+
+function getVisibleOpenableItems(){
+  return dockLiveVisibleItemsNow().filter(v => v?.url);
+}
+
+function getSelectedVisibleItems(){
+  const selectedFromDom = dockLiveSelectedVisibleItemsNow();
+  if (selectedFromDom.length) return selectedFromDom;
+
+  return (visible || []).filter(v => isSelectedVisible(v));
+}
+
+function dockTagActionMenuUi(){
+  try {
+    [actionsMenu, openSubmenu, deleteSubmenu, openMenuToggle, deleteMenuToggle, openAllBtn, openSelectedBtn, refreshBtn].forEach((el) => {
+      if (el) el.dataset.dockUi = el.dataset.dockUi || "action-menu";
+    });
+  } catch {}
+}
+
+
 function canDeleteCurrentView(){ return activeGroup !== "__admin__"; }
 function currentGroupRecord(){ return (groups || []).find(g => g.id === activeGroup) || null; }
 function ensureGroupColor(group){ return norm(group?.color) || DEFAULT_GROUP_COLOR; }
@@ -308,7 +361,7 @@ async function saveState(){
   await saveGroupState({ groups, groupItems, activeGroup });
 }
 
-function getVisibleOpenableItems(){ return (visible || []).filter(v => v?.url); }
+
 
 async function keepDockAsFirstTab(tab = null) {
   const dockTab = tab || await chromeTabsCall("getCurrent").catch(() => null);
@@ -2156,8 +2209,16 @@ editGroupBtn?.addEventListener("click", async () => {
 });
 
 refreshBtn?.addEventListener("click", () => { hydratePage({ forceSync: true }).catch(() => {}); });
-openAllBtn?.addEventListener("click", async () => { closeMenus(); const items = getVisibleOpenableItems(); if (items.length) await openWorkspaceItems(items); });
-openSelectedBtn?.addEventListener("click", async () => {
+openAllBtn?.addEventListener("click", async (e) => {
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
+  closeMenus();
+  const items = getVisibleOpenableItems();
+  if (items.length) await openWorkspaceItems(items);
+});
+openSelectedBtn?.addEventListener("click", async (e) => {
+  e?.preventDefault?.();
+  e?.stopPropagation?.();
   closeMenus();
   const items = getSelectedVisibleItems().filter(v => v?.url);
   if (!items.length) return alert("Select one or more tabs first.");
@@ -2361,18 +2422,29 @@ themeMenuBtn?.addEventListener("click", (e) => {
 });
 themeItems.forEach(btn => btn.addEventListener("click", async (e) => { e.stopPropagation(); await saveTheme(btn.dataset.theme || DEFAULT_THEME); closeMenus(); }));
 actionsMenuBtn?.addEventListener("click", (e) => {
+  e.preventDefault();
   e.stopPropagation();
+  dockTagActionMenuUi();
+  updateActionButtons();
   const willShow = actionsMenu?.classList.contains("hidden");
   closeMenus();
   if (willShow) actionsMenu?.classList.remove("hidden");
 });
 function bindNestedMenu(toggleEl, panelEl, otherPanelEl){
   if (!toggleEl || !panelEl) return;
+  toggleEl.dataset.dockUi = toggleEl.dataset.dockUi || "action-menu-toggle";
+  panelEl.dataset.dockUi = panelEl.dataset.dockUi || "action-submenu";
   toggleEl.addEventListener("click", (e) => {
+    e.preventDefault();
     e.stopPropagation();
+    dockTagActionMenuUi();
+    updateActionButtons();
+
     const willShow = panelEl.classList.contains("hidden");
     if (otherPanelEl) otherPanelEl.classList.add("hidden");
     panelEl.classList.toggle("hidden", !willShow);
+    panelEl.style.pointerEvents = willShow ? "auto" : "";
+    panelEl.style.zIndex = willShow ? "2147483647" : "";
     toggleEl.classList.toggle("isOpen", willShow);
     if (otherPanelEl === openSubmenu) openMenuToggle?.classList.remove("isOpen");
     if (otherPanelEl === deleteSubmenu) deleteMenuToggle?.classList.remove("isOpen");
