@@ -1390,8 +1390,10 @@ function cleanupGridImageRefs(){
 function openWorkspaceModal({ title, subtitle, submitLabel = "Create", suggestedName = "", defaultColor = DEFAULT_GROUP_COLOR, showColor = false, workspaceChoices = [], onSubmit }) {
   const backdrop = document.createElement("div");
   backdrop.className = "dockModalBackdrop";
+  backdrop.dataset.dockUi = "modal-backdrop";
   const modal = document.createElement("div");
   modal.className = "dockModal";
+  modal.dataset.dockUi = "modal";
 
   const selectHtml = workspaceChoices.length
     ? `<label class="dockField"><span class="dockFieldLabel">Dock</span><select class="dockInput dockSelect" id="dockWorkspaceSelect">${workspaceChoices.map(w => `<option value="${escapeHtml(w.id)}">${escapeHtml(w.name)}</option>`).join("")}</select></label>`
@@ -2621,6 +2623,21 @@ init().catch(() => {});
 
   function looksLikeCenterDockWatermark(el){
     if (!el || !el.getBoundingClientRect) return false;
+
+    const protectedUiSelector = [
+      '[data-dock-ui]',
+      '.dockModalBackdrop', '.dockModal',
+      '.modalBackdrop', '.modal',
+      '.workspaceModalBackdrop', '.workspaceModal',
+      '.createDockBackdrop', '.createDockModal',
+      '.backdrop', '.overlay', '.dialog', '[role="dialog"]',
+      '.menuPanel', '.actionsMenuPanel', '.themeMenuPanel', '.subMenuPanel',
+      '.groupPillMenu', '.popover', '.dropdown',
+      '.card', '.memoryCard', '.previewCard',
+      'button', 'input', 'select', 'textarea', 'a'
+    ].join(',');
+
+    if (el.matches?.(protectedUiSelector) || el.closest?.(protectedUiSelector)) return false;
 
     const rect = el.getBoundingClientRect();
     const vw = window.innerWidth || document.documentElement.clientWidth || 0;
