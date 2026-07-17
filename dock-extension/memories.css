@@ -7257,19 +7257,45 @@ body[data-managed-dock="true"] .groupBar {
   pointer-events: auto !important;
 }
 
-/* === FINAL: managed admin background must never cover Action open submenu === */
-body[data-managed-dock="true"] #actionsMenu,
-body[data-managed-dock="true"] #openSubmenu,
-body[data-managed-dock="true"] #deleteSubmenu,
-body[data-managed-dock="true"] .actionsMenuPanel,
-body[data-managed-dock="true"] .subMenuPanel {
-  position: relative;
-  z-index: 2147483647 !important;
+/* === FINAL: managed admin Actions menu must overlay, never reflow the page ===
+   Actions worked, but the last CSS fix made #actionsMenu position: relative.
+   That put the dropdown into the header/page flow and caused the screen jump.
+   Keep the menu clickable above the admin background without changing layout.
+*/
+body[data-managed-dock="true"] .menuWrapActions {
+  position: relative !important;
+  z-index: 2147483000 !important;
+  overflow: visible !important;
   pointer-events: auto !important;
-  visibility: visible;
 }
 
-body[data-managed-dock="true"] #actionsMenu.hidden,
+body[data-managed-dock="true"] #actionsMenu.actionsMenuPanel,
+body[data-managed-dock="true"] #actionsMenu {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  left: auto !important;
+  min-width: 250px !important;
+  max-width: min(320px, calc(100vw - 24px)) !important;
+  z-index: 2147483001 !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
+body[data-managed-dock="true"] #actionsMenu.hidden {
+  display: none !important;
+}
+
+body[data-managed-dock="true"] #openSubmenu,
+body[data-managed-dock="true"] #deleteSubmenu,
+body[data-managed-dock="true"] .subMenuPanel {
+  position: static !important;
+  inset: auto !important;
+  z-index: auto !important;
+  pointer-events: auto !important;
+  visibility: visible !important;
+}
+
 body[data-managed-dock="true"] #openSubmenu.hidden,
 body[data-managed-dock="true"] #deleteSubmenu.hidden {
   display: none !important;
