@@ -1,0 +1,4 @@
+.appQuickNav{position:fixed;right:18px;bottom:18px;z-index:1000;display:flex;gap:8px;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:16px;background:rgba(9,24,42,.92);box-shadow:0 16px 40px rgba(8,23,40,.28);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+.appQuickNav a{display:inline-flex;align-items:center;gap:6px;padding:9px 11px;border-radius:11px;color:#eaf2fb;text-decoration:none;font-size:12px;font-weight:800;letter-spacing:.01em}
+.appQuickNav a:hover{background:rgba(255,255,255,.1);color:#fff}
+@media(max-width:700px){.appQuickNav{right:10px;bottom:10px}.appQuickNav a span{display:none}.appQuickNav a{padding:10px 12px}}
