@@ -35,9 +35,17 @@ export function normalizeUrl(value: unknown) {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
 }
 
+export function normalizeImageUrl(value: unknown) {
+  const raw = normalize(value)
+  if (!raw) return ''
+  if (raw.startsWith('data:image/')) return raw
+  if (/^https?:\/\//i.test(raw)) return raw
+  return ''
+}
+
 export function ownerEmailSet() {
   const configured = process.env.DOCK_OWNER_EMAILS || process.env.NEXT_PUBLIC_DOCK_OWNER_EMAILS || ''
-  const defaults = 'mywargarden@gmail.com,drew.lowery@henry.k12.va.us'
+  const defaults = 'mywargarden@gmail.com,drew.lowery@henry.k12.va.us,southcreeksystems@gmail.com'
   return new Set(`${configured},${defaults}`
     .split(',')
     .map((email) => normalizeEmail(email))
@@ -82,6 +90,9 @@ export type OwnerDistrictPayload = {
     grace_period_days?: number
     minimum_extension_version?: string | null
     owner_notes?: string | null
+    district_logo_url?: string | null
+    district_background_url?: string | null
+    district_accent_color?: string | null
   }
   domains?: Array<{ domain: string; status?: 'verified' | 'pending'; domain_type?: 'primary' | 'additional' }>
   admins?: Array<{ email: string; role?: 'owner' | 'district_admin' }>
@@ -99,6 +110,7 @@ export function validateOwnerDistrictPayload(body: any): OwnerDistrictPayload {
 
   const licenseStatus = normalize(organization.license_status || 'trial').toLowerCase()
   const allowedStatuses = new Set(['trial', 'active', 'past_due', 'suspended', 'expired'])
+  const accent = normalize(organization.district_accent_color || '#8fd8c6')
 
   return {
     organization: {
@@ -112,7 +124,10 @@ export function validateOwnerDistrictPayload(body: any): OwnerDistrictPayload {
       license_renewal_date: normalize(organization.license_renewal_date) || null,
       grace_period_days: Math.max(0, Number(organization.grace_period_days) || 30),
       minimum_extension_version: normalize(organization.minimum_extension_version) || null,
-      owner_notes: normalize(organization.owner_notes) || null
+      owner_notes: normalize(organization.owner_notes) || null,
+      district_logo_url: normalizeImageUrl(organization.district_logo_url) || null,
+      district_background_url: normalizeImageUrl(organization.district_background_url) || null,
+      district_accent_color: /^#[0-9a-f]{6}$/i.test(accent) ? accent : '#8fd8c6'
     },
     domains: Array.isArray(body?.domains) ? body.domains : [],
     admins: Array.isArray(body?.admins) ? body.admins : [],
@@ -183,15 +198,17 @@ export async function loadOwnerDistricts(service: SupabaseClient) {
 
   if (!orgIds.length) return []
 
-  const [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes] = await Promise.all([
+  const [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes] = await Promise.all([
     service.from('organization_domains').select('organization_id, domain, normalized_domain, status, domain_type, verified_at').in('organization_id', orgIds).order('normalized_domain', { ascending: true }),
     service.from('organization_admins').select('organization_id, email, role, user_id').in('organization_id', orgIds).order('email', { ascending: true }),
     service.from('organization_allowed_users').select('organization_id, email, name, note, status').in('organization_id', orgIds).order('email', { ascending: true }),
     service.from('workspaces').select('organization_id, name, version, published_at, updated_at').in('organization_id', orgIds).eq('status', 'published').order('published_at', { ascending: false }),
-    service.from('profiles').select('organization_id, id, email, status').in('organization_id', orgIds)
+    service.from('profiles').select('organization_id, id, email, role, status, created_at, updated_at').in('organization_id', orgIds).order('email', { ascending: true }),
+    service.from('workspace_versions').select('organization_id, version, name, published_at, created_at, branding').in('organization_id', orgIds).order('version', { ascending: false }).limit(200),
+    service.from('audit_logs').select('organization_id, action, target_type, target_id, details, created_at').in('organization_id', orgIds).order('created_at', { ascending: false }).limit(200)
   ])
 
-  for (const res of [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes]) {
+  for (const res of [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes]) {
     if (res.error) throw res.error
   }
 
@@ -206,6 +223,8 @@ export async function loadOwnerDistricts(service: SupabaseClient) {
   const adminsByOrg = byOrg(adminsRes.data || [])
   const allowedByOrg = byOrg(allowedRes.data || [])
   const profilesByOrg = byOrg(profilesRes.data || [])
+  const versionsByOrg = byOrg(versionsRes.data || [])
+  const auditByOrg = byOrg(auditRes.data || [])
   const workspaceByOrg = new Map<string, any>()
   for (const ws of workspacesRes.data || []) {
     if (!workspaceByOrg.has(ws.organization_id)) workspaceByOrg.set(ws.organization_id, ws)
@@ -216,8 +235,11 @@ export async function loadOwnerDistricts(service: SupabaseClient) {
     domains: domainsByOrg[org.id] || [],
     admins: adminsByOrg[org.id] || [],
     allowedUsers: allowedByOrg[org.id] || [],
+    users: profilesByOrg[org.id] || [],
     activeSeatCount: (profilesByOrg[org.id] || []).filter((p: any) => p.status !== 'inactive').length,
-    publishedWorkspace: workspaceByOrg.get(org.id) || null
+    publishedWorkspace: workspaceByOrg.get(org.id) || null,
+    workspaceVersions: (versionsByOrg[org.id] || []).slice(0, 12),
+    auditLogs: (auditByOrg[org.id] || []).slice(0, 16)
   }))
 }
 
@@ -234,6 +256,9 @@ export async function persistOwnerDistrict(service: SupabaseClient, payload: Own
     grace_period_days: payload.organization.grace_period_days || 30,
     minimum_extension_version: payload.organization.minimum_extension_version || null,
     owner_notes: payload.organization.owner_notes || null,
+    district_logo_url: payload.organization.district_logo_url || null,
+    district_background_url: payload.organization.district_background_url || null,
+    district_accent_color: payload.organization.district_accent_color || '#8fd8c6',
     updated_at: nowIso
   }
 
@@ -289,7 +314,12 @@ export async function persistOwnerDistrict(service: SupabaseClient, payload: Own
     action: 'owner_upsert_district',
     target_type: 'organization',
     target_id: organizationId,
-    details: { orgCode: orgRow.org_code, licenseStatus: orgRow.license_status, maxUsers: orgRow.max_users }
+    details: {
+      orgCode: orgRow.org_code,
+      licenseStatus: orgRow.license_status,
+      maxUsers: orgRow.max_users,
+      brandingUpdated: true
+    }
   }).throwOnError()
 
   return orgRow
