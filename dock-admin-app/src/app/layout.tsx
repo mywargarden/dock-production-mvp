@@ -1,5 +1,6 @@
 import './globals.css'
 import './quicknav.css'
+import './theme-studio.css'
 import type { Metadata } from 'next'
 import AppQuickNav from '@/components/AppQuickNav'
 
