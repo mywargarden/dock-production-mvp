@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { buildExtensionConfigForEmail } from '../../../lib/license';
+import { buildExtensionConfigForEmail } from '../../../../lib/license';
 
 export const runtime = 'nodejs';
 
