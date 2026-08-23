@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v1';
+const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v2';
 
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -111,7 +111,7 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
 
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('id,name,org_code,email_domain,plan,max_users,published_at,license_status,license_renewal_date,grace_period_days,district_logo_url,district_background_url,district_accent_color,minimum_extension_version')
+      .select('id,name,org_code,email_domain,plan,max_users,published_at,license_status,license_renewal_date,grace_period_days,district_logo_url,district_background_url,district_accent_color,minimum_extension_version,default_theme')
       .eq('org_code', orgCode)
       .maybeSingle();
     if (orgError) return NextResponse.json({ error: orgError.message }, { status: 500 });
@@ -185,7 +185,8 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
         branding: {
           districtLogoUrl: String((org as any).district_logo_url || '').trim(),
           districtBackgroundUrl: String((org as any).district_background_url || '').trim(),
-          districtAccentColor: String((org as any).district_accent_color || '').trim()
+          districtAccentColor: String((org as any).district_accent_color || '').trim(),
+          defaultTheme: String((org as any).default_theme || 'dock-green').trim()
         },
         tabs: normalizedTabs
       },
