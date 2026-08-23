@@ -1,16 +1,19 @@
-
-import './globals.css';
-import type { Metadata } from 'next';
+import './globals.css'
+import type { Metadata } from 'next'
+import AppQuickNav from '@/components/AppQuickNav'
 
 export const metadata: Metadata = {
-  title: 'Dock Admin',
-  description: 'Manage district workspaces for Dock'
-};
+  title: 'Dock',
+  description: 'Dock for schools and district operations'
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <AppQuickNav />
+        {children}
+      </body>
     </html>
-  );
+  )
 }
