@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
 
   if (event.type === 'invoice.payment_failed') {
     const invoice = event.data.object as Stripe.Invoice;
-    const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+    const subscriptionId = typeof (invoice as any).subscription === 'string' ? (invoice as any).subscription : (invoice as any).subscription?.id;
 
     if (subscriptionId) {
       const { data: licenses, error } = await supabaseAdmin
@@ -94,7 +94,7 @@ export async function POST(request: NextRequest) {
 
   if (event.type === 'invoice.payment_succeeded') {
     const invoice = event.data.object as Stripe.Invoice;
-    const subscriptionId = typeof invoice.subscription === 'string' ? invoice.subscription : invoice.subscription?.id;
+    const subscriptionId = typeof (invoice as any).subscription === 'string' ? (invoice as any).subscription : (invoice as any).subscription?.id;
 
     if (subscriptionId) {
       const { data: licenses, error } = await supabaseAdmin
