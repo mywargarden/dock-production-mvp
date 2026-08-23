@@ -11,9 +11,9 @@ export default function Home() {
           recoverable, and easy to reopen without overwhelming teachers or students.
         </p>
         <div className="row wrap publicActions">
-          <Link className="buttonLink" href="/admin">Open Admin</Link>
+          <Link className="buttonLink" href="/admin">Open District Admin</Link>
           <Link className="buttonLink secondaryLink" href="/district">View Workspace Pages</Link>
-          <Link className="buttonLink secondaryLink" href="/api/bootstrap">Bootstrap API</Link>
+          <Link className="buttonLink secondaryLink" href="/owner">Open Dock HQ</Link>
         </div>
       </section>
 
@@ -33,9 +33,10 @@ export default function Home() {
           </p>
         </div>
         <div className="card">
-          <h2>Local-first</h2>
+          <h2>Owner controlled</h2>
           <p className="muted">
-            Core Dock behavior remains fast and calm even when the backend is slow or unavailable.
+            Dock HQ keeps customer accounts, licensing, branding, access, releases, and operations
+            together in one owner-only control plane.
           </p>
         </div>
       </section>
