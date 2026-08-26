@@ -5,35 +5,19 @@ import { createClient } from '@supabase/supabase-js'
 
 let ownerAuthSupabaseSingleton: SupabaseClient | null = null
 
-const THEME_IDS = new Set([
-  'dock-green', 'slate', 'warm', 'sunset', 'tie-dye',
-  'rubber-ducky', 'crazy-ducky', 'violet-harbor', 'skipper-harbor'
-])
-
 function getAuthSupabase() {
   if (ownerAuthSupabaseSingleton) return ownerAuthSupabaseSingleton
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
   if (!anonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
-  ownerAuthSupabaseSingleton = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  })
+  ownerAuthSupabaseSingleton = createClient(url, anonKey, { auth: { persistSession: false, autoRefreshToken: false } })
   return ownerAuthSupabaseSingleton
 }
 
-export function normalize(value: unknown) {
-  return String(value || '').trim()
-}
-
-export function normalizeEmail(value: unknown) {
-  return normalize(value).toLowerCase()
-}
-
-export function normalizeDomain(value: unknown) {
-  return normalize(value).toLowerCase().replace(/^@+/, '')
-}
-
+export function normalize(value: unknown) { return String(value || '').trim() }
+export function normalizeEmail(value: unknown) { return normalize(value).toLowerCase() }
+export function normalizeDomain(value: unknown) { return normalize(value).toLowerCase().replace(/^@+/, '') }
 export function normalizeImageUrl(value: unknown) {
   const raw = normalize(value)
   if (!raw) return ''
@@ -41,31 +25,28 @@ export function normalizeImageUrl(value: unknown) {
   if (/^https?:\/\//i.test(raw)) return raw
   return ''
 }
+export function normalizeThemeSlug(value: unknown) {
+  const slug = normalize(value).toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/^-+|-+$/g, '')
+  return slug || 'dock-green'
+}
 
 export function ownerEmailSet() {
   const configured = process.env.DOCK_OWNER_EMAILS || process.env.NEXT_PUBLIC_DOCK_OWNER_EMAILS || ''
   const defaults = 'mywargarden@gmail.com,drew.lowery@henry.k12.va.us,southcreeksystems@gmail.com'
-  return new Set(`${configured},${defaults}`
-    .split(',')
-    .map((email) => normalizeEmail(email))
-    .filter(Boolean))
+  return new Set(`${configured},${defaults}`.split(',').map((email) => normalizeEmail(email)).filter(Boolean))
 }
 
 export async function requireOwner(request: NextRequest) {
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
   if (!token) return { error: NextResponse.json({ error: 'Missing bearer token' }, { status: 401 }) }
-
   const auth = getAuthSupabase()
   const service = getServiceSupabase()
   const { data, error: userError } = await auth.auth.getUser(token)
   const user = data?.user
   if (userError || !user?.id) return { error: NextResponse.json({ error: 'Invalid auth token' }, { status: 401 }) }
-
   const email = normalizeEmail(user.email)
-  if (!ownerEmailSet().has(email)) {
-    return { error: NextResponse.json({ error: 'Dock HQ owner access required.' }, { status: 403 }) }
-  }
+  if (!ownerEmailSet().has(email)) return { error: NextResponse.json({ error: 'Dock HQ owner access required.' }, { status: 403 }) }
   return { user, service, ownerEmail: email }
 }
 
@@ -86,6 +67,11 @@ export type OwnerDistrictPayload = {
     district_background_url?: string | null
     district_accent_color?: string | null
     default_theme?: string | null
+    allow_user_theme_override?: boolean
+    allow_admin_branding?: boolean
+    customer_contact_name?: string | null
+    customer_contact_email?: string | null
+    customer_contact_phone?: string | null
   }
   domains?: Array<{ domain: string; status?: 'verified' | 'pending'; domain_type?: 'primary' | 'additional' }>
   admins?: Array<{ email: string; role?: 'owner' | 'district_admin' }>
@@ -99,12 +85,9 @@ export function validateOwnerDistrictPayload(body: any): OwnerDistrictPayload {
   const name = normalize(organization.name)
   if (!name) throw new Error('District name is required.')
   if (!orgCode) throw new Error('Organization code is required.')
-
   const licenseStatus = normalize(organization.license_status || 'trial').toLowerCase()
   const allowedStatuses = new Set(['trial', 'active', 'past_due', 'suspended', 'expired'])
   const accent = normalize(organization.district_accent_color || '#8fd8c6')
-  const requestedTheme = normalize(organization.default_theme || 'dock-green')
-
   return {
     organization: {
       id: normalize(organization.id) || undefined,
@@ -121,7 +104,12 @@ export function validateOwnerDistrictPayload(body: any): OwnerDistrictPayload {
       district_logo_url: normalizeImageUrl(organization.district_logo_url) || null,
       district_background_url: normalizeImageUrl(organization.district_background_url) || null,
       district_accent_color: /^#[0-9a-f]{6}$/i.test(accent) ? accent : '#8fd8c6',
-      default_theme: THEME_IDS.has(requestedTheme) ? requestedTheme : 'dock-green'
+      default_theme: normalizeThemeSlug(organization.default_theme || 'dock-green'),
+      allow_user_theme_override: organization.allow_user_theme_override !== false,
+      allow_admin_branding: organization.allow_admin_branding !== false,
+      customer_contact_name: normalize(organization.customer_contact_name) || null,
+      customer_contact_email: normalizeEmail(organization.customer_contact_email) || null,
+      customer_contact_phone: normalize(organization.customer_contact_phone) || null
     },
     domains: Array.isArray(body?.domains) ? body.domains : [],
     admins: Array.isArray(body?.admins) ? body.admins : [],
@@ -134,25 +122,10 @@ export function cleanDomains(rawDomains: any[], primaryDomain: string) {
   for (const entry of rawDomains || []) {
     const domain = normalizeDomain(entry?.domain || entry)
     if (!domain) continue
-    map.set(domain, {
-      domain,
-      normalized_domain: domain,
-      status: normalize(entry?.status) === 'pending' ? 'pending' : 'verified',
-      domain_type: normalize(entry?.domain_type) === 'primary' ? 'primary' : 'additional'
-    })
+    map.set(domain, { domain, normalized_domain: domain, status: normalize(entry?.status) === 'pending' ? 'pending' : 'verified', domain_type: normalize(entry?.domain_type) === 'primary' ? 'primary' : 'additional' })
   }
-  if (primaryDomain) {
-    map.set(primaryDomain, {
-      domain: primaryDomain,
-      normalized_domain: primaryDomain,
-      status: map.get(primaryDomain)?.status || 'verified',
-      domain_type: 'primary'
-    })
-  }
-  return Array.from(map.values()).map((entry, index) => ({
-    ...entry,
-    domain_type: entry.normalized_domain === primaryDomain || index === 0 ? 'primary' : 'additional'
-  }))
+  if (primaryDomain) map.set(primaryDomain, { domain: primaryDomain, normalized_domain: primaryDomain, status: map.get(primaryDomain)?.status || 'verified', domain_type: 'primary' })
+  return Array.from(map.values()).map((entry, index) => ({ ...entry, domain_type: entry.normalized_domain === primaryDomain || index === 0 ? 'primary' : 'additional' }))
 }
 
 export function cleanAdmins(rawAdmins: any[]) {
@@ -170,12 +143,7 @@ export function cleanAllowedUsers(rawUsers: any[]) {
   for (const entry of rawUsers || []) {
     const email = normalizeEmail(entry?.email || entry)
     if (!email || !email.includes('@')) continue
-    map.set(email, {
-      email,
-      name: normalize(entry?.name) || null,
-      note: normalize(entry?.note) || null,
-      status: normalize(entry?.status) === 'inactive' ? 'inactive' : 'active'
-    })
+    map.set(email, { email, name: normalize(entry?.name) || null, note: normalize(entry?.note) || null, status: normalize(entry?.status) === 'inactive' ? 'inactive' : 'active' })
   }
   return Array.from(map.values())
 }
@@ -187,30 +155,29 @@ export async function loadOwnerDistricts(service: SupabaseClient) {
   const orgIds = organizations.map((org: any) => org.id).filter(Boolean)
   if (!orgIds.length) return []
 
-  const [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes] = await Promise.all([
+  const [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes, billingRes, themesRes] = await Promise.all([
     service.from('organization_domains').select('organization_id, domain, normalized_domain, status, domain_type, verified_at').in('organization_id', orgIds).order('normalized_domain', { ascending: true }),
     service.from('organization_admins').select('organization_id, email, role, user_id').in('organization_id', orgIds).order('email', { ascending: true }),
     service.from('organization_allowed_users').select('organization_id, email, name, note, status').in('organization_id', orgIds).order('email', { ascending: true }),
-    service.from('workspaces').select('organization_id, name, version, published_at, updated_at').in('organization_id', orgIds).eq('status', 'published').order('published_at', { ascending: false }),
+    service.from('workspaces').select('organization_id, id, name, version, published_at, updated_at').in('organization_id', orgIds).eq('status', 'published').order('published_at', { ascending: false }),
     service.from('profiles').select('organization_id, id, email, role, status, created_at, last_seen_at, updated_at').in('organization_id', orgIds).order('email', { ascending: true }),
-    service.from('workspace_versions').select('organization_id, version, name, published_at, created_at').in('organization_id', orgIds).order('version', { ascending: false }).limit(200),
-    service.from('audit_logs').select('organization_id, action, target_type, target_id, details, created_at').in('organization_id', orgIds).order('created_at', { ascending: false }).limit(200)
+    service.from('workspace_versions').select('organization_id, version, name, published_at, created_at').in('organization_id', orgIds).order('version', { ascending: false }).limit(300),
+    service.from('audit_logs').select('organization_id, action, target_type, target_id, details, created_at').in('organization_id', orgIds).order('created_at', { ascending: false }).limit(300),
+    service.from('billing_subscriptions').select('*').in('organization_id', orgIds),
+    service.from('dock_themes').select('id,slug,name,organization_id,scope,status,definition,version,created_at,updated_at,published_at').or(`organization_id.in.(${orgIds.join(',')}),organization_id.is.null`).order('updated_at', { ascending: false })
   ])
-  for (const res of [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes]) if (res.error) throw res.error
+  for (const res of [domainsRes, adminsRes, allowedRes, workspacesRes, profilesRes, versionsRes, auditRes, billingRes, themesRes]) if (res.error) throw res.error
 
-  const byOrg = (rows: any[] = []) => rows.reduce((acc, row) => {
-    const id = row.organization_id
-    if (!acc[id]) acc[id] = []
-    acc[id].push(row)
-    return acc
-  }, {} as Record<string, any[]>)
-
+  const byOrg = (rows: any[] = []) => rows.reduce((acc, row) => { const id = row.organization_id; if (!acc[id]) acc[id] = []; acc[id].push(row); return acc }, {} as Record<string, any[]>)
   const domainsByOrg = byOrg(domainsRes.data || [])
   const adminsByOrg = byOrg(adminsRes.data || [])
   const allowedByOrg = byOrg(allowedRes.data || [])
   const profilesByOrg = byOrg(profilesRes.data || [])
   const versionsByOrg = byOrg(versionsRes.data || [])
   const auditByOrg = byOrg(auditRes.data || [])
+  const themesByOrg = byOrg((themesRes.data || []).filter((t: any) => t.organization_id))
+  const globalThemes = (themesRes.data || []).filter((t: any) => !t.organization_id)
+  const billingByOrg = new Map((billingRes.data || []).map((row: any) => [row.organization_id, row]))
   const workspaceByOrg = new Map<string, any>()
   for (const ws of workspacesRes.data || []) if (!workspaceByOrg.has(ws.organization_id)) workspaceByOrg.set(ws.organization_id, ws)
 
@@ -222,8 +189,10 @@ export async function loadOwnerDistricts(service: SupabaseClient) {
     users: profilesByOrg[org.id] || [],
     activeSeatCount: (profilesByOrg[org.id] || []).filter((p: any) => p.status !== 'inactive').length,
     publishedWorkspace: workspaceByOrg.get(org.id) || null,
-    workspaceVersions: (versionsByOrg[org.id] || []).slice(0, 12),
-    auditLogs: (auditByOrg[org.id] || []).slice(0, 18)
+    workspaceVersions: (versionsByOrg[org.id] || []).slice(0, 18),
+    auditLogs: (auditByOrg[org.id] || []).slice(0, 24),
+    billing: billingByOrg.get(org.id) || null,
+    themes: [...globalThemes, ...(themesByOrg[org.id] || [])]
   }))
 }
 
@@ -237,19 +206,22 @@ export async function persistOwnerDistrict(service: SupabaseClient, payload: Own
     max_users: payload.organization.max_users,
     license_status: payload.organization.license_status || 'trial',
     license_renewal_date: payload.organization.license_renewal_date || null,
-    grace_period_days: payload.organization.grace_period_days || 30,
+    grace_period_days: payload.organization.grace_period_days ?? 30,
     minimum_extension_version: payload.organization.minimum_extension_version || null,
     owner_notes: payload.organization.owner_notes || null,
     district_logo_url: payload.organization.district_logo_url || null,
     district_background_url: payload.organization.district_background_url || null,
     district_accent_color: payload.organization.district_accent_color || '#8fd8c6',
     default_theme: payload.organization.default_theme || 'dock-green',
+    allow_user_theme_override: payload.organization.allow_user_theme_override !== false,
+    allow_admin_branding: payload.organization.allow_admin_branding !== false,
+    customer_contact_name: payload.organization.customer_contact_name || null,
+    customer_contact_email: payload.organization.customer_contact_email || null,
+    customer_contact_phone: payload.organization.customer_contact_phone || null,
     updated_at: nowIso
   }
-
   const { data: orgRow, error: orgError } = await service.from('organizations').upsert(orgPayload, { onConflict: 'org_code' }).select('*').single()
   if (orgError) throw orgError
-
   const organizationId = orgRow.id
   const domains = cleanDomains(payload.domains || [], payload.organization.email_domain)
   const admins = cleanAdmins(payload.admins || [])
@@ -257,13 +229,10 @@ export async function persistOwnerDistrict(service: SupabaseClient, payload: Own
 
   await service.from('organization_domains').delete().eq('organization_id', organizationId).throwOnError()
   if (domains.length) await service.from('organization_domains').upsert(domains.map((entry) => ({ organization_id: organizationId, domain: entry.domain, normalized_domain: entry.normalized_domain, status: entry.status, domain_type: entry.domain_type, verified_at: entry.status === 'verified' ? nowIso : null, updated_at: nowIso })), { onConflict: 'normalized_domain' }).throwOnError()
-
   await service.from('organization_admins').delete().eq('organization_id', organizationId).throwOnError()
   if (admins.length) await service.from('organization_admins').upsert(admins.map((entry) => ({ organization_id: organizationId, email: entry.email, role: entry.role })), { onConflict: 'organization_id,email' }).throwOnError()
-
   await service.from('organization_allowed_users').delete().eq('organization_id', organizationId).throwOnError()
   if (allowedUsers.length) await service.from('organization_allowed_users').upsert(allowedUsers.map((entry) => ({ organization_id: organizationId, email: entry.email, name: entry.name, note: entry.note, status: entry.status, updated_at: nowIso })), { onConflict: 'organization_id,email' }).throwOnError()
-
   await service.from('audit_logs').insert({ organization_id: organizationId, action: 'owner_upsert_district', target_type: 'organization', target_id: organizationId, details: { orgCode: orgRow.org_code, licenseStatus: orgRow.license_status, maxUsers: orgRow.max_users, defaultTheme: orgRow.default_theme } }).throwOnError()
   return orgRow
 }
