@@ -6,6 +6,7 @@ import { getAccessToken, getUser, signIn, signOut } from '@/lib/auth'
 type View = 'overview'|'districts'|'licensing'|'users'|'themes'|'branding'|'workspaces'|'releases'|'diagnostics'|'activity'|'settings'
 type DistrictForm = { organization:any; domains:any[]; admins:any[]; allowedUsers:any[] }
 type ThemeDraft = { id?:string; name:string; slug:string; organizationId:string; definition:any }
+type RowKind = 'domains'|'admins'|'allowedUsers'
 
 const BUILTIN = [
   ['dock-green','Dock Green','#2b8c8f','#fbf7f2'],['slate','Slate','#475569','#eef2f6'],['warm','Warm','#b86b3d','#fbf4ea'],
@@ -27,11 +28,12 @@ function hexToRgb(hex:string){const n=parseInt(hex.replace('#',''),16);return {r
 function rgbToHex(r:number,g:number,b:number){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('')}
 function mix(hex:string,target:string,p:number){const a=hexToRgb(hex),b=hexToRgb(target);return rgbToHex(a.r+(b.r-a.r)*p,a.g+(b.g-a.g)*p,a.b+(b.b-a.b)*p)}
 function generateTheme(base:string,mood:string,name:string,orgId:string):ThemeDraft{
-  const dark=mood==='dark', spirit=mood==='spirit', soft=mood==='soft';
+  const dark=mood==='dark', spirit=mood==='spirit', soft=mood==='soft'
   const bg=dark?mix(base,'#07111f',.78):soft?mix(base,'#ffffff',.92):spirit?mix(base,'#ffffff',.88):mix(base,'#ffffff',.95)
   const fg=dark?'#f5f8fc':'#14263a', card=dark?mix(base,'#0b1726',.82):'#ffffff', border=dark?mix(base,'#ffffff',.64):mix(base,'#8ca0b4',.55)
   return {name,slug:slugify(name),organizationId:orgId,definition:{...blankTheme.definition,background:bg,foreground:fg,muted:dark?'#b3c2d2':'#607286',primary:base,primaryText:'#ffffff',accent:spirit?mix(base,'#ffcc4d',.28):mix(base,'#42d3c4',.22),card,border,radius:spirit?20:soft?18:14,cardOpacity:dark?.82:.9,shadow:dark?'deep':'soft',backgroundMode:'gradient',gradientEnd:dark?mix(base,'#000000',.67):mix(base,'#ffffff',.72)}}
-async function fileData(file:File,max=1600){if(!file.type.startsWith('image/'))throw new Error('Choose an image.');if(file.size>4*1024*1024)throw new Error('Keep images under 4 MB.');const raw=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(new Error('Image read failed.'));r.readAsDataURL(file)});return raw}
+}
+async function fileData(file:File){if(!file.type.startsWith('image/'))throw new Error('Choose an image.');if(file.size>4*1024*1024)throw new Error('Keep images under 4 MB.');return await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(new Error('Image read failed.'));r.readAsDataURL(file)})}
 
 export default function OwnerPage(){
   const [user,setUser]=useState<any>(null),[districts,setDistricts]=useState<any[]>([]),[form,setForm]=useState<DistrictForm>(blankDistrict),[view,setView]=useState<View>('overview')
@@ -49,9 +51,9 @@ export default function OwnerPage(){
   function updateOrg(k:string,v:any){setForm(c=>({...c,organization:{...c.organization,[k]:v}}));setDirty(true)}
   function choose(d:any,next:View=view){setForm(toForm(d));setDirty(false);setView(next)}
   function newDistrict(){setForm(blankDistrict);setDirty(true);setView('districts')}
-  function addRow(kind:'domains'|'admins'|'allowedUsers'){const row=kind==='domains'?{domain:'',status:'verified',domain_type:'additional'}:kind==='admins'?{email:'',role:'district_admin'}:{email:'',name:'',note:'',status:'active'};setForm(c=>({...c,[kind]:[...c[kind],row]}));setDirty(true)}
-  function patchRow(kind:any,i:number,k:string,v:any){setForm(c=>({...c,[kind]:c[kind].map((x:any,n:number)=>n===i?{...x,[k]:v}:x)}));setDirty(true)}
-  function removeRow(kind:any,i:number){setForm(c=>({...c,[kind]:c[kind].filter((_:any,n:number)=>n!==i)}));setDirty(true)}
+  function addRow(kind:RowKind){const row=kind==='domains'?{domain:'',status:'verified',domain_type:'additional'}:kind==='admins'?{email:'',role:'district_admin'}:{email:'',name:'',note:'',status:'active'};setForm(c=>({...c,[kind]:[...(c as any)[kind],row]}));setDirty(true)}
+  function patchRow(kind:RowKind,i:number,k:string,v:any){setForm(c=>({...c,[kind]:(c as any)[kind].map((x:any,n:number)=>n===i?{...x,[k]:v}:x)}));setDirty(true)}
+  function removeRow(kind:RowKind,i:number){setForm(c=>({...c,[kind]:(c as any)[kind].filter((_:any,n:number)=>n!==i)}));setDirty(true)}
   function patchTheme(k:string,v:any){setTheme(c=>({...c,definition:{...c.definition,[k]:v}}))}
 
   if(!user)return <main className="hq2SignIn"><section className="hq2SignInCard"><div className="hq2Logo">D</div><div className="hq2Eyebrow" style={{color:'#9cc8ff',marginTop:20}}>Owner Control Plane</div><h1>Dock HQ</h1><p>One private mothership for the business side of Dock.</p><button onClick={signIn}>Enter Dock HQ</button></section></main>
