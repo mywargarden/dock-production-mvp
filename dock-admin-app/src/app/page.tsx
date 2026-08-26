@@ -5,38 +5,28 @@ export default function Home() {
     <main className="publicShell">
       <section className="card publicHero">
         <div className="heroEyebrow">Dock for Schools</div>
-        <h1>A calmer browser workspace for districts.</h1>
+        <h1>One calmer workspace. Clear roles.</h1>
         <p className="muted publicLead">
-          Dock gives schools a managed Safe Harbor where important resources stay organized,
-          recoverable, and easy to reopen without overwhelming teachers or students.
+          Dock keeps district resources organized and recoverable while separating owner operations from school administration.
         </p>
         <div className="row wrap publicActions">
-          <Link className="buttonLink" href="/admin">Open Admin</Link>
-          <Link className="buttonLink secondaryLink" href="/district">View Workspace Pages</Link>
-          <Link className="buttonLink secondaryLink" href="/api/bootstrap">Bootstrap API</Link>
+          <Link className="buttonLink" href="/owner">Open Dock HQ</Link>
+          <Link className="buttonLink secondaryLink" href="/admin">Open District Admin</Link>
         </div>
       </section>
 
       <section className="publicGrid">
         <div className="card">
-          <h2>Safe Harbor</h2>
-          <p className="muted">
-            A persistent workspace where district resources and personal memories can be recovered
-            without losing browser context.
-          </p>
+          <h2>Dock HQ</h2>
+          <p className="muted">Owner-only control for customers, licenses, seats, themes, billing, releases, and system health.</p>
         </div>
         <div className="card">
-          <h2>District managed</h2>
-          <p className="muted">
-            Published workspaces can be attached to verified school email domains and pushed through
-            managed extension deployment.
-          </p>
+          <h2>District Admin</h2>
+          <p className="muted">District staff manage their own published links and workspace content without touching owner controls.</p>
         </div>
         <div className="card">
-          <h2>Local-first</h2>
-          <p className="muted">
-            Core Dock behavior remains fast and calm even when the backend is slow or unavailable.
-          </p>
+          <h2>Managed Dock</h2>
+          <p className="muted">Verified users receive the correct district workspace through the extension automatically.</p>
         </div>
       </section>
     </main>
