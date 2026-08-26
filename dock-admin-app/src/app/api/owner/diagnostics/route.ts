@@ -44,7 +44,7 @@ export async function GET(request:NextRequest){
     const outdated=districts.flatMap((d:any)=>(d.installations||[]).filter((x:any)=>d.organization?.minimum_extension_version&&x.extension_version&&versionLt(x.extension_version,d.organization.minimum_extension_version)).map((x:any)=>({district:d.organization?.name,orgCode:d.organization?.org_code,email:x.email,version:x.extension_version,minimum:d.organization.minimum_extension_version,lastSeen:x.last_seen_at})))
 
     const checks=[
-      check('database','Database','pass',`Loaded ${districts.length} district record${districts.length===1?'':'s'} from Supabase.`),0,'No action required.'),
+      check('database','Database','pass',`Loaded ${districts.length} district record${districts.length===1?'':'s'} from Supabase.`,0,'No action required.'),
       check('authentication','Owner authentication','pass',`Authenticated owner session for ${auth.ownerEmail}.`,0,'No action required.'),
       check('district_resolution','District resolution',domainMissing.length?'warning':'pass',domainMissing.length?`${domainMissing.length} district${domainMissing.length===1?' has':'s have'} no verified domain.`:'Every district has a verified domain.',domainMissing.length,domainMissing.length?'Open Districts and verify the missing domain records.':'No action required.'),
       check('license','License enforcement',licenseProblems.length?'warning':'pass',licenseProblems.length?`${licenseProblems.length} district${licenseProblems.length===1?' needs':'s need'} license attention.`:'No suspended, expired, or past-due districts.',licenseProblems.length,licenseProblems.length?'Open Licensing & Billing and review the affected customers.':'No action required.'),
