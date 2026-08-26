@@ -3,287 +3,88 @@
 import { useEffect, useMemo, useState } from 'react'
 import { getAccessToken, getUser, signIn, signOut } from '@/lib/auth'
 
-type View = 'overview' | 'districts' | 'users' | 'branding' | 'operations'
-type DomainRow = { domain: string; status: 'verified' | 'pending'; domain_type: 'primary' | 'additional' }
-type AdminRow = { email: string; role: 'owner' | 'district_admin' }
-type AllowedUserRow = { email: string; name?: string; note?: string; status: 'active' | 'inactive' }
-type DistrictForm = {
-  organization: {
-    id?: string
-    name: string
-    org_code: string
-    email_domain: string
-    plan: string
-    max_users: number
-    license_status: 'trial' | 'active' | 'past_due' | 'suspended' | 'expired'
-    license_renewal_date: string
-    grace_period_days: number
-    minimum_extension_version: string
-    owner_notes: string
-    district_logo_url: string
-    district_background_url: string
-    district_accent_color: string
-    default_theme: string
-  }
-  domains: DomainRow[]
-  admins: AdminRow[]
-  allowedUsers: AllowedUserRow[]
-}
+type View = 'overview'|'districts'|'licensing'|'users'|'themes'|'branding'|'workspaces'|'releases'|'diagnostics'|'activity'|'settings'
+type DistrictForm = { organization:any; domains:any[]; admins:any[]; allowedUsers:any[] }
+type ThemeDraft = { id?:string; name:string; slug:string; organizationId:string; definition:any }
 
-const THEMES = [
-  ['dock-green', 'Dock Green'], ['slate', 'Slate'], ['warm', 'Warm'], ['sunset', 'Sunset'],
-  ['violet-harbor', 'Violet Harbor'], ['rubber-ducky', 'Rubber Ducky'], ['crazy-ducky', 'Crazy Ducky'],
-  ['tie-dye', 'Tie Dye'], ['skipper-harbor', 'Skipper Harbor']
+const BUILTIN = [
+  ['dock-green','Dock Green','#2b8c8f','#fbf7f2'],['slate','Slate','#475569','#eef2f6'],['warm','Warm','#b86b3d','#fbf4ea'],
+  ['sunset','Sunset','#e87d64','#fff1e7'],['violet-harbor','Violet Harbor','#7d67aa','#f4f0fa'],['rubber-ducky','Rubber Ducky','#21a7d7','#fff8c9'],
+  ['crazy-ducky','Crazy Ducky','#ed4b9a','#fff1fb'],['tie-dye','Tie Dye','#7c4dff','#fff2f8'],['skipper-harbor','Skipper Harbor','#2d6f94','#edf7fa']
 ]
+const NAV:[View,string][] = [
+  ['overview','Overview'],['districts','Districts'],['licensing','Licensing & Billing'],['users','Users & Seats'],['themes','Theme Studio'],
+  ['branding','Branding'],['workspaces','Workspaces'],['releases','Releases'],['diagnostics','Diagnostics'],['activity','Activity'],['settings','Owner Settings']
+]
+const blankDistrict:DistrictForm = { organization:{name:'',org_code:'',email_domain:'',plan:'district',max_users:500,license_status:'trial',license_renewal_date:'',grace_period_days:30,minimum_extension_version:'',owner_notes:'',district_logo_url:'',district_background_url:'',district_accent_color:'#8fd8c6',default_theme:'dock-green',allow_user_theme_override:true,allow_admin_branding:true,customer_contact_name:'',customer_contact_email:'',customer_contact_phone:''}, domains:[],admins:[],allowedUsers:[] }
+const blankTheme:ThemeDraft = { name:'New Dock Theme',slug:'new-dock-theme',organizationId:'',definition:{background:'#f4f8fc',foreground:'#14263a',muted:'#607286',primary:'#2b8c8f',primaryText:'#ffffff',card:'#ffffff',border:'#d7e1eb',accent:'#2b8c8f',radius:16,cardOpacity:.88,shadow:'soft',backgroundMode:'color',gradientEnd:'#dcecf8',sceneImageUrl:''} }
 
-const blankDistrict: DistrictForm = {
-  organization: {
-    name: '', org_code: '', email_domain: '', plan: 'district', max_users: 500,
-    license_status: 'trial', license_renewal_date: '', grace_period_days: 30,
-    minimum_extension_version: '', owner_notes: '', district_logo_url: '',
-    district_background_url: '', district_accent_color: '#8fd8c6', default_theme: 'dock-green'
-  },
-  domains: [], admins: [], allowedUsers: []
-}
+function slugify(v:string){return String(v||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'')}
+function dateInput(v:any){if(!v)return '';const d=new Date(v);return Number.isNaN(d.getTime())?'':d.toISOString().slice(0,10)}
+function toForm(item:any):DistrictForm{const o=item?.organization||{};return {organization:{...blankDistrict.organization,...o,license_renewal_date:dateInput(o.license_renewal_date),allow_user_theme_override:o.allow_user_theme_override!==false,allow_admin_branding:o.allow_admin_branding!==false},domains:(item?.domains||[]).map((x:any)=>({...x,domain:x.domain||x.normalized_domain||''})),admins:item?.admins||[],allowedUsers:item?.allowedUsers||[]}}
+function themeFromRecord(t:any):ThemeDraft{return {id:t.id,name:t.name||'Theme',slug:t.slug||slugify(t.name),organizationId:t.organization_id||'',definition:{...blankTheme.definition,...(t.definition||{})}}}
+function hexToRgb(hex:string){const n=parseInt(hex.replace('#',''),16);return {r:(n>>16)&255,g:(n>>8)&255,b:n&255}}
+function rgbToHex(r:number,g:number,b:number){return '#'+[r,g,b].map(v=>Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,'0')).join('')}
+function mix(hex:string,target:string,p:number){const a=hexToRgb(hex),b=hexToRgb(target);return rgbToHex(a.r+(b.r-a.r)*p,a.g+(b.g-a.g)*p,a.b+(b.b-a.b)*p)}
+function generateTheme(base:string,mood:string,name:string,orgId:string):ThemeDraft{
+  const dark=mood==='dark', spirit=mood==='spirit', soft=mood==='soft';
+  const bg=dark?mix(base,'#07111f',.78):soft?mix(base,'#ffffff',.92):spirit?mix(base,'#ffffff',.88):mix(base,'#ffffff',.95)
+  const fg=dark?'#f5f8fc':'#14263a', card=dark?mix(base,'#0b1726',.82):'#ffffff', border=dark?mix(base,'#ffffff',.64):mix(base,'#8ca0b4',.55)
+  return {name,slug:slugify(name),organizationId:orgId,definition:{...blankTheme.definition,background:bg,foreground:fg,muted:dark?'#b3c2d2':'#607286',primary:base,primaryText:'#ffffff',accent:spirit?mix(base,'#ffcc4d',.28):mix(base,'#42d3c4',.22),card,border,radius:spirit?20:soft?18:14,cardOpacity:dark?.82:.9,shadow:dark?'deep':'soft',backgroundMode:'gradient',gradientEnd:dark?mix(base,'#000000',.67):mix(base,'#ffffff',.72)}}
+async function fileData(file:File,max=1600){if(!file.type.startsWith('image/'))throw new Error('Choose an image.');if(file.size>4*1024*1024)throw new Error('Keep images under 4 MB.');const raw=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result||''));r.onerror=()=>rej(new Error('Image read failed.'));r.readAsDataURL(file)});return raw}
 
-function slugify(value: string) {
-  return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
-}
-function normalizeDomain(value: string) { return String(value || '').trim().toLowerCase().replace(/^@+/, '') }
-function inputDate(value: string | null | undefined) {
-  if (!value) return ''
-  const d = new Date(value)
-  return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10)
-}
-function toForm(item: any): DistrictForm {
-  const org = item?.organization || {}
-  return {
-    organization: {
-      id: org.id || undefined,
-      name: org.name || '', org_code: org.org_code || '', email_domain: org.email_domain || '',
-      plan: org.plan || 'district', max_users: Number(org.max_users) || 500,
-      license_status: org.license_status || 'trial', license_renewal_date: inputDate(org.license_renewal_date),
-      grace_period_days: Number(org.grace_period_days) || 30, minimum_extension_version: org.minimum_extension_version || '',
-      owner_notes: org.owner_notes || '', district_logo_url: org.district_logo_url || '',
-      district_background_url: org.district_background_url || '', district_accent_color: org.district_accent_color || '#8fd8c6',
-      default_theme: org.default_theme || 'dock-green'
-    },
-    domains: (item?.domains || []).map((d: any) => ({ domain: d.domain || d.normalized_domain || '', status: d.status === 'pending' ? 'pending' : 'verified', domain_type: d.domain_type === 'primary' ? 'primary' : 'additional' })),
-    admins: (item?.admins || []).map((a: any) => ({ email: a.email || '', role: a.role === 'owner' ? 'owner' : 'district_admin' })),
-    allowedUsers: (item?.allowedUsers || []).map((u: any) => ({ email: u.email || '', name: u.name || '', note: u.note || '', status: u.status === 'inactive' ? 'inactive' : 'active' }))
-  }
-}
+export default function OwnerPage(){
+  const [user,setUser]=useState<any>(null),[districts,setDistricts]=useState<any[]>([]),[form,setForm]=useState<DistrictForm>(blankDistrict),[view,setView]=useState<View>('overview')
+  const [loading,setLoading]=useState(false),[status,setStatus]=useState('Dock HQ ready.'),[dirty,setDirty]=useState(false),[themes,setThemes]=useState<any[]>([]),[theme,setTheme]=useState<ThemeDraft>(blankTheme),[themeStatus,setThemeStatus]=useState('Theme Studio ready.')
+  const selected=useMemo(()=>districts.find(d=>d.organization?.org_code===form.organization.org_code),[districts,form.organization.org_code])
+  const totals=useMemo(()=>({districts:districts.length,seats:districts.reduce((s,d)=>s+(+d.organization?.max_users||0),0),used:districts.reduce((s,d)=>s+(+d.activeSeatCount||0),0),active:districts.filter(d=>d.organization?.license_status==='active').length,attention:districts.filter(d=>['past_due','suspended','expired'].includes(d.organization?.license_status)).length}),[districts])
 
-async function imageToDataUrl(file: File, maxSize: number) {
-  if (!file.type.startsWith('image/')) throw new Error('Choose an image file.')
-  if (file.size > 4 * 1024 * 1024) throw new Error('Keep images under 4 MB.')
-  const raw = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result || ''))
-    reader.onerror = () => reject(new Error('Could not read image.'))
-    reader.readAsDataURL(file)
-  })
-  return await new Promise<string>((resolve) => {
-    const image = new Image()
-    image.onload = () => {
-      const scale = Math.min(1, maxSize / image.width, maxSize / image.height)
-      const canvas = document.createElement('canvas')
-      canvas.width = Math.max(1, Math.round(image.width * scale))
-      canvas.height = Math.max(1, Math.round(image.height * scale))
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return resolve(raw)
-      ctx.drawImage(image, 0, 0, canvas.width, canvas.height)
-      resolve(canvas.toDataURL('image/webp', 0.84))
-    }
-    image.onerror = () => resolve(raw)
-    image.src = raw
-  })
-}
+  useEffect(()=>{(async()=>{const u=await getUser();setUser(u);if(u){await loadDistricts();await loadThemes()}})()},[])
+  async function authFetch(url:string,opts:any={}){const token=await getAccessToken();if(!token)throw new Error('Sign in again.');return fetch(url,{...opts,headers:{...(opts.headers||{}),Authorization:`Bearer ${token}`}})}
+  async function loadDistricts(){try{setLoading(true);const r=await authFetch('/api/owner/districts',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'Could not load districts.');setDistricts(j.districts||[]);if(!form.organization.org_code&&j.districts?.[0])setForm(toForm(j.districts[0]));setStatus(`Loaded ${j.districts?.length||0} districts.`)}catch(e:any){setStatus(e.message)}finally{setLoading(false)}}
+  async function loadThemes(){try{const r=await authFetch('/api/owner/themes',{cache:'no-store'}),j=await r.json();if(!r.ok)throw new Error(j.error||'Could not load themes.');setThemes(j.themes||[])}catch(e:any){setThemeStatus(e.message)}}
+  async function saveDistrict(){try{setLoading(true);const r=await authFetch('/api/owner/districts',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(form)}),j=await r.json();if(!r.ok)throw new Error(j.error||'Save failed.');setDistricts(j.districts||[]);const cur=(j.districts||[]).find((d:any)=>d.organization?.org_code===j.organization?.org_code);if(cur)setForm(toForm(cur));setDirty(false);setStatus(`Saved ${j.organization?.name}.`)}catch(e:any){setStatus(e.message)}finally{setLoading(false)}}
+  async function toggleUser(u:any){if(!selected?.organization?.id)return;try{const next=u.status==='inactive'?'active':'inactive';const r=await authFetch('/api/owner/users',{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({organizationId:selected.organization.id,userId:u.id,status:next})}),j=await r.json();if(!r.ok)throw new Error(j.error||'User update failed.');setDistricts(j.districts||[]);setStatus(`${u.email} is ${next}.`)}catch(e:any){setStatus(e.message)}}
+  async function saveTheme(action:'save'|'publish'){try{setLoading(true);setThemeStatus(action==='publish'?'Publishing theme…':'Saving theme…');const r=await authFetch('/api/owner/themes',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action,id:theme.id,name:theme.name,slug:theme.slug,organizationId:theme.organizationId||null,definition:theme.definition})}),j=await r.json();if(!r.ok)throw new Error(j.error||'Theme save failed.');setThemes(j.themes||[]);setTheme(themeFromRecord(j.theme));setThemeStatus(action==='publish'?'Theme published and assigned.':'Theme draft saved.');if(action==='publish')await loadDistricts()}catch(e:any){setThemeStatus(e.message)}finally{setLoading(false)}}
+  function updateOrg(k:string,v:any){setForm(c=>({...c,organization:{...c.organization,[k]:v}}));setDirty(true)}
+  function choose(d:any,next:View=view){setForm(toForm(d));setDirty(false);setView(next)}
+  function newDistrict(){setForm(blankDistrict);setDirty(true);setView('districts')}
+  function addRow(kind:'domains'|'admins'|'allowedUsers'){const row=kind==='domains'?{domain:'',status:'verified',domain_type:'additional'}:kind==='admins'?{email:'',role:'district_admin'}:{email:'',name:'',note:'',status:'active'};setForm(c=>({...c,[kind]:[...c[kind],row]}));setDirty(true)}
+  function patchRow(kind:any,i:number,k:string,v:any){setForm(c=>({...c,[kind]:c[kind].map((x:any,n:number)=>n===i?{...x,[k]:v}:x)}));setDirty(true)}
+  function removeRow(kind:any,i:number){setForm(c=>({...c,[kind]:c[kind].filter((_:any,n:number)=>n!==i)}));setDirty(true)}
+  function patchTheme(k:string,v:any){setTheme(c=>({...c,definition:{...c.definition,[k]:v}}))}
 
-export default function OwnerPage() {
-  const [user, setUser] = useState<any>(null)
-  const [districts, setDistricts] = useState<any[]>([])
-  const [form, setForm] = useState<DistrictForm>(blankDistrict)
-  const [view, setView] = useState<View>('overview')
-  const [status, setStatus] = useState('Dock HQ ready.')
-  const [loading, setLoading] = useState(false)
-  const [dirty, setDirty] = useState(false)
+  if(!user)return <main className="hq2SignIn"><section className="hq2SignInCard"><div className="hq2Logo">D</div><div className="hq2Eyebrow" style={{color:'#9cc8ff',marginTop:20}}>Owner Control Plane</div><h1>Dock HQ</h1><p>One private mothership for the business side of Dock.</p><button onClick={signIn}>Enter Dock HQ</button></section></main>
 
-  const selected = useMemo(() => districts.find((d) => d.organization?.org_code === form.organization.org_code), [districts, form.organization.org_code])
-  const totalSeats = useMemo(() => districts.reduce((sum, d) => sum + (Number(d.organization?.max_users) || 0), 0), [districts])
-  const seatsUsed = useMemo(() => districts.reduce((sum, d) => sum + (Number(d.activeSeatCount) || 0), 0), [districts])
-  const attention = useMemo(() => districts.filter((d) => ['past_due', 'suspended', 'expired'].includes(d.organization?.license_status)).length, [districts])
-  const activeCount = useMemo(() => districts.filter((d) => d.organization?.license_status === 'active').length, [districts])
+  return <div className="hq2Shell">
+    <header className="hq2Top"><div className="hq2TopInner"><div className="hq2Brand"><div className="hq2Logo">D</div><div><strong>Dock HQ</strong><span>Owner mothership · {user.email}</span></div></div><div className="hq2TopActions"><select value={form.organization.org_code||''} onChange={e=>{const d=districts.find(x=>x.organization.org_code===e.target.value);if(d)choose(d)}}><option value="">All districts</option>{districts.map(d=><option key={d.organization.id} value={d.organization.org_code}>{d.organization.name}</option>)}</select><button onClick={()=>{loadDistricts();loadThemes()}}>{loading?'Working…':'Refresh'}</button><button onClick={signOut}>Sign out</button><button onClick={newDistrict}>+ New District</button></div></div></header>
+    <div className="hq2App"><aside className="hq2Nav"><div className="hq2NavLabel">Dock HQ</div>{NAV.map(([id,label])=><button key={id} className={view===id?'active':''} onClick={()=>setView(id)}>{label}</button>)}<div className="hq2NavDivider"/><div className="hq2NavNote">Owner work stays here. School admins use District Admin.</div></aside>
+    <main className="hq2Content">
+      <section className="hq2Hero"><div><div className="hq2Eyebrow">Dock Mothership</div><h1>{NAV.find(x=>x[0]===view)?.[1]}</h1><p>{view==='overview'?'Run customers, licenses, users, themes, releases and system health from one place.':`Selected: ${form.organization.name||'All districts'}`}</p></div><span className="hq2Badge">Owner authenticated</span></section>
 
-  useEffect(() => {
-    ;(async () => {
-      const u = await getUser()
-      setUser(u)
-      if (u) await loadDistricts()
-    })()
-  }, [])
+      {view==='overview'&&<><section className="hq2Metrics"><div className="hq2Metric"><span>Districts</span><strong>{totals.districts}</strong><small>customers</small></div><div className="hq2Metric"><span>Seats</span><strong>{totals.used}/{totals.seats}</strong><small>active / licensed</small></div><div className="hq2Metric"><span>Active</span><strong>{totals.active}</strong><small>paid/current</small></div><div className="hq2Metric"><span>Attention</span><strong>{totals.attention}</strong><small>past due / blocked</small></div></section><div className="hq2Grid2"><section className="hq2Card"><div className="hq2CardHeader"><div><h2>Customer portfolio</h2><p>Every tenant in one directory.</p></div><button className="hq2Primary" onClick={newDistrict}>New district</button></div><table className="hq2Table"><thead><tr><th>District</th><th>License</th><th>Seats</th><th>Workspace</th><th/></tr></thead><tbody>{districts.map(d=><tr key={d.organization.id}><td><div className="hq2DistrictName">{d.organization.name}</div><div className="hq2Sub">{d.organization.org_code} · {d.organization.email_domain}</div></td><td><span className={`hq2Status ${d.organization.license_status}`}>{d.organization.license_status}</span></td><td>{d.activeSeatCount||0}/{d.organization.max_users}</td><td>v{d.publishedWorkspace?.version||'—'}</td><td><button className="hq2Ghost" onClick={()=>choose(d,'districts')}>Manage</button></td></tr>)}</tbody></table></section><section className="hq2Card"><h2>Command center</h2><div className="hq2Ops"><div className="hq2Op"><strong>Licensing</strong><span>Enforcement online</span></div><div className="hq2Op"><strong>Themes</strong><span>{themes.length} custom theme records</span></div><div className="hq2Op"><strong>Billing</strong><span>Subscription model ready; Stripe automation next</span></div><div className="hq2Op"><strong>Workspace</strong><span>{selected?.publishedWorkspace?`v${selected.publishedWorkspace.version}`:'Select a district'}</span></div></div></section></div></>}
 
-  async function loadDistricts() {
-    try {
-      setLoading(true)
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in to Dock HQ first.')
-      const response = await fetch('/api/owner/districts', { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result?.error || 'Could not load districts.')
-      const rows = result.districts || []
-      setDistricts(rows)
-      setStatus(`Loaded ${rows.length} district${rows.length === 1 ? '' : 's'}.`)
-      if (!form.organization.org_code && rows[0]) setForm(toForm(rows[0]))
-    } catch (error: any) {
-      setStatus(error?.message || 'Could not load Dock HQ.')
-    } finally { setLoading(false) }
-  }
+      {view==='districts'&&<><section className="hq2Card"><div className="hq2CardHeader"><div><h2>District profile</h2><p>Create and control the customer record.</p></div><button className="hq2Primary" onClick={saveDistrict}>Save district</button></div><div className="hq2FormGrid">{[['District name','name'],['Org code','org_code'],['Primary domain','email_domain'],['Contact name','customer_contact_name'],['Contact email','customer_contact_email'],['Contact phone','customer_contact_phone']].map(([l,k])=><div className="hq2Field" key={k}><label>{l}</label><input value={form.organization[k]||''} onChange={e=>updateOrg(k,k==='org_code'?slugify(e.target.value):e.target.value)}/></div>)}<div className="hq2Field full"><label>Owner notes</label><textarea value={form.organization.owner_notes||''} onChange={e=>updateOrg('owner_notes',e.target.value)}/></div></div></section><section className="hq2Card"><h2>Domains & delegated access</h2><h3 className="hq2SectionTitle">Verified domains</h3>{form.domains.map((x,i)=><div className="hq2MiniRow" key={i}><input value={x.domain||''} onChange={e=>patchRow('domains',i,'domain',e.target.value)}/><select value={x.status||'verified'} onChange={e=>patchRow('domains',i,'status',e.target.value)}><option>verified</option><option>pending</option></select><button className="hq2Danger" onClick={()=>removeRow('domains',i)}>Remove</button></div>)}<button className="hq2Ghost" onClick={()=>addRow('domains')}>Add domain</button><h3 className="hq2SectionTitle">District admins</h3>{form.admins.map((x,i)=><div className="hq2MiniRow admin" key={i}><input value={x.email||''} onChange={e=>patchRow('admins',i,'email',e.target.value)}/><select value={x.role||'district_admin'} onChange={e=>patchRow('admins',i,'role',e.target.value)}><option value="district_admin">District Admin</option><option value="owner">District Owner</option></select><button className="hq2Danger" onClick={()=>removeRow('admins',i)}>Remove</button></div>)}<button className="hq2Ghost" onClick={()=>addRow('admins')}>Add admin</button><h3 className="hq2SectionTitle">Outside-domain users</h3>{form.allowedUsers.map((x,i)=><div className="hq2MiniRow allowed" key={i}><input placeholder="email" value={x.email||''} onChange={e=>patchRow('allowedUsers',i,'email',e.target.value)}/><input placeholder="name" value={x.name||''} onChange={e=>patchRow('allowedUsers',i,'name',e.target.value)}/><input placeholder="note" value={x.note||''} onChange={e=>patchRow('allowedUsers',i,'note',e.target.value)}/><button className="hq2Danger" onClick={()=>removeRow('allowedUsers',i)}>Remove</button></div>)}<button className="hq2Ghost" onClick={()=>addRow('allowedUsers')}>Add user</button></section></>}
 
-  async function saveDistrict() {
-    try {
-      setLoading(true)
-      setStatus('Saving owner changes…')
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in again.')
-      const response = await fetch('/api/owner/districts', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(form)
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result?.error || 'Could not save district.')
-      const rows = result.districts || []
-      setDistricts(rows)
-      const current = rows.find((d: any) => d.organization?.org_code === result.organization?.org_code)
-      if (current) setForm(toForm(current))
-      setDirty(false)
-      setStatus(`Saved ${result.organization?.name || 'district'}.`)
-    } catch (error: any) { setStatus(error?.message || 'Save failed.') }
-    finally { setLoading(false) }
-  }
+      {view==='licensing'&&<section className="hq2Card"><div className="hq2CardHeader"><div><h2>License & billing</h2><p>Dock remains the enforcement layer; Stripe will feed payment state here.</p></div><button className="hq2Primary" onClick={saveDistrict}>Save license</button></div><div className="hq2FormGrid"><div className="hq2Field"><label>Plan</label><select value={form.organization.plan} onChange={e=>updateOrg('plan',e.target.value)}><option value="district">District</option><option value="school">School</option><option value="pilot">Pilot</option></select></div><div className="hq2Field"><label>Status</label><select value={form.organization.license_status} onChange={e=>updateOrg('license_status',e.target.value)}>{['trial','active','past_due','suspended','expired'].map(x=><option key={x}>{x}</option>)}</select></div><div className="hq2Field"><label>Seats</label><input type="number" value={form.organization.max_users} onChange={e=>updateOrg('max_users',+e.target.value)}/></div><div className="hq2Field"><label>Renewal date</label><input type="date" value={form.organization.license_renewal_date||''} onChange={e=>updateOrg('license_renewal_date',e.target.value)}/></div><div className="hq2Field"><label>Grace days</label><input type="number" value={form.organization.grace_period_days} onChange={e=>updateOrg('grace_period_days',+e.target.value)}/></div><div className="hq2Field"><label>Minimum extension version</label><input value={form.organization.minimum_extension_version||''} onChange={e=>updateOrg('minimum_extension_version',e.target.value)}/></div></div><div className="hq2Billing"><div><span>Stripe customer</span><strong>{selected?.billing?.provider_customer_id||'Not connected'}</strong></div><div><span>Subscription</span><strong>{selected?.billing?.status||'Unconfigured'}</strong></div><div><span>Last invoice</span><strong>{selected?.billing?.last_invoice_status||'—'}</strong></div><div><span>Period end</span><strong>{selected?.billing?.current_period_end?new Date(selected.billing.current_period_end).toLocaleDateString():'—'}</strong></div></div><div className="hq2Notice">Automatic Stripe webhook activation/cutoff is the remaining billing integration. Manual license enforcement already works.</div></section>}
 
-  async function toggleUser(userRow: any) {
-    if (!selected?.organization?.id || !userRow?.id) return
-    try {
-      setLoading(true)
-      const token = await getAccessToken()
-      if (!token) throw new Error('Sign in again.')
-      const nextStatus = userRow.status === 'inactive' ? 'active' : 'inactive'
-      const response = await fetch('/api/owner/users', {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ organizationId: selected.organization.id, userId: userRow.id, status: nextStatus })
-      })
-      const result = await response.json()
-      if (!response.ok) throw new Error(result?.error || 'Could not update user.')
-      setDistricts(result.districts || [])
-      setStatus(`${userRow.email || 'User'} set to ${nextStatus}.`)
-    } catch (error: any) { setStatus(error?.message || 'Could not update user.') }
-    finally { setLoading(false) }
-  }
+      {view==='users'&&<section className="hq2Card"><div className="hq2CardHeader"><div><h2>Users & seats</h2><p>Search, inspect and activate/deactivate seats.</p></div><strong>{selected?.activeSeatCount||0} / {form.organization.max_users||0}</strong></div><div className="hq2UserList">{selected?.users?.length?selected.users.map((u:any)=><div className="hq2User" key={u.id}><div className="hq2UserMain"><strong>{u.email||'Unnamed'}</strong><div className="hq2Sub">{u.role||'member'} · last seen {u.last_seen_at?new Date(u.last_seen_at).toLocaleString():'unknown'}</div></div><div className="hq2Inline"><span className={`hq2Status ${u.status==='inactive'?'expired':'active'}`}>{u.status||'active'}</span><button className={u.status==='inactive'?'hq2Primary':'hq2Danger'} onClick={()=>toggleUser(u)}>{u.status==='inactive'?'Activate':'Deactivate'}</button></div></div>):<div className="hq2Empty">Select a district with user profiles.</div>}</div></section>}
 
-  function updateOrg(key: keyof DistrictForm['organization'], value: any) {
-    setForm((current) => ({ ...current, organization: { ...current.organization, [key]: value } }))
-    setDirty(true)
-  }
-  function chooseDistrict(d: any, nextView: View = 'districts') { setForm(toForm(d)); setView(nextView); setDirty(false) }
-  function newDistrict() { setForm(blankDistrict); setView('districts'); setDirty(true); setStatus('New district ready.') }
-  function addDomain() { setForm((c) => ({ ...c, domains: [...c.domains, { domain: '', status: 'verified', domain_type: 'additional' }] })); setDirty(true) }
-  function addAdmin() { setForm((c) => ({ ...c, admins: [...c.admins, { email: '', role: 'district_admin' }] })); setDirty(true) }
-  function addAllowed() { setForm((c) => ({ ...c, allowedUsers: [...c.allowedUsers, { email: '', name: '', note: '', status: 'active' }] })); setDirty(true) }
+      {view==='themes'&&<><section className="hq2Card"><div className="hq2CardHeader"><div><h2>Theme Generator</h2><p>Generate a complete starting theme from a district accent, then refine it below.</p></div><div className="hq2Inline"><button className="hq2Ghost" onClick={()=>setTheme({...blankTheme,organizationId:selected?.organization?.id||'',name:`${form.organization.name||'Dock'} Custom`,slug:slugify(`${form.organization.name||'dock'} custom`)})}>New</button>{['clean','soft','spirit','dark'].map(m=><button className="hq2Ghost" key={m} onClick={()=>setTheme(generateTheme(form.organization.district_accent_color||'#2b8c8f',m,`${form.organization.name||'Dock'} ${m[0].toUpperCase()+m.slice(1)}`,selected?.organization?.id||''))}>Generate {m}</button>)}</div></div><div className="hq2ThemeStudio"><div className="hq2ThemeControls"><div className="hq2FormGrid"><div className="hq2Field"><label>Theme name</label><input value={theme.name} onChange={e=>setTheme(c=>({...c,name:e.target.value,slug:slugify(e.target.value)}))}/></div><div className="hq2Field"><label>Assign to</label><select value={theme.organizationId} onChange={e=>setTheme(c=>({...c,organizationId:e.target.value}))}><option value="">Global library</option>{districts.map(d=><option key={d.organization.id} value={d.organization.id}>{d.organization.name}</option>)}</select></div>{[['Background','background'],['Primary','primary'],['Accent','accent'],['Text','foreground'],['Muted text','muted'],['Cards','card'],['Borders','border']].map(([l,k])=><div className="hq2Field" key={k}><label>{l}</label><div className="hq2ColorRow"><input type="color" value={theme.definition[k]} onChange={e=>patchTheme(k,e.target.value)}/><input value={theme.definition[k]} onChange={e=>patchTheme(k,e.target.value)}/></div></div>)}<div className="hq2Field"><label>Background mode</label><select value={theme.definition.backgroundMode} onChange={e=>patchTheme('backgroundMode',e.target.value)}><option value="color">Color</option><option value="gradient">Gradient</option><option value="image">Image</option></select></div><div className="hq2Field"><label>Corner radius</label><input type="range" min="4" max="28" value={theme.definition.radius} onChange={e=>patchTheme('radius',+e.target.value)}/></div><div className="hq2Field"><label>Card opacity</label><input type="range" min="45" max="100" value={Math.round(theme.definition.cardOpacity*100)} onChange={e=>patchTheme('cardOpacity',+e.target.value/100)}/></div><div className="hq2Field"><label>Shadow</label><select value={theme.definition.shadow} onChange={e=>patchTheme('shadow',e.target.value)}><option>none</option><option>soft</option><option>medium</option><option>deep</option></select></div><div className="hq2Field full"><label>Background image</label><input type="file" accept="image/*" onChange={async e=>{const f=e.target.files?.[0];if(f){patchTheme('sceneImageUrl',await fileData(f));patchTheme('backgroundMode','image')}}}/></div></div><div className="hq2Inline"><button className="hq2Ghost" onClick={()=>saveTheme('save')}>Save Draft</button><button className="hq2Primary" onClick={()=>saveTheme('publish')}>Publish & Assign</button></div><div className="hq2Notice">{themeStatus}</div></div><div className="hq2DockPreview" style={{'--pv-bg':theme.definition.background,'--pv-fg':theme.definition.foreground,'--pv-primary':theme.definition.primary,'--pv-card':theme.definition.card,'--pv-border':theme.definition.border,'--pv-radius':`${theme.definition.radius}px`,'--pv-opacity':theme.definition.cardOpacity,backgroundImage:theme.definition.backgroundMode==='image'&&theme.definition.sceneImageUrl?`linear-gradient(rgba(255,255,255,.25),rgba(255,255,255,.25)),url(${theme.definition.sceneImageUrl})`:theme.definition.backgroundMode==='gradient'?`linear-gradient(135deg,${theme.definition.background},${theme.definition.gradientEnd})`:undefined} as any}><div className="pvTop"><strong>Dock</strong><span>Safe Harbor</span></div><div className="pvPills"><b>All</b><span>Research</span><span>Planning</span></div><div className="pvCards"><div>Gmail<small>mail.google.com</small></div><div>PowerSchool<small>district resource</small></div><div>Canvas<small>managed workspace</small></div><div>ParentSquare<small>district resource</small></div></div><button>Dock 1 Tab</button></div></div></section><section className="hq2Card"><h2>Theme library</h2><div className="hq2ThemeGrid">{BUILTIN.map(([id,name,p,b])=><button className="hq2Theme" key={id} onClick={()=>setTheme(generateTheme(p,'clean',name,selected?.organization?.id||''))}><div className="hq2Swatch" style={{background:`linear-gradient(135deg,${b},${p})`}}/><strong>{name}</strong><small>Built in</small></button>)}{themes.filter(t=>t.status!=='archived').map(t=><button className="hq2Theme" key={t.id} onClick={()=>setTheme(themeFromRecord(t))}><div className="hq2Swatch" style={{background:`linear-gradient(135deg,${t.definition?.background||'#eef3f8'},${t.definition?.primary||'#2b8c8f'})`}}/><strong>{t.name}</strong><small>{t.status} · v{t.version}</small></button>)}</div></section></>}
 
-  if (!user) return (
-    <main className="hq2SignIn">
-      <section className="hq2SignInCard">
-        <div className="hq2Logo">D</div>
-        <div className="hq2Eyebrow" style={{ color: '#9cc8ff', marginTop: 20 }}>Owner Control Plane</div>
-        <h1>Dock HQ</h1>
-        <p>This is the private owner console. District admins and normal Dock users do not manage the business from here.</p>
-        <button onClick={signIn}>Enter Dock HQ</button>
-      </section>
-    </main>
-  )
+      {view==='branding'&&<section className="hq2Card"><div className="hq2CardHeader"><div><h2>District branding</h2><p>Logo, background, default theme and delegation policy.</p></div><button className="hq2Primary" onClick={saveDistrict}>Save branding</button></div><div className="hq2Grid2"><div className="hq2FormGrid"><div className="hq2Field"><label>Accent</label><input type="color" value={form.organization.district_accent_color||'#8fd8c6'} onChange={e=>updateOrg('district_accent_color',e.target.value)}/></div><div className="hq2Field"><label>Default theme</label><input value={form.organization.default_theme||'dock-green'} onChange={e=>updateOrg('default_theme',slugify(e.target.value))}/></div><div className="hq2Field"><label>District logo</label><input type="file" accept="image/*" onChange={async e=>{const f=e.target.files?.[0];if(f)updateOrg('district_logo_url',await fileData(f))}}/></div><div className="hq2Field"><label>Background</label><input type="file" accept="image/*" onChange={async e=>{const f=e.target.files?.[0];if(f)updateOrg('district_background_url',await fileData(f))}}/></div><label className="hq2Check"><input type="checkbox" checked={form.organization.allow_user_theme_override!==false} onChange={e=>updateOrg('allow_user_theme_override',e.target.checked)}/> Allow users to override district theme</label><label className="hq2Check"><input type="checkbox" checked={form.organization.allow_admin_branding!==false} onChange={e=>updateOrg('allow_admin_branding',e.target.checked)}/> Let District Admin edit branding</label></div><div className="hq2Preview" style={{backgroundColor:form.organization.district_accent_color,backgroundImage:form.organization.district_background_url?`linear-gradient(rgba(10,28,48,.2),rgba(10,28,48,.2)),url(${form.organization.district_background_url})`:undefined}}>{form.organization.district_logo_url?<img src={form.organization.district_logo_url} alt="logo"/>:null}<strong>{form.organization.name||'District'}</strong><span>{form.organization.default_theme||'dock-green'} · managed Dock</span></div></div></section>}
 
-  return (
-    <div className="hq2Shell">
-      <header className="hq2Top">
-        <div className="hq2TopInner">
-          <div className="hq2Brand"><div className="hq2Logo">D</div><div><strong>Dock HQ</strong><span>Owner console · {user.email}</span></div></div>
-          <div className="hq2TopActions"><button onClick={loadDistricts}>{loading ? 'Working…' : 'Refresh'}</button><button onClick={signOut}>Sign out</button><button onClick={newDistrict}>+ New District</button></div>
-        </div>
-      </header>
+      {view==='workspaces'&&<section className="hq2Card"><div className="hq2CardHeader"><div><h2>Workspace oversight</h2><p>Owner visibility without stealing school-admin editing duties.</p></div>{form.organization.org_code&&<a className="hq2Ghost linkButton" href={`/district/${encodeURIComponent(form.organization.org_code)}?from=owner`} target="_blank">Open preview</a>}</div><div className="hq2Metrics compact"><div className="hq2Metric"><span>Live version</span><strong>v{selected?.publishedWorkspace?.version||'—'}</strong></div><div className="hq2Metric"><span>Published</span><strong className="smallStrong">{selected?.publishedWorkspace?.published_at?new Date(selected.publishedWorkspace.published_at).toLocaleDateString():'—'}</strong></div><div className="hq2Metric"><span>Versions loaded</span><strong>{selected?.workspaceVersions?.length||0}</strong></div><div className="hq2Metric"><span>Workspace</span><strong className="smallStrong">{selected?.publishedWorkspace?.name||'—'}</strong></div></div><table className="hq2Table"><thead><tr><th>Version</th><th>Name</th><th>Published</th></tr></thead><tbody>{(selected?.workspaceVersions||[]).map((v:any)=><tr key={`${v.version}-${v.created_at}`}><td>v{v.version}</td><td>{v.name}</td><td>{v.published_at?new Date(v.published_at).toLocaleString():'—'}</td></tr>)}</tbody></table></section>}
 
-      <div className="hq2App">
-        <aside className="hq2Nav">
-          <div className="hq2NavLabel">Owner workspace</div>
-          {(['overview','districts','users','branding','operations'] as View[]).map((item) => <button key={item} className={view === item ? 'active' : ''} onClick={() => setView(item)}>{item === 'overview' ? 'Overview' : item === 'districts' ? 'Districts & Licensing' : item === 'users' ? 'Users & Seats' : item === 'branding' ? 'Theme Studio' : 'Operations'}</button>)}
-          <div className="hq2NavDivider" /><div className="hq2NavNote">Owner-only work stays here. District Admin remains a separate customer-facing workspace editor.</div>
-        </aside>
+      {view==='releases'&&<section className="hq2Card"><h2>Release control</h2><p>Keep customer configuration separate from extension distribution.</p><div className="hq2Ops"><div className="hq2Op"><strong>District minimum</strong><span>{form.organization.minimum_extension_version||'No minimum set'}</span></div><div className="hq2Op"><strong>Managed config</strong><span>Live per-district delivery</span></div><div className="hq2Op"><strong>Chrome distribution</strong><span>Store / enterprise deployment remains external</span></div><div className="hq2Op"><strong>Staged rollout</strong><span>Planned HQ control</span></div></div></section>}
 
-        <main className="hq2Content">
-          <section className="hq2Hero">
-            <div><div className="hq2Eyebrow">Dock Mothership</div><h1>{view === 'overview' ? 'Everything owner-side in one place.' : view === 'districts' ? 'Districts & licensing' : view === 'users' ? 'Users & seats' : view === 'branding' ? 'Theme Studio' : 'Operations'}</h1><p>{view === 'overview' ? 'Manage customers, licenses, seats, branding, access, releases, and system health without bouncing between owner sites.' : `Selected district: ${form.organization.name || 'none'}`}</p></div>
-            <span className="hq2Badge">Owner authenticated</span>
-          </section>
+      {view==='diagnostics'&&<section className="hq2Card"><h2>Diagnostics & support</h2><div className="hq2Ops"><div className="hq2Op good"><strong>Owner authentication</strong><span>Signed in as {user.email}</span></div><div className="hq2Op good"><strong>Supabase</strong><span>{districts.length} district records loaded</span></div><div className="hq2Op good"><strong>License enforcement</strong><span>Active / trial / past due / suspended / expired</span></div><div className="hq2Op good"><strong>Domain resolution</strong><span>{selected?.domains?.filter((d:any)=>d.status==='verified').length||0} verified for selected district</span></div><div className="hq2Op"><strong>Billing automation</strong><span>{selected?.billing?'Subscription record present':'Stripe webhook integration not finished'}</span></div><div className="hq2Op good"><strong>Workspace</strong><span>{selected?.publishedWorkspace?`Published v${selected.publishedWorkspace.version}`:'No selected workspace'}</span></div></div><div className="hq2Notice">Raw API endpoints stay behind the scenes. Owner diagnostics are human-readable here.</div></section>}
 
-          {view === 'overview' && <>
-            <section className="hq2Metrics">
-              <div className="hq2Metric"><span>Districts</span><strong>{districts.length}</strong><small>customer organizations</small></div>
-              <div className="hq2Metric"><span>Licensed seats</span><strong>{totalSeats.toLocaleString()}</strong><small>{seatsUsed.toLocaleString()} in use</small></div>
-              <div className="hq2Metric"><span>Active licenses</span><strong>{activeCount}</strong><small>{districts.length - activeCount} trial or other</small></div>
-              <div className="hq2Metric"><span>Needs attention</span><strong>{attention}</strong><small>past due, suspended, expired</small></div>
-            </section>
-            <div className="hq2Grid2">
-              <section className="hq2Card"><div className="hq2CardHeader"><div><h2>Customer portfolio</h2><p>Every district from one directory.</p></div><button className="hq2Primary" onClick={newDistrict}>New district</button></div>
-                <table className="hq2Table"><thead><tr><th>District</th><th>License</th><th>Seats</th><th>Workspace</th><th></th></tr></thead><tbody>{districts.map((d) => <tr key={d.organization.id}><td><div className="hq2DistrictName">{d.organization.name}</div><div className="hq2Sub">{d.organization.org_code} · {d.organization.email_domain || 'no domain'}</div></td><td><span className={`hq2Status ${d.organization.license_status || 'trial'}`}>{d.organization.license_status || 'trial'}</span></td><td>{d.activeSeatCount || 0} / {d.organization.max_users || 0}</td><td>v{d.publishedWorkspace?.version || '—'}</td><td><button className="hq2Ghost" onClick={() => chooseDistrict(d, 'districts')}>Manage</button></td></tr>)}</tbody></table>
-              </section>
-              <section className="hq2Card"><h2>Owner status</h2><div className="hq2Ops" style={{ marginTop: 14 }}><div className="hq2Op"><strong>Licensing</strong><span>Database controls active</span></div><div className="hq2Op"><strong>Seat tracking</strong><span>{seatsUsed} active profiles</span></div><div className="hq2Op"><strong>Branding</strong><span>Managed per district</span></div><div className="hq2Op"><strong>Billing</strong><span>Stripe automation still to finish</span></div></div><div className="hq2Notice">No raw API pages belong in the owner workflow. They stay behind the scenes.</div></section>
-            </div>
-          </>}
+      {view==='activity'&&<section className="hq2Card"><h2>Audit & activity</h2><div className="hq2Activity">{selected?.auditLogs?.length?selected.auditLogs.map((a:any,i:number)=><div key={i}><strong>{String(a.action||'event').replaceAll('_',' ')}</strong><span>{a.created_at?new Date(a.created_at).toLocaleString():''}</span><small>{a.target_type||''}</small></div>):<div className="hq2Empty">Select a district to inspect recent activity.</div>}</div></section>}
 
-          {view === 'districts' && <>
-            <section className="hq2Card"><div className="hq2CardHeader"><div><h2>District directory</h2><p>Select a customer to manage its owner-level settings.</p></div><button className="hq2Primary" onClick={newDistrict}>+ New District</button></div>
-              <table className="hq2Table"><thead><tr><th>District</th><th>Status</th><th>Seats</th><th>Domain</th><th></th></tr></thead><tbody>{districts.map((d) => <tr key={d.organization.id}><td><div className="hq2DistrictName">{d.organization.name}</div><div className="hq2Sub">{d.organization.org_code}</div></td><td><span className={`hq2Status ${d.organization.license_status || 'trial'}`}>{d.organization.license_status || 'trial'}</span></td><td>{d.activeSeatCount || 0}/{d.organization.max_users || 0}</td><td>{d.organization.email_domain || '—'}</td><td><button className="hq2Ghost" onClick={() => chooseDistrict(d)}>Edit</button></td></tr>)}</tbody></table>
-            </section>
-            <section className="hq2Card"><div className="hq2CardHeader"><div><h2>{form.organization.name || 'New district'}</h2><p>License, access, domains, and owner notes.</p></div>{selected?.organization?.org_code ? <a className="hq2Ghost" href={`/district/${selected.organization.org_code}`} target="_blank" rel="noreferrer">Preview workspace</a> : null}</div>
-              <div className="hq2FormGrid">
-                <div className="hq2Field"><label>District name</label><input value={form.organization.name} onChange={(e) => { updateOrg('name', e.target.value); if (!form.organization.org_code) updateOrg('org_code', slugify(e.target.value)) }} /></div>
-                <div className="hq2Field"><label>Org code</label><input value={form.organization.org_code} onChange={(e) => updateOrg('org_code', slugify(e.target.value))} /></div>
-                <div className="hq2Field"><label>Primary email domain</label><input value={form.organization.email_domain} onChange={(e) => updateOrg('email_domain', normalizeDomain(e.target.value))} /></div>
-                <div className="hq2Field"><label>Plan</label><select value={form.organization.plan} onChange={(e) => updateOrg('plan', e.target.value)}><option value="district">District</option><option value="pilot">Pilot</option><option value="school">School</option></select></div>
-                <div className="hq2Field"><label>Licensed seats</label><input type="number" value={form.organization.max_users} onChange={(e) => updateOrg('max_users', Math.max(1, Number(e.target.value) || 1))} /></div>
-                <div className="hq2Field"><label>License status</label><select value={form.organization.license_status} onChange={(e) => updateOrg('license_status', e.target.value)}><option value="trial">Trial</option><option value="active">Active</option><option value="past_due">Past Due</option><option value="suspended">Suspended</option><option value="expired">Expired</option></select></div>
-                <div className="hq2Field"><label>Renewal date</label><input type="date" value={form.organization.license_renewal_date} onChange={(e) => updateOrg('license_renewal_date', e.target.value)} /></div>
-                <div className="hq2Field"><label>Grace days</label><input type="number" value={form.organization.grace_period_days} onChange={(e) => updateOrg('grace_period_days', Number(e.target.value) || 0)} /></div>
-                <div className="hq2Field"><label>Minimum extension version</label><input value={form.organization.minimum_extension_version} onChange={(e) => updateOrg('minimum_extension_version', e.target.value)} placeholder="0.2.3" /></div>
-                <div className="hq2Field full"><label>Owner notes</label><textarea value={form.organization.owner_notes} onChange={(e) => updateOrg('owner_notes', e.target.value)} placeholder="Billing, renewal, support, or customer notes" /></div>
-              </div>
+      {view==='settings'&&<section className="hq2Card"><h2>Owner settings</h2><p>Global owner access remains environment-controlled for safety. Customer-level policies live here.</p><div className="hq2Ops"><div className="hq2Op"><strong>Owner account</strong><span>{user.email}</span></div><div className="hq2Op"><strong>Global theme library</strong><span>{themes.filter(t=>!t.organization_id).length} custom global themes</span></div><div className="hq2Op"><strong>Tenant source of truth</strong><span>organizations</span></div><div className="hq2Op"><strong>Owner route</strong><span>/owner</span></div></div></section>}
 
-              <h3 className="hq2SectionTitle">Verified domains</h3><div className="hq2MiniRows">{form.domains.length ? form.domains.map((entry,index) => <div className="hq2MiniRow" key={index}><input value={entry.domain} onChange={(e) => { const next=[...form.domains]; next[index]={...next[index],domain:normalizeDomain(e.target.value)}; setForm({...form,domains:next}); setDirty(true) }} /><select value={entry.status} onChange={(e) => { const next=[...form.domains]; next[index]={...next[index],status:e.target.value as any}; setForm({...form,domains:next}); setDirty(true) }}><option value="verified">Verified</option><option value="pending">Pending</option></select><button className="hq2Danger" onClick={() => { setForm({...form,domains:form.domains.filter((_,i)=>i!==index)}); setDirty(true) }}>Remove</button></div>) : <div className="hq2Empty">No verified domains yet.</div>}</div><button className="hq2Ghost" style={{ marginTop: 10 }} onClick={addDomain}>Add domain</button>
-
-              <h3 className="hq2SectionTitle">District admins</h3><div className="hq2MiniRows">{form.admins.length ? form.admins.map((entry,index) => <div className="hq2MiniRow admin" key={index}><input value={entry.email} onChange={(e) => { const next=[...form.admins]; next[index]={...next[index],email:e.target.value}; setForm({...form,admins:next}); setDirty(true) }} /><select value={entry.role} onChange={(e) => { const next=[...form.admins]; next[index]={...next[index],role:e.target.value as any}; setForm({...form,admins:next}); setDirty(true) }}><option value="district_admin">District Admin</option><option value="owner">District Owner</option></select><button className="hq2Danger" onClick={() => { setForm({...form,admins:form.admins.filter((_,i)=>i!==index)}); setDirty(true) }}>Remove</button></div>) : <div className="hq2Empty">No district admins assigned.</div>}</div><button className="hq2Ghost" style={{ marginTop: 10 }} onClick={addAdmin}>Add admin</button>
-
-              <h3 className="hq2SectionTitle">Outside-domain users</h3><div className="hq2MiniRows">{form.allowedUsers.length ? form.allowedUsers.map((entry,index) => <div className="hq2MiniRow allowed" key={index}><input value={entry.email} placeholder="email" onChange={(e) => { const next=[...form.allowedUsers]; next[index]={...next[index],email:e.target.value}; setForm({...form,allowedUsers:next}); setDirty(true) }} /><input value={entry.name || ''} placeholder="name" onChange={(e) => { const next=[...form.allowedUsers]; next[index]={...next[index],name:e.target.value}; setForm({...form,allowedUsers:next}); setDirty(true) }} /><input value={entry.note || ''} placeholder="note" onChange={(e) => { const next=[...form.allowedUsers]; next[index]={...next[index],note:e.target.value}; setForm({...form,allowedUsers:next}); setDirty(true) }} /><button className="hq2Danger" onClick={() => { setForm({...form,allowedUsers:form.allowedUsers.filter((_,i)=>i!==index)}); setDirty(true) }}>Remove</button></div>) : <div className="hq2Empty">No outside-domain exceptions.</div>}</div><button className="hq2Ghost" style={{ marginTop: 10 }} onClick={addAllowed}>Add user</button>
-            </section>
-          </>}
-
-          {view === 'users' && <section className="hq2Card"><div className="hq2CardHeader"><div><h2>Users & seats</h2><p>Activate or deactivate profiles without leaving HQ.</p></div><select value={form.organization.org_code} onChange={(e) => { const d=districts.find((x)=>x.organization.org_code===e.target.value); if(d) chooseDistrict(d,'users') }}>{districts.map((d)=><option key={d.organization.id} value={d.organization.org_code}>{d.organization.name}</option>)}</select></div>
-            <div className="hq2UserList">{selected?.users?.length ? selected.users.map((u:any)=><div className="hq2User" key={u.id}><div className="hq2UserMain"><strong>{u.email || 'Unnamed user'}</strong><div className="hq2Sub">{u.role || 'member'} · last seen {u.last_seen_at ? new Date(u.last_seen_at).toLocaleString() : 'unknown'}</div></div><div className="hq2Inline"><span className={`hq2Status ${u.status === 'inactive' ? 'expired' : 'active'}`}>{u.status || 'active'}</span><button className={u.status === 'inactive' ? 'hq2Primary' : 'hq2Danger'} onClick={()=>toggleUser(u)}>{u.status === 'inactive' ? 'Activate' : 'Deactivate'}</button></div></div>) : <div className="hq2Empty">No user profiles found for this district yet.</div>}</div>
-          </section>}
-
-          {view === 'branding' && <>
-            <section className="hq2Card"><div className="hq2CardHeader"><div><h2>Theme Studio</h2><p>Branding belongs here in HQ, not scattered across admin pages.</p></div><select value={form.organization.org_code} onChange={(e) => { const d=districts.find((x)=>x.organization.org_code===e.target.value); if(d) chooseDistrict(d,'branding') }}>{districts.map((d)=><option key={d.organization.id} value={d.organization.org_code}>{d.organization.name}</option>)}</select></div>
-              <div className="hq2Grid2"><div><div className="hq2FormGrid"><div className="hq2Field"><label>Accent color</label><input type="color" value={form.organization.district_accent_color} onChange={(e)=>updateOrg('district_accent_color',e.target.value)} /></div><div className="hq2Field"><label>Default Dock theme</label><select value={form.organization.default_theme} onChange={(e)=>updateOrg('default_theme',e.target.value)}>{THEMES.map(([id,name])=><option key={id} value={id}>{name}</option>)}</select></div><div className="hq2Field"><label>District logo</label><input type="file" accept="image/*" onChange={async(e)=>{const f=e.target.files?.[0];if(f)updateOrg('district_logo_url',await imageToDataUrl(f,600))}} /></div><div className="hq2Field"><label>Dock background</label><input type="file" accept="image/*" onChange={async(e)=>{const f=e.target.files?.[0];if(f)updateOrg('district_background_url',await imageToDataUrl(f,1600))}} /></div></div><div className="hq2Inline" style={{marginTop:12}}><button className="hq2Ghost" onClick={()=>updateOrg('district_logo_url','')}>Clear logo</button><button className="hq2Ghost" onClick={()=>updateOrg('district_background_url','')}>Clear background</button></div></div>
-                <div className="hq2Preview" style={{ backgroundColor: form.organization.district_accent_color, backgroundImage: form.organization.district_background_url ? `linear-gradient(rgba(10,28,48,.25),rgba(10,28,48,.25)),url(${form.organization.district_background_url})` : undefined }}>{form.organization.district_logo_url ? <img src={form.organization.district_logo_url} alt="District logo" /> : null}<strong>{form.organization.name || 'District'}</strong><span>{THEMES.find(([id])=>id===form.organization.default_theme)?.[1] || 'Dock Green'} · managed Dock</span></div>
-              </div>
-            </section>
-            <section className="hq2Card"><h2>Theme library</h2><p>Choose the district default here. Users may still have personal themes where allowed.</p><div className="hq2ThemeGrid" style={{marginTop:14}}>{THEMES.map(([id,name])=><button key={id} className={`hq2Theme ${form.organization.default_theme===id?'selected':''}`} onClick={()=>updateOrg('default_theme',id)}><div className={`hq2Swatch ${id}`}></div><strong>{name}</strong></button>)}</div></section>
-          </>}
-
-          {view === 'operations' && <section className="hq2Card"><div className="hq2CardHeader"><div><h2>Operations</h2><p>Owner-level system health and release controls.</p></div></div><div className="hq2Ops"><div className="hq2Op"><strong>Owner authentication</strong><span>Online · signed in as {user.email}</span></div><div className="hq2Op"><strong>District records</strong><span>{districts.length} loaded from Supabase</span></div><div className="hq2Op"><strong>License enforcement</strong><span>Trial / active / past due / suspended / expired controls are available</span></div><div className="hq2Op"><strong>Release enforcement</strong><span>Minimum extension version is stored per district</span></div><div className="hq2Op"><strong>Workspace versions</strong><span>{selected?.workspaceVersions?.length || 0} recent versions loaded for selected district</span></div><div className="hq2Op"><strong>Audit trail</strong><span>{selected?.auditLogs?.length || 0} recent owner/system events loaded</span></div><div className="hq2Op"><strong>Billing automation</strong><span>Not finished: Stripe payment state still needs to become the single source of license truth</span></div><div className="hq2Op"><strong>Production deployment</strong><span>Not controlled from HQ yet; keep Vercel release steps separate until safely wired</span></div></div><div className="hq2Notice">This page intentionally does not expose raw JSON/API buttons. Diagnostics should be readable owner tools, not implementation details.</div></section>}
-
-          {dirty && <div className="hq2SaveBar"><span>Unsaved owner changes for {form.organization.name || 'new district'}.</span><button className="hq2Primary" onClick={saveDistrict} disabled={loading}>{loading ? 'Saving…' : 'Save changes'}</button></div>}
-          {!dirty && <div className="hq2Notice">{status}</div>}
-        </main>
-      </div>
-    </div>
-  )
+      {dirty&&<div className="hq2SaveBar"><span>Unsaved owner changes for {form.organization.name||'new district'}.</span><button className="hq2Primary" onClick={saveDistrict}>{loading?'Saving…':'Save changes'}</button></div>}{!dirty&&<div className="hq2Notice">{status}</div>}
+    </main></div>
+  </div>
 }
