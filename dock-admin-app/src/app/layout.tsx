@@ -1,5 +1,6 @@
 import './globals.css'
 import './owner-hq.css'
+import './owner-hq-v3.css'
 import type { Metadata } from 'next'
 
 export const metadata: Metadata = {
