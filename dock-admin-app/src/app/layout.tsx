@@ -3,8 +3,8 @@ import './owner-hq.css';
 import type { Metadata } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Dock Admin',
-  description: 'Manage district workspaces for Dock'
+  title: 'Dock HQ',
+  description: 'Dock owner mothership and district operations console'
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
