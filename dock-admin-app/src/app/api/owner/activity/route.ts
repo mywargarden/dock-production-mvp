@@ -24,7 +24,7 @@ export async function GET(request:NextRequest){
     const {data,error}=await query
     if(error)throw error
 
-    const orgIds=[...new Set((data||[]).map((x:any)=>x.organization_id).filter(Boolean))]
+    const orgIds=Array.from(new Set((data||[]).map((x:any)=>x.organization_id).filter(Boolean))) as string[]
     const orgMap=new Map<string,any>()
     if(orgIds.length){
       const {data:orgs,error:orgError}=await auth.service.from('organizations').select('id,name,org_code').in('id',orgIds)
