@@ -59,11 +59,7 @@ export async function GET(request: NextRequest) {
     const auth = await requireOwner(request)
     if ('error' in auth) return auth.error
     const themeId = normalize(request.nextUrl.searchParams.get('themeId'))
-    return NextResponse.json({
-      ok: true,
-      themes: await listThemes(auth.service),
-      versions: themeId ? await listVersions(auth.service, themeId) : [],
-    })
+    return NextResponse.json({ ok: true, themes: await listThemes(auth.service), versions: themeId ? await listVersions(auth.service, themeId) : [] })
   } catch (error: any) {
     return NextResponse.json({ error: error?.message || 'Could not load themes.' }, { status: 400 })
   }
@@ -76,27 +72,15 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const action = normalize(body?.action) || 'save'
     const id = normalize(body?.id)
-    const now = new Date().toISOString()
 
     if (['archive', 'restore'].includes(action)) {
       if (!id) return NextResponse.json({ error: 'Theme id is required.' }, { status: 400 })
-      const { data: existing, error: existingError } = await auth.service.from('dock_themes').select('*').eq('id', id).single()
-      if (existingError) throw existingError
-      const status = action === 'archive' ? 'archived' : 'draft'
-      const { data: theme, error } = await auth.service.from('dock_themes')
-        .update({ status, updated_at: now })
-        .eq('id', id)
-        .select('*')
-        .single()
+      const { data: theme, error } = await auth.service.rpc('dock_owner_set_theme_status', {
+        p_theme_id: id,
+        p_action: action,
+        p_actor_email: auth.ownerEmail,
+      })
       if (error) throw error
-      await auth.service.from('audit_logs').insert({
-        organization_id: existing.organization_id || null,
-        actor_email: auth.ownerEmail,
-        action: action === 'archive' ? 'owner_archive_theme' : 'owner_restore_theme',
-        target_type: 'dock_theme',
-        target_id: id,
-        details: { name: existing.name, slug: existing.slug, previousStatus: existing.status, nextStatus: status },
-      }).throwOnError()
       return NextResponse.json({ ok: true, theme, themes: await listThemes(auth.service), versions: await listVersions(auth.service, id) })
     }
 
@@ -108,76 +92,17 @@ export async function POST(request: NextRequest) {
     const slug = normalizeThemeSlug(body?.slug || name)
     const organizationId = normalize(body?.organizationId) || null
     const definition = normalizeDefinition(body?.definition)
-    let theme: any = null
 
-    if (id) {
-      const { data: existing, error: existingError } = await auth.service.from('dock_themes').select('*').eq('id', id).single()
-      if (existingError) throw existingError
-      if (existing.status === 'archived') return NextResponse.json({ error: 'Restore this theme before editing it.' }, { status: 400 })
-      const nextVersion = Math.max(1, Number(existing.version) || 1) + 1
-      const { data, error } = await auth.service.from('dock_themes').update({
-        name,
-        slug,
-        organization_id: organizationId,
-        scope: organizationId ? 'district' : 'global',
-        status: action === 'publish' ? 'published' : 'draft',
-        definition,
-        version: nextVersion,
-        updated_at: now,
-        published_at: action === 'publish' ? now : existing.published_at,
-      }).eq('id', id).select('*').single()
-      if (error) throw error
-      theme = data
-      await auth.service.from('dock_theme_versions').insert({
-        theme_id: id,
-        version: nextVersion,
-        definition,
-        name,
-        created_by: auth.ownerEmail,
-      }).throwOnError()
-    } else {
-      const { data, error } = await auth.service.from('dock_themes').insert({
-        name,
-        slug,
-        organization_id: organizationId,
-        scope: organizationId ? 'district' : 'global',
-        status: action === 'publish' ? 'published' : 'draft',
-        definition,
-        version: 1,
-        created_by: auth.ownerEmail,
-        updated_at: now,
-        published_at: action === 'publish' ? now : null,
-      }).select('*').single()
-      if (error) throw error
-      theme = data
-      await auth.service.from('dock_theme_versions').insert({
-        theme_id: theme.id,
-        version: 1,
-        definition,
-        name,
-        created_by: auth.ownerEmail,
-      }).throwOnError()
-    }
-
-    if (action === 'publish' && organizationId) {
-      await auth.service.from('organizations').update({ default_theme: slug, updated_at: now }).eq('id', organizationId).throwOnError()
-    }
-
-    await auth.service.from('audit_logs').insert({
-      organization_id: organizationId,
-      actor_email: auth.ownerEmail,
-      action: action === 'publish' ? 'owner_publish_theme' : 'owner_save_theme',
-      target_type: 'dock_theme',
-      target_id: theme.id,
-      details: {
-        name,
-        slug,
-        version: theme.version,
-        scope: organizationId ? 'district' : 'global',
-        backgroundMode: definition.backgroundMode,
-        hasBackgroundImage: Boolean(definition.sceneImageUrl),
-      },
-    }).throwOnError()
+    const { data: theme, error } = await auth.service.rpc('dock_owner_save_theme', {
+      p_theme_id: id || null,
+      p_name: name,
+      p_slug: slug,
+      p_organization_id: organizationId,
+      p_definition: definition,
+      p_action: action,
+      p_actor_email: auth.ownerEmail,
+    })
+    if (error) throw error
 
     return NextResponse.json({
       ok: true,
