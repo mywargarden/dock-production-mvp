@@ -75,7 +75,7 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
       .maybeSingle()
     if (grantError) return { error: NextResponse.json({ error: grantError.message }, { status: 500 }) }
     grant = grantRow || null
-  } else if (!(profile?.id && profileRole === 'admin' && profileOrgId)) {
+  } else {
     const { data: grants, error: grantsError } = await service
       .from('organization_admins')
       .select('id,organization_id,role,email,status')
@@ -89,14 +89,11 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
     grant = grants?.[0] || null
   }
 
-  const activeProfileAdmin = !!profile?.id && profileRole === 'admin' && profileStatus === 'active'
-  const activeGrantAdmin = !!grant?.id
-
-  if (!activeProfileAdmin && !activeGrantAdmin) {
-    return { error: NextResponse.json({ error: 'Admin access required for this organization.' }, { status: 403 }) }
+  if (!grant?.id) {
+    return { error: NextResponse.json({ error: 'Active district admin grant required.', code: 'ADMIN_GRANT_REQUIRED' }, { status: 403 }) }
   }
 
-  const effectiveOrgId = normalize(grant?.organization_id) || profileOrgId
+  const effectiveOrgId = normalize(grant.organization_id)
   if (!effectiveOrgId) return { error: NextResponse.json({ error: 'No district organization is assigned to this admin.' }, { status: 403 }) }
 
   if (organizationIdHint && effectiveOrgId !== organizationIdHint) {
@@ -107,7 +104,7 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
     return { error: NextResponse.json({ error: 'Admin profile is bound to a different organization.', code: 'TENANT_MISMATCH' }, { status: 403 }) }
   }
 
-  if (activeGrantAdmin && (!profile?.id || profileRole !== 'admin')) {
+  if (!profile?.id || profileRole !== 'admin') {
     const { error: syncError } = await service.from('profiles').upsert({
       id: user.id,
       email: userEmail || null,
