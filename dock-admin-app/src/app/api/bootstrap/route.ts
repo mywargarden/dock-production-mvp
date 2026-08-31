@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v1'
+const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v2-tenant-guard'
 const ORG_CACHE_TTL_MS = 60 * 1000
 
 type OrgRow = {
@@ -104,11 +104,13 @@ async function resolveOrganization(supabase: SupabaseClient, requestedOrgCode: s
 async function resolveOrganizationByAllowedEmail(supabase: SupabaseClient, userEmail: string) {
   const email = normalizeEmail(userEmail)
   if (!email) return { data: null, error: null, source: 'missing-email', allowedRecord: null as any }
+  const nowIso = new Date().toISOString()
   const { data: allowedRecord, error } = await supabase
     .from('organization_allowed_users')
-    .select(`organization_id, email, status, organizations (${ORG_SELECT})`)
+    .select(`organization_id, email, status, expires_at, organizations (${ORG_SELECT})`)
     .eq('email', email)
     .eq('status', 'active')
+    .or(`expires_at.is.null,expires_at.gt.${nowIso}`)
     .maybeSingle()
   if (error) return { data: null, error, source: 'allowed-email', allowedRecord: null as any }
   return { data: extractOrgFromAllowedUser(allowedRecord), error: null, source: 'allowed-email', allowedRecord: allowedRecord || null }
@@ -138,13 +140,24 @@ async function syncProfileIfPossible(supabase: SupabaseClient, userId: string, u
 
   if (existingError) return { ok: false, phase: 'select-existing', reason: existingError.message, details: { code: (existingError as any)?.code || null } }
 
-  const sameOrg = normalize(existing?.organization_id) === org.id
-  if (!sameOrg) {
+  const existingOrgId = normalize(existing?.organization_id)
+  const sameOrg = existingOrgId === org.id
+  const existingStatus = normalize(existing?.status || 'active').toLowerCase()
+
+  if (existing?.id && existingStatus !== 'active') {
+    return { ok: false, phase: 'account-disabled', reason: 'profile-is-not-active', details: { status: existingStatus } }
+  }
+
+  if (existing?.id && existingOrgId && !sameOrg) {
+    return { ok: false, phase: 'tenant-mismatch', reason: 'profile-bound-to-different-organization', details: { requestedOrganizationId: org.id } }
+  }
+
+  if (!existing?.id) {
     const { count, error: countError } = await supabase
       .from('profiles')
       .select('id', { count: 'exact', head: true })
       .eq('organization_id', org.id)
-      .neq('status', 'inactive')
+      .eq('status', 'active')
     if (countError) return { ok: false, phase: 'seat-count', reason: countError.message }
     const maxUsers = Number(org.max_users) || 0
     if (maxUsers > 0 && (count || 0) >= maxUsers) {
@@ -153,15 +166,15 @@ async function syncProfileIfPossible(supabase: SupabaseClient, userId: string, u
   }
 
   const normalizedRole = normalize(existing?.role) || 'member'
-  const payload = { id: userId, email: normalizeEmail(userEmail) || null, organization_id: org.id, role: normalizedRole, status: 'active' }
+  const payload = { id: userId, email: normalizeEmail(userEmail) || null, organization_id: org.id, role: normalizedRole, status: existing?.id ? existingStatus : 'active' }
   const { data: saved, error: profileError } = await supabase
     .from('profiles')
     .upsert(payload, { onConflict: 'id' })
     .select('id, email, organization_id, role, status')
     .maybeSingle()
 
-  if (profileError) return { ok: false, phase: 'upsert', reason: profileError.message, details: { code: (profileError as any)?.code || null, payload } }
-  return { ok: true, phase: existing?.id ? 'updated' : 'inserted', reason: existing?.id ? 'updated' : 'inserted', details: { saved: saved || null } }
+  if (profileError) return { ok: false, phase: 'upsert', reason: profileError.message, details: { code: (profileError as any)?.code || null } }
+  return { ok: true, phase: existing?.id ? 'unchanged' : 'inserted', reason: existing?.id ? 'existing-active-profile' : 'inserted', details: { saved: saved || null } }
 }
 
 export async function GET(request: NextRequest) {
@@ -181,6 +194,10 @@ export async function GET(request: NextRequest) {
       const { data: { user }, error: userError } = await authSupabase.auth.getUser(token)
       if (userError || !user) authStatus = 'invalid-token'
       else { authStatus = 'authenticated'; userId = normalize(user.id); userEmail = normalizeEmail(user.email) }
+    }
+
+    if (token && authStatus === 'invalid-token') {
+      return NextResponse.json({ error: 'Invalid auth token', code: 'INVALID_AUTH_TOKEN' }, { status: 401 })
     }
 
     const emailDomain = requestedDomain || normalizeDomain(userEmail)
@@ -207,8 +224,15 @@ export async function GET(request: NextRequest) {
     let profileSync: ProfileSyncResult
     if (userId) {
       profileSync = await syncProfileIfPossible(supabase, userId, userEmail, org)
-      if (!profileSync.ok && profileSync.phase === 'seat-limit') {
-        return NextResponse.json({ error: 'Seat limit exceeded for this district.', code: 'SEAT_LIMIT_EXCEEDED', details: profileSync.details }, { status: 403 })
+      if (!profileSync.ok) {
+        const code = profileSync.phase === 'seat-limit'
+          ? 'SEAT_LIMIT_EXCEEDED'
+          : profileSync.phase === 'account-disabled'
+            ? 'ACCOUNT_DISABLED'
+            : profileSync.phase === 'tenant-mismatch'
+              ? 'TENANT_MISMATCH'
+              : 'PROFILE_SYNC_DENIED'
+        return NextResponse.json({ error: profileSync.reason, code, phase: profileSync.phase, details: profileSync.details || null }, { status: 403 })
       }
     } else {
       profileSync = { ok: false, phase: 'skipped', reason: authStatus, details: { hasAuthorizationHeader: !!authHeader, tokenPresent: !!token } }
