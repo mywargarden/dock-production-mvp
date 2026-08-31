@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v1';
+const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v2-tenant-guard';
 
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -39,20 +39,19 @@ function normalizeManagedUrl(value: unknown) {
   return '';
 }
 
-async function syncProfileFromRequest(request: NextRequest, supabase: ReturnType<typeof getServerSupabase>, org: { id: string }) {
+async function requireActiveUserForOrganization(
+  request: NextRequest,
+  supabase: ReturnType<typeof getServerSupabase>,
+  org: { id: string }
+) {
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  if (!token) return { ok: false, phase: 'precheck', reason: 'missing-auth-token', details: { hasAuthorizationHeader: !!authHeader } };
+  if (!token) return { error: NextResponse.json({ error: 'Missing bearer token', code: 'AUTH_REQUIRED' }, { status: 401 }) };
 
   const authSupabase = getAuthSupabase();
   const { data: { user }, error: userError } = await authSupabase.auth.getUser(token);
   if (userError || !user?.id) {
-    return {
-      ok: false,
-      phase: 'get-user',
-      reason: userError?.message || 'invalid-user-token',
-      details: { code: (userError as any)?.code || null, hint: (userError as any)?.hint || null }
-    };
+    return { error: NextResponse.json({ error: 'Invalid auth token', code: 'INVALID_AUTH_TOKEN' }, { status: 401 }) };
   }
 
   const userId = normalize(user.id);
@@ -60,47 +59,38 @@ async function syncProfileFromRequest(request: NextRequest, supabase: ReturnType
 
   const { data: existing, error: existingError } = await supabase
     .from('profiles')
-    .select('id, role, organization_id, email')
+    .select('id, role, organization_id, email, status')
     .eq('id', userId)
     .maybeSingle();
 
   if (existingError) {
-    return {
-      ok: false,
-      phase: 'select-existing',
-      reason: existingError.message,
-      details: { code: (existingError as any)?.code || null, hint: (existingError as any)?.hint || null }
-    };
+    return { error: NextResponse.json({ error: existingError.message, code: 'PROFILE_LOOKUP_FAILED' }, { status: 500 }) };
   }
 
-  const payload = {
-    id: userId,
-    email: userEmail || null,
-    organization_id: org.id,
-    role: normalize(existing?.role) || 'member'
-  };
-
-  const { data: saved, error: profileError } = await supabase
-    .from('profiles')
-    .upsert(payload, { onConflict: 'id' })
-    .select('id, email, organization_id, role')
-    .maybeSingle();
-
-  if (profileError) {
-    return {
-      ok: false,
-      phase: 'upsert',
-      reason: profileError.message,
-      details: { code: (profileError as any)?.code || null, hint: (profileError as any)?.hint || null, payload }
-    };
+  if (!existing?.id) {
+    return { error: NextResponse.json({ error: 'User is not provisioned for this district.', code: 'PROFILE_REQUIRED' }, { status: 403 }) };
   }
 
-  return {
-    ok: true,
-    phase: existing?.id ? 'updated' : 'inserted',
-    reason: existing?.id ? 'updated' : 'inserted',
-    details: { payload, existing: existing || null, saved: saved || null }
-  };
+  if (normalize(existing.status || 'active').toLowerCase() !== 'active') {
+    return { error: NextResponse.json({ error: 'User account is disabled.', code: 'ACCOUNT_DISABLED' }, { status: 403 }) };
+  }
+
+  if (normalize(existing.organization_id) !== normalize(org.id)) {
+    return { error: NextResponse.json({ error: 'User is not authorized for this district.', code: 'TENANT_MISMATCH' }, { status: 403 }) };
+  }
+
+  if (userEmail && normalize(existing.email).toLowerCase() !== userEmail) {
+    const { error: emailUpdateError } = await supabase
+      .from('profiles')
+      .update({ email: userEmail, updated_at: new Date().toISOString() })
+      .eq('id', userId)
+      .eq('organization_id', org.id);
+    if (emailUpdateError) {
+      return { error: NextResponse.json({ error: emailUpdateError.message, code: 'PROFILE_EMAIL_SYNC_FAILED' }, { status: 403 }) };
+    }
+  }
+
+  return { user: { id: userId, email: userEmail, role: normalize(existing.role) || 'member' } };
 }
 
 export async function GET(request: NextRequest, { params }: { params: { orgCode: string } }) {
@@ -117,6 +107,9 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
     if (orgError) return NextResponse.json({ error: orgError.message }, { status: 500 });
     if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
 
+    const auth = await requireActiveUserForOrganization(request, supabase, org);
+    if ('error' in auth) return auth.error;
+
     const licenseStatus = String((org as any).license_status || 'trial').trim().toLowerCase();
     if (licenseStatus === 'suspended' || licenseStatus === 'expired') {
       return NextResponse.json({ error: `District license is ${licenseStatus}.`, code: licenseStatus === 'suspended' ? 'LICENSE_SUSPENDED' : 'LICENSE_EXPIRED' }, { status: 403 });
@@ -128,8 +121,6 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
         return NextResponse.json({ error: 'District license is past due.', code: 'LICENSE_PAST_DUE' }, { status: 403 });
       }
     }
-
-    const profileSync = await syncProfileFromRequest(request, supabase, org);
 
     const { data: workspace, error: wsError } = await supabase
       .from('workspaces')
@@ -189,11 +180,7 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
         },
         tabs: normalizedTabs
       },
-      profileSync: {
-        ok: !!profileSync?.ok,
-        phase: profileSync?.phase || null,
-        reason: profileSync?.reason || null
-      }
+      profileSync: { ok: true, phase: 'verified', reason: 'active-profile-matches-tenant' }
     }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
