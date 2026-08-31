@@ -38,7 +38,6 @@ export async function POST(request:NextRequest){
     const body=await request.json();const action=normalize(body?.action)||'save'
     const version=normalize(body?.version)
     if(!version)return NextResponse.json({error:'Version is required.'},{status:400})
-    const now=new Date().toISOString()
     const {data:existing,error:existingError}=await auth.service.from('dock_releases').select('*').eq('version',version).maybeSingle()
     if(existingError)throw existingError
 
@@ -53,15 +52,21 @@ export async function POST(request:NextRequest){
       return NextResponse.json({ok:true,...await listReleases(auth.service)})
     }
 
-    const requestedChannel=normalize(body?.channel)
-    const requestedStatus=normalize(body?.status)
-    const protectedStatus=existing&&['preview','production'].includes(normalize(existing.status))
-    const channel=existing?.status==='production'?'production':(['development','pilot','beta'].includes(requestedChannel)?requestedChannel:(existing?.channel||'development'))
-    const status=protectedStatus?normalize(existing.status):(['draft','paused','retired'].includes(requestedStatus)?requestedStatus:(existing?.status||'draft'))
-    const payload:any={version,channel,status,deployment_url:normalize(body?.deployment_url)||null,chrome_status:normalize(body?.chrome_status)||null,notes_internal:normalize(body?.notes_internal)||null,notes_public:normalize(body?.notes_public)||null,build_verified:body?.build_verified===true,migrations_verified:body?.migrations_verified===true,managed_config_verified:body?.managed_config_verified===true,theme_runtime_verified:body?.theme_runtime_verified===true,updated_at:now}
-    if(existing){const {error}=await auth.service.from('dock_releases').update(payload).eq('id',existing.id);if(error)throw error}
-    else{const {error}=await auth.service.from('dock_releases').insert({...payload,created_at:now});if(error)throw error}
-    await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:'owner_save_release',target_type:'dock_release',target_id:existing?.id||version,details:{version,channel,status}}).throwOnError()
+    const {error}=await auth.service.rpc('dock_owner_save_release',{
+      p_version:version,
+      p_channel:normalize(body?.channel),
+      p_status:normalize(body?.status),
+      p_deployment_url:normalize(body?.deployment_url),
+      p_chrome_status:normalize(body?.chrome_status),
+      p_notes_internal:normalize(body?.notes_internal),
+      p_notes_public:normalize(body?.notes_public),
+      p_build_verified:body?.build_verified===true,
+      p_migrations_verified:body?.migrations_verified===true,
+      p_managed_config_verified:body?.managed_config_verified===true,
+      p_theme_runtime_verified:body?.theme_runtime_verified===true,
+      p_actor_email:auth.ownerEmail,
+    })
+    if(error)throw error
     return NextResponse.json({ok:true,...await listReleases(auth.service)})
   }catch(error:any){return NextResponse.json({error:error?.message||'Could not save release.'},{status:400})}
 }
