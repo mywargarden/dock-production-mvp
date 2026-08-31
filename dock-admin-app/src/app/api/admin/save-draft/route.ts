@@ -1,13 +1,14 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin, validatePayload } from '@/lib/adminServer'
+import { validatePayload } from '@/lib/adminServer'
+import { requireActiveAdmin } from '@/lib/adminGuard'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const payload = validatePayload(body)
-    const auth = await requireAdmin(request, payload.organization.org_code)
+    const auth = await requireActiveAdmin(request, payload.organization.org_code)
     if ('error' in auth) return auth.error
 
     const saveTime = new Date().toISOString()
