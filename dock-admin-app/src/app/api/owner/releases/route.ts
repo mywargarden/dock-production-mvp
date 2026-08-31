@@ -53,8 +53,11 @@ export async function POST(request:NextRequest){
       return NextResponse.json({ok:true,...await listReleases(auth.service)})
     }
 
-    const channel=['development','pilot','beta','production'].includes(normalize(body?.channel))?normalize(body.channel):'development'
-    const status=['draft','preview','production','paused','retired'].includes(normalize(body?.status))?normalize(body.status):'draft'
+    const requestedChannel=normalize(body?.channel)
+    const requestedStatus=normalize(body?.status)
+    const protectedStatus=existing&&['preview','production'].includes(normalize(existing.status))
+    const channel=existing?.status==='production'?'production':(['development','pilot','beta'].includes(requestedChannel)?requestedChannel:(existing?.channel||'development'))
+    const status=protectedStatus?normalize(existing.status):(['draft','paused','retired'].includes(requestedStatus)?requestedStatus:(existing?.status||'draft'))
     const payload:any={version,channel,status,deployment_url:normalize(body?.deployment_url)||null,chrome_status:normalize(body?.chrome_status)||null,notes_internal:normalize(body?.notes_internal)||null,notes_public:normalize(body?.notes_public)||null,build_verified:body?.build_verified===true,migrations_verified:body?.migrations_verified===true,managed_config_verified:body?.managed_config_verified===true,theme_runtime_verified:body?.theme_runtime_verified===true,updated_at:now}
     if(existing){const {error}=await auth.service.from('dock_releases').update(payload).eq('id',existing.id);if(error)throw error}
     else{const {error}=await auth.service.from('dock_releases').insert({...payload,created_at:now});if(error)throw error}
