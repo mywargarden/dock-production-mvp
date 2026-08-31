@@ -1,11 +1,12 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { loadOrganizationSettings, requireAdmin } from '@/lib/adminServer'
+import { loadOrganizationSettings } from '@/lib/adminServer'
+import { requireActiveAdmin } from '@/lib/adminGuard'
 
 export async function GET(request: NextRequest) {
   try {
-    const auth = await requireAdmin(request)
+    const auth = await requireActiveAdmin(request)
     if ('error' in auth) return auth.error
 
     const orgId = String(auth.profile?.organization_id || '').trim()
