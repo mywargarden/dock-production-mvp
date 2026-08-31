@@ -1,13 +1,14 @@
 export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireAdmin, validatePayload } from '@/lib/adminServer'
+import { validatePayload } from '@/lib/adminServer'
+import { requireActiveAdmin } from '@/lib/adminGuard'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const payload = validatePayload(body)
-    const auth = await requireAdmin(request, payload.organization.org_code)
+    const auth = await requireActiveAdmin(request, payload.organization.org_code)
     if ('error' in auth) return auth.error
 
     const publishTime = new Date().toISOString()
@@ -53,24 +54,20 @@ export async function POST(request: NextRequest) {
     const nextVersion = (Number(existingPublished?.version) || 0) + 1
 
     if (workspaceId) {
-      try {
-        await auth.service.from('workspace_versions').insert({
-          organization_id: existingOrg.id,
-          workspace_id: workspaceId,
-          version: Number(existingPublished.version) || 1,
-          name: existingPublished.name,
-          tabs: existingOrg.draft_tabs || [],
-          branding: {
-            district_logo_url: existingOrg.district_logo_url || null,
-            district_background_url: existingOrg.district_background_url || null,
-            district_accent_color: existingOrg.district_accent_color || null
-          },
-          published_at: existingPublished.published_at || publishTime,
-          created_by: auth.user.id
-        }).throwOnError()
-      } catch (versionError) {
-        console.warn('Workspace version snapshot skipped. Apply owner_portal_licensing_branding.sql to enable rollback history.', versionError)
-      }
+      await auth.service.from('workspace_versions').insert({
+        organization_id: existingOrg.id,
+        workspace_id: workspaceId,
+        version: Number(existingPublished.version) || 1,
+        name: existingPublished.name,
+        tabs: existingOrg.draft_tabs || [],
+        branding: {
+          district_logo_url: existingOrg.district_logo_url || null,
+          district_background_url: existingOrg.district_background_url || null,
+          district_accent_color: existingOrg.district_accent_color || null
+        },
+        published_at: existingPublished.published_at || publishTime,
+        created_by: auth.user.id
+      }).throwOnError()
 
       const { error: updateWorkspaceError } = await auth.service
         .from('workspaces')
