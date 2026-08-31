@@ -50,9 +50,14 @@ export async function POST(request:NextRequest){
    }
  }
 
- const now=new Date().toISOString();const {error}=await auth.service.from('owner_settings').upsert({id:'global',settings:next,updated_by:auth.ownerEmail,updated_at:now},{onConflict:'id'})
- if(error)return NextResponse.json({error:error.message},{status:400})
  const changed=Object.keys(next).filter(k=>JSON.stringify(current[k])!==JSON.stringify(next[k]))
- await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:action==='safety'?'owner_update_safety_flags':'owner_update_settings',target_type:'owner_settings',target_id:'global',details:{changed,reason:action==='safety'?normalize(body?.reason)||null:null}})
- return NextResponse.json({ok:true,scope:'global',settings:next,updated_at:now,updated_by:auth.ownerEmail,changed})
+ const {data:result,error}=await auth.service.rpc('dock_owner_save_settings',{
+   p_settings:next,
+   p_actor_email:auth.ownerEmail,
+   p_action:action,
+   p_reason:action==='safety'?normalize(body?.reason)||'':null,
+   p_changed:changed,
+ })
+ if(error)return NextResponse.json({error:error.message},{status:400})
+ return NextResponse.json({ok:true,scope:'global',settings:safeSettings(result?.settings),updated_at:result?.updated_at||null,updated_by:result?.updated_by||auth.ownerEmail,changed})
 }
