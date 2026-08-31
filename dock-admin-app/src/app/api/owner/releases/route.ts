@@ -42,35 +42,14 @@ export async function POST(request:NextRequest){
     const {data:existing,error:existingError}=await auth.service.from('dock_releases').select('*').eq('version',version).maybeSingle()
     if(existingError)throw existingError
 
-    if(action==='approve_preview'){
+    if(action==='approve_preview'||action==='approve_production'){
       if(!existing)return NextResponse.json({error:'Save the release first.'},{status:404})
-      const missing=[] as string[]
-      if(!existing.build_verified)missing.push('build verification')
-      if(!existing.migrations_verified)missing.push('database migration verification')
-      if(!normalize(existing.deployment_url))missing.push('deployment URL')
-      if(missing.length)return NextResponse.json({error:`Cannot approve preview. Missing: ${missing.join(', ')}.`},{status:400})
-      const {error}=await auth.service.from('dock_releases').update({status:'preview',preview_approved_by:auth.ownerEmail,preview_approved_at:now,updated_at:now}).eq('id',existing.id)
+      const {error}=await auth.service.rpc('dock_owner_transition_release',{
+        p_release_id:existing.id,
+        p_action:action,
+        p_actor_email:auth.ownerEmail,
+      })
       if(error)throw error
-      await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:'owner_approve_release_preview',target_type:'dock_release',target_id:existing.id,details:{version,channel:existing.channel}})
-      return NextResponse.json({ok:true,...await listReleases(auth.service)})
-    }
-
-    if(action==='approve_production'){
-      if(!existing)return NextResponse.json({error:'Save the release first.'},{status:404})
-      const missing=[] as string[]
-      if(!existing.build_verified)missing.push('build verification')
-      if(!existing.migrations_verified)missing.push('database migration verification')
-      if(!existing.managed_config_verified)missing.push('managed config verification')
-      if(!existing.theme_runtime_verified)missing.push('theme runtime verification')
-      if(!existing.preview_approved_at)missing.push('preview approval')
-      if(!normalize(existing.notes_public))missing.push('release notes')
-      if(!normalize(existing.deployment_url))missing.push('deployment URL')
-      if(missing.length)return NextResponse.json({error:`Cannot approve production. Missing: ${missing.join(', ')}.`},{status:400})
-
-      await auth.service.from('dock_releases').update({status:'retired',updated_at:now}).eq('status','production').neq('id',existing.id).throwOnError()
-      const {error}=await auth.service.from('dock_releases').update({status:'production',channel:'production',released_at:now,production_approved_by:auth.ownerEmail,production_approved_at:now,updated_at:now}).eq('id',existing.id)
-      if(error)throw error
-      await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:'owner_approve_production_release',target_type:'dock_release',target_id:existing.id,details:{version,previousChannel:existing.channel}})
       return NextResponse.json({ok:true,...await listReleases(auth.service)})
     }
 
@@ -79,7 +58,7 @@ export async function POST(request:NextRequest){
     const payload:any={version,channel,status,deployment_url:normalize(body?.deployment_url)||null,chrome_status:normalize(body?.chrome_status)||null,notes_internal:normalize(body?.notes_internal)||null,notes_public:normalize(body?.notes_public)||null,build_verified:body?.build_verified===true,migrations_verified:body?.migrations_verified===true,managed_config_verified:body?.managed_config_verified===true,theme_runtime_verified:body?.theme_runtime_verified===true,updated_at:now}
     if(existing){const {error}=await auth.service.from('dock_releases').update(payload).eq('id',existing.id);if(error)throw error}
     else{const {error}=await auth.service.from('dock_releases').insert({...payload,created_at:now});if(error)throw error}
-    await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:'owner_save_release',target_type:'dock_release',target_id:existing?.id||version,details:{version,channel,status}})
+    await auth.service.from('audit_logs').insert({organization_id:null,actor_email:auth.ownerEmail,action:'owner_save_release',target_type:'dock_release',target_id:existing?.id||version,details:{version,channel,status}}).throwOnError()
     return NextResponse.json({ok:true,...await listReleases(auth.service)})
   }catch(error:any){return NextResponse.json({error:error?.message||'Could not save release.'},{status:400})}
 }
