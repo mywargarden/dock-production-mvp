@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 
-const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v2-tenant-guard';
+const BUILD_FINGERPRINT = 'workspace-dock-hq-branding-v3-current-access';
 
 function getServerSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -79,6 +79,17 @@ async function requireActiveUserForOrganization(
     return { error: NextResponse.json({ error: 'User is not authorized for this district.', code: 'TENANT_MISMATCH' }, { status: 403 }) };
   }
 
+  const { data: allowed, error: accessError } = await supabase.rpc('dock_user_access_allowed', {
+    p_user_id: userId,
+    p_organization_id: org.id,
+  });
+  if (accessError) {
+    return { error: NextResponse.json({ error: accessError.message, code: 'ACCESS_CHECK_FAILED' }, { status: 500 }) };
+  }
+  if (!allowed) {
+    return { error: NextResponse.json({ error: 'Dock access is disabled or unauthorized.', code: 'ACCESS_DENIED' }, { status: 403 }) };
+  }
+
   if (userEmail && normalize(existing.email).toLowerCase() !== userEmail) {
     const { error: emailUpdateError } = await supabase
       .from('profiles')
@@ -101,11 +112,15 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
 
     const { data: org, error: orgError } = await supabase
       .from('organizations')
-      .select('id,name,org_code,email_domain,plan,max_users,published_at,license_status,license_renewal_date,grace_period_days,district_logo_url,district_background_url,district_accent_color,minimum_extension_version')
+      .select('id,name,org_code,email_domain,plan,max_users,published_at,license_status,license_renewal_date,grace_period_days,customer_lifecycle,district_logo_url,district_background_url,district_accent_color,minimum_extension_version')
       .eq('org_code', orgCode)
       .maybeSingle();
     if (orgError) return NextResponse.json({ error: orgError.message }, { status: 500 });
     if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
+
+    if (String((org as any).customer_lifecycle || 'setup').trim().toLowerCase() === 'archived') {
+      return NextResponse.json({ error: 'District is archived.', code: 'DISTRICT_ARCHIVED' }, { status: 403 });
+    }
 
     const auth = await requireActiveUserForOrganization(request, supabase, org);
     if ('error' in auth) return auth.error;
@@ -180,7 +195,7 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
         },
         tabs: normalizedTabs
       },
-      profileSync: { ok: true, phase: 'verified', reason: 'active-profile-matches-tenant' }
+      profileSync: { ok: true, phase: 'verified', reason: 'current-access-matches-tenant' }
     }, {
       headers: {
         'Cache-Control': 'no-store, no-cache, must-revalidate',
