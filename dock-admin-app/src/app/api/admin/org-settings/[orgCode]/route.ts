@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { loadOrganizationSettings, requireAdmin } from '@/lib/adminServer'
+import { loadOrganizationSettings } from '@/lib/adminServer'
+import { requireActiveAdmin } from '@/lib/adminGuard'
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +12,7 @@ export async function GET(
       return NextResponse.json({ error: 'Missing organization code.' }, { status: 400 })
     }
 
-    const auth = await requireAdmin(request, orgCode)
+    const auth = await requireActiveAdmin(request, orgCode)
     if ('error' in auth) return auth.error
 
     const settings = await loadOrganizationSettings(auth.service, orgCode)
