@@ -10,6 +10,7 @@ export default function Rc1Layout({children}:{children:React.ReactNode}){
         <Link className="hq2Ghost" href="/hq-rc1/districts">Districts</Link>
         <Link className="hq2Ghost" href="/hq-rc1/settings">Settings</Link>
         <Link className="hq2Ghost" href="/hq-rc1/releases">Releases</Link>
+        <Link className="hq2Ghost" href="/hq-rc1/maintenance">Maintenance</Link>
       </div>
     </div>
     {children}
