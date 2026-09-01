@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v2-tenant-guard'
+const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v3-current-access'
 const ORG_CACHE_TTL_MS = 60 * 1000
 
 type OrgRow = {
@@ -17,6 +17,7 @@ type OrgRow = {
   license_renewal_date?: string | null
   grace_period_days?: number | null
   minimum_extension_version?: string | null
+  customer_lifecycle?: string | null
 }
 
 type ProfileSyncResult = { ok: boolean; phase: string; reason: string; details?: Record<string, unknown> | null }
@@ -70,7 +71,7 @@ function buildOrgCacheKey(requestedOrgCode: string, emailDomain: string) {
   return requestedOrgCode ? `org:${requestedOrgCode}` : `domain:${emailDomain}`
 }
 
-const ORG_SELECT = 'id, name, org_code, email_domain, plan, max_users, license_status, license_renewal_date, grace_period_days, minimum_extension_version'
+const ORG_SELECT = 'id, name, org_code, email_domain, plan, max_users, license_status, license_renewal_date, grace_period_days, minimum_extension_version, customer_lifecycle'
 
 async function resolveOrganization(supabase: SupabaseClient, requestedOrgCode: string, emailDomain: string) {
   const normalizedEmailDomain = normalizeDomain(emailDomain)
@@ -187,19 +188,13 @@ export async function GET(request: NextRequest) {
     const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
     const token = authHeader.replace(/^Bearer\s+/i, '').trim()
 
-    let userEmail = ''
-    let userId = ''
-    let authStatus = 'missing-token'
-    if (token) {
-      const { data: { user }, error: userError } = await authSupabase.auth.getUser(token)
-      if (userError || !user) authStatus = 'invalid-token'
-      else { authStatus = 'authenticated'; userId = normalize(user.id); userEmail = normalizeEmail(user.email) }
-    }
+    if (!token) return NextResponse.json({ error: 'Authentication is required.', code: 'AUTH_REQUIRED' }, { status: 401 })
 
-    if (token && authStatus === 'invalid-token') {
-      return NextResponse.json({ error: 'Invalid auth token', code: 'INVALID_AUTH_TOKEN' }, { status: 401 })
-    }
+    const { data: { user }, error: userError } = await authSupabase.auth.getUser(token)
+    if (userError || !user) return NextResponse.json({ error: 'Invalid auth token', code: 'INVALID_AUTH_TOKEN' }, { status: 401 })
 
+    const userId = normalize(user.id)
+    const userEmail = normalizeEmail(user.email)
     const emailDomain = requestedDomain || normalizeDomain(userEmail)
     if (!requestedOrgCode && !emailDomain && !userEmail) return NextResponse.json({ error: 'Missing orgCode, domain, or authenticated email' }, { status: 400 })
 
@@ -218,24 +213,23 @@ export async function GET(request: NextRequest) {
     if (resolution.error) return NextResponse.json({ error: resolution.error.message }, { status: 500 })
     if (!org) return NextResponse.json({ error: 'Organization not found', code: 'NO_ORGANIZATION' }, { status: 404 })
 
+    if (normalize(org.customer_lifecycle || 'setup').toLowerCase() === 'archived') {
+      return NextResponse.json({ error: 'District is archived.', code: 'DISTRICT_ARCHIVED' }, { status: 403 })
+    }
+
     const license = licenseCheck(org)
     if (!license.ok) return NextResponse.json({ error: license.message, code: license.code, orgCode: org.org_code }, { status: 403 })
 
-    let profileSync: ProfileSyncResult
-    if (userId) {
-      profileSync = await syncProfileIfPossible(supabase, userId, userEmail, org)
-      if (!profileSync.ok) {
-        const code = profileSync.phase === 'seat-limit'
-          ? 'SEAT_LIMIT_EXCEEDED'
-          : profileSync.phase === 'account-disabled'
-            ? 'ACCOUNT_DISABLED'
-            : profileSync.phase === 'tenant-mismatch'
-              ? 'TENANT_MISMATCH'
-              : 'PROFILE_SYNC_DENIED'
-        return NextResponse.json({ error: profileSync.reason, code, phase: profileSync.phase, details: profileSync.details || null }, { status: 403 })
-      }
-    } else {
-      profileSync = { ok: false, phase: 'skipped', reason: authStatus, details: { hasAuthorizationHeader: !!authHeader, tokenPresent: !!token } }
+    const profileSync = await syncProfileIfPossible(supabase, userId, userEmail, org)
+    if (!profileSync.ok) {
+      const code = profileSync.phase === 'seat-limit'
+        ? 'SEAT_LIMIT_EXCEEDED'
+        : profileSync.phase === 'account-disabled'
+          ? 'ACCOUNT_DISABLED'
+          : profileSync.phase === 'tenant-mismatch'
+            ? 'TENANT_MISMATCH'
+            : 'PROFILE_SYNC_DENIED'
+      return NextResponse.json({ error: profileSync.reason, code, phase: profileSync.phase, details: profileSync.details || null }, { status: 403 })
     }
 
     const origin = url.origin
