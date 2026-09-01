@@ -2,6 +2,55 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { loadOwnerDistricts, normalize, requireOwner } from '@/lib/ownerServer'
+import { materializeManagedImage } from '@/lib/managedAssets'
+
+async function materializeLegacySnapshotAssets(service: any, organizationId: string, snapshotId: string) {
+  const [{ data: org, error: orgError }, { data: snapshot, error: snapshotError }] = await Promise.all([
+    service.from('organizations').select('org_code').eq('id', organizationId).maybeSingle(),
+    service.from('workspace_versions').select('id,tabs,branding').eq('id', snapshotId).eq('organization_id', organizationId).maybeSingle(),
+  ])
+  if (orgError) throw orgError
+  if (snapshotError) throw snapshotError
+  if (!org?.org_code || !snapshot?.id) return { changed: false }
+
+  const orgCode = normalize(org.org_code)
+  const tabs = Array.isArray(snapshot.tabs) ? snapshot.tabs : []
+  const branding = snapshot.branding && typeof snapshot.branding === 'object' ? { ...snapshot.branding } : {}
+  let changed = false
+
+  if (normalize(branding.district_logo_url).startsWith('data:image/')) {
+    branding.district_logo_url = await materializeManagedImage(service, branding.district_logo_url, { orgCode, kind: 'logo' })
+    changed = true
+  }
+  if (normalize(branding.district_background_url).startsWith('data:image/')) {
+    branding.district_background_url = await materializeManagedImage(service, branding.district_background_url, { orgCode, kind: 'background' })
+    changed = true
+  }
+
+  const nextTabs = []
+  for (let index = 0; index < tabs.length; index += 1) {
+    const tab = tabs[index] || {}
+    const icon = normalize(tab.icon_url)
+    if (icon.startsWith('data:image/')) {
+      const iconUrl = await materializeManagedImage(service, icon, { orgCode, kind: `tab-icon-${index}` })
+      nextTabs.push({ ...tab, icon_url: iconUrl || null })
+      changed = true
+    } else {
+      nextTabs.push(tab)
+    }
+  }
+
+  if (!changed) return { changed: false }
+
+  const { error: updateError } = await service
+    .from('workspace_versions')
+    .update({ tabs: nextTabs, branding })
+    .eq('id', snapshotId)
+    .eq('organization_id', organizationId)
+  if (updateError) throw updateError
+
+  return { changed: true }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -20,6 +69,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'A restore reason of at least 5 characters is required.' }, { status: 400 })
     }
 
+    const legacyAssets = await materializeLegacySnapshotAssets(auth.service, organizationId, snapshotId)
+
     const { data: restored, error: restoreError } = await auth.service.rpc('dock_owner_restore_workspace', {
       p_organization_id: organizationId,
       p_snapshot_id: snapshotId,
@@ -31,6 +82,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       ok: true,
       restored: restored || null,
+      legacyAssetsMaterialized: legacyAssets.changed,
       districts: await loadOwnerDistricts(auth.service),
     })
   } catch (error: any) {
