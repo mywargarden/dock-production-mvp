@@ -6,6 +6,27 @@ import { loadOwnerDistricts, normalizeDomain, normalizeEmail, requireOwner } fro
 function versionParts(value:string){return String(value||'').replace(/^v/i,'').split('.').map(x=>Number(x)||0)}
 function versionLt(a:string,b:string){const aa=versionParts(a),bb=versionParts(b),n=Math.max(aa.length,bb.length);for(let i=0;i<n;i++){if((aa[i]||0)<(bb[i]||0))return true;if((aa[i]||0)>(bb[i]||0))return false}return false}
 function check(key:string,label:string,status:'pass'|'warning'|'fail',summary:string,affected:number=0,recommendation=''){return {key,label,status,summary,affected,recommendation}}
+function activeAllowed(d:any,email:string){return email?d.allowedUsers?.find((x:any)=>normalizeEmail(x.email)===email&&x.status!=='inactive'):null}
+function activeAdmin(d:any,email:string){return email?d.admins?.find((x:any)=>normalizeEmail(x.email)===email&&x.status!=='disabled'&&x.status!=='inactive'):null}
+function emailProfile(d:any,email:string){return email?d.users?.find((x:any)=>normalizeEmail(x.email)===email):null}
+function domainMatches(d:any,domain:string){return !!domain&&Boolean(d.domains?.some((x:any)=>x.status==='verified'&&normalizeDomain(x.normalized_domain||x.domain)===domain)||normalizeDomain(d.organization?.email_domain)===domain)}
+function resolveAccess(match:any,email:string,domain:string,source:'verified-domain'|'allowed-email'|'admin-email'){
+  const allowed=activeAllowed(match,email)
+  const profile=emailProfile(match,email)
+  const admin=activeAdmin(match,email)
+  const status=String(match.organization?.license_status||'trial').toLowerCase()
+  const blockedByLicense=['suspended','expired'].includes(status)
+  const blockedByProfile=profile?.status==='inactive'
+  const verifiedDomain=domainMatches(match,domain)
+  const permittedIdentity=!email||Boolean(admin||allowed||(verifiedDomain&&email.endsWith(`@${domain}`)))
+  let access='ALLOWED'
+  let reason=source==='admin-email'?'Active district admin grant.':source==='allowed-email'?'Active outside-domain allowed-user grant.':'Verified district domain and eligible identity.'
+  if(blockedByLicense){access='BLOCKED';reason=`District license is ${status}.`}
+  else if(blockedByProfile){access='BLOCKED';reason='User profile is inactive.'}
+  else if(!permittedIdentity){access='BLOCKED';reason='Identity is not authorized by the verified domain, an active district-admin grant, or an active allowed-user exception.'}
+  else if(status==='past_due'){access='GRACE';reason='District is past due but remains inside its configured grace period.'}
+  return {domain:domain||null,email:email||null,matched:true,district:match.organization?.name,orgCode:match.organization?.org_code,licenseStatus:status,access,reason,profileStatus:profile?.status||null,role:profile?.role||admin?.role||null,isDistrictAdmin:!!admin,outsideDomainException:!!allowed,verifiedDomain,resolutionSource:source}
+}
 
 export async function GET(request:NextRequest){
   try{
@@ -16,23 +37,25 @@ export async function GET(request:NextRequest){
     const domain=normalizeDomain(url.searchParams.get('domain')||(email.includes('@')?email.split('@')[1]:''))
     let resolution:any=null
 
-    if(domain){
-      const match=districts.find((d:any)=>d.domains?.some((x:any)=>x.status==='verified'&&(x.normalized_domain||x.domain)===domain)||d.organization?.email_domain===domain)
-      if(match){
-        const allowed=email?match.allowedUsers?.find((x:any)=>normalizeEmail(x.email)===email&&x.status!=='inactive'):null
-        const profile=email?match.users?.find((x:any)=>normalizeEmail(x.email)===email):null
-        const admin=email?match.admins?.find((x:any)=>normalizeEmail(x.email)===email&&x.status!=='disabled'):null
-        const status=match.organization?.license_status
-        const blockedByLicense=['suspended','expired'].includes(status)
-        const blockedByProfile=profile?.status==='inactive'
-        const permittedIdentity=!email||Boolean(profile||admin||allowed||email.endsWith(`@${domain}`))
-        let access='ALLOWED',reason='Verified district domain and eligible identity.'
-        if(blockedByLicense){access='BLOCKED';reason=`District license is ${status}.`}
-        else if(blockedByProfile){access='BLOCKED';reason='User profile is inactive.'}
-        else if(!permittedIdentity){access='BLOCKED';reason='Identity is not a district profile, admin, domain member, or allowed exception.'}
-        else if(status==='past_due'){access='GRACE';reason='District is past due but remains inside its configured grace period.'}
-        resolution={domain,email:email||null,matched:true,district:match.organization?.name,orgCode:match.organization?.org_code,licenseStatus:status,access,reason,profileStatus:profile?.status||null,role:profile?.role||admin?.role||null,isDistrictAdmin:!!admin,outsideDomainException:!!allowed,verifiedDomain:!!match.domains?.some((x:any)=>x.status==='verified'&&(x.normalized_domain||x.domain)===domain)}
-      }else resolution={domain,email:email||null,matched:false,access:'BLOCKED',reason:'No verified Dock district matches this domain.'}
+    if(domain||email){
+      const domainMatchesList=domain?districts.filter((d:any)=>domainMatches(d,domain)):[]
+      if(domainMatchesList.length>1){
+        resolution={domain:domain||null,email:email||null,matched:false,access:'BLOCKED',reason:'Multiple verified Dock districts match this domain; repair domain registry ambiguity before resolving access.'}
+      }else if(domainMatchesList.length===1){
+        resolution=resolveAccess(domainMatchesList[0],email,domain,'verified-domain')
+      }else if(email){
+        const outsideMatches=districts.map((d:any)=>({district:d,allowed:activeAllowed(d,email),admin:activeAdmin(d,email)})).filter((x:any)=>x.allowed||x.admin)
+        if(outsideMatches.length>1){
+          resolution={domain:domain||null,email,matched:false,access:'BLOCKED',reason:'Multiple active outside-domain district grants match this identity; an explicit district is required.'}
+        }else if(outsideMatches.length===1){
+          const x=outsideMatches[0]
+          resolution=resolveAccess(x.district,email,domain,x.admin?'admin-email':'allowed-email')
+        }else{
+          resolution={domain:domain||null,email,matched:false,access:'BLOCKED',reason:'No verified Dock district or active outside-domain grant matches this identity.'}
+        }
+      }else{
+        resolution={domain:domain||null,email:null,matched:false,access:'BLOCKED',reason:'No verified Dock district matches this domain.'}
+      }
     }
 
     const workspaceMissing=districts.filter((d:any)=>!d.publishedWorkspace)
