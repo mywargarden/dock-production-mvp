@@ -20,10 +20,11 @@ function withDraftBranding(settings: any) {
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { orgCode: string } }
+  { params }: { params: Promise<{ orgCode: string }> }
 ) {
   try {
-    const orgCode = decodeURIComponent(params.orgCode || '').trim()
+    const { orgCode: rawOrgCode } = await params
+    const orgCode = decodeURIComponent(rawOrgCode || '').trim()
     if (!orgCode) return NextResponse.json({ error: 'Missing organization code.' }, { status: 400 })
 
     const auth = await requireActiveAdmin(request, orgCode)
