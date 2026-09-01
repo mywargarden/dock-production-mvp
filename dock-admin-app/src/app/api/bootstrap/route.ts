@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
-const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v3-current-access'
+const BUILD_FINGERPRINT = 'bootstrap-dock-hq-license-v4-admin-access'
 const ORG_CACHE_TTL_MS = 60 * 1000
 
 type OrgRow = {
@@ -67,6 +67,12 @@ function extractOrgFromAllowedUser(record: any): OrgRow | null {
   return (joined || null) as OrgRow | null
 }
 
+function extractOrgFromAdmin(record: any): OrgRow | null {
+  const joined = record?.organizations
+  if (Array.isArray(joined)) return (joined[0] || null) as OrgRow | null
+  return (joined || null) as OrgRow | null
+}
+
 function buildOrgCacheKey(requestedOrgCode: string, emailDomain: string) {
   return requestedOrgCode ? `org:${requestedOrgCode}` : `domain:${emailDomain}`
 }
@@ -115,6 +121,19 @@ async function resolveOrganizationByAllowedEmail(supabase: SupabaseClient, userE
     .maybeSingle()
   if (error) return { data: null, error, source: 'allowed-email', allowedRecord: null as any }
   return { data: extractOrgFromAllowedUser(allowedRecord), error: null, source: 'allowed-email', allowedRecord: allowedRecord || null }
+}
+
+async function resolveOrganizationByAdminEmail(supabase: SupabaseClient, userEmail: string) {
+  const email = normalizeEmail(userEmail)
+  if (!email) return { data: null, error: null, source: 'missing-email', adminRecord: null as any }
+  const { data: adminRecord, error } = await supabase
+    .from('organization_admins')
+    .select(`organization_id, email, role, status, organizations (${ORG_SELECT})`)
+    .eq('email', email)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (error) return { data: null, error, source: 'admin-email', adminRecord: null as any }
+  return { data: extractOrgFromAdmin(adminRecord), error: null, source: 'admin-email', adminRecord: adminRecord || null }
 }
 
 function licenseCheck(org: OrgRow) {
@@ -203,11 +222,18 @@ export async function GET(request: NextRequest) {
     let resolutionSource = resolution.source
     let domainRecord = resolution.domainRecord
     let allowedRecord: any = null
+    let adminRecord: any = null
 
     if (!org && userEmail) {
       const allowed = await resolveOrganizationByAllowedEmail(supabase, userEmail)
       if (allowed.error) return NextResponse.json({ error: allowed.error.message }, { status: 500 })
       if (allowed.data) { org = allowed.data; resolutionSource = allowed.source; allowedRecord = allowed.allowedRecord }
+    }
+
+    if (!org && userEmail) {
+      const admin = await resolveOrganizationByAdminEmail(supabase, userEmail)
+      if (admin.error) return NextResponse.json({ error: admin.error.message }, { status: 500 })
+      if (admin.data) { org = admin.data; resolutionSource = admin.source; adminRecord = admin.adminRecord }
     }
 
     if (resolution.error) return NextResponse.json({ error: resolution.error.message }, { status: 500 })
@@ -249,13 +275,17 @@ export async function GET(request: NextRequest) {
       buildFingerprint: BUILD_FINGERPRINT,
       domainResolution: {
         source: resolutionSource,
-        strategy: resolutionSource === 'allowed-email' ? 'outside-domain-allowed-user' : (resolutionSource === 'verified-domain' ? 'verified-domain-registry' : resolutionSource),
-        verified: resolutionSource === 'verified-domain' || resolutionSource === 'allowed-email',
+        strategy: resolutionSource === 'admin-email'
+          ? 'outside-domain-district-admin'
+          : (resolutionSource === 'allowed-email' ? 'outside-domain-allowed-user' : (resolutionSource === 'verified-domain' ? 'verified-domain-registry' : resolutionSource)),
+        verified: resolutionSource === 'verified-domain' || resolutionSource === 'allowed-email' || resolutionSource === 'admin-email',
         domainRegistryMatched: resolutionSource === 'verified-domain',
         allowedUserMatched: resolutionSource === 'allowed-email',
+        adminMatched: resolutionSource === 'admin-email',
         domain: domainRecord?.normalized_domain || emailDomain || null,
         allowedEmail: allowedRecord?.email || null,
-        organizationId: domainRecord?.organization_id || allowedRecord?.organization_id || org.id
+        adminEmail: adminRecord?.email || null,
+        organizationId: domainRecord?.organization_id || allowedRecord?.organization_id || adminRecord?.organization_id || org.id
       },
       profileSync: { ok: !!profileSync?.ok, phase: profileSync?.phase || null, reason: profileSync?.reason || null },
       timestamp: new Date().toISOString()
