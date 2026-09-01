@@ -17,6 +17,7 @@
   - theme lifecycle/version restore
   - structured diagnostics
   - paginated audit activity
+- [x] Collapsed Vercel Git realization topology to one canonical consumer: `dock-production-mvp`; detached duplicate `dock-production-mvp-i4b2` and `dock-production-mvp-jywt` projects from the GitHub repository.
 
 ### Next convergence work
 - [ ] Verify `/hq-rc1` compiles and deploys from the canonical Vercel project.
