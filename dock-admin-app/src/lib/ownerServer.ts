@@ -141,18 +141,3 @@ export async function loadOwnerDistricts(service:SupabaseClient){
   return organizations.map((org:any)=>{const users=p[org.id]||[];return {organization:org,domains:d[org.id]||[],admins:a[org.id]||[],allowedUsers:al[org.id]||[],users,activeSeatCount:users.filter((x:any)=>x.status==='active').length,publishedWorkspace:ws.get(org.id)||null,workspaceTabs:tabsByOrg[org.id]||[],workspaceVersions:(v[org.id]||[]).slice(0,30),auditLogs:(au[org.id]||[]).slice(0,50),billing:bill.get(org.id)||null,themes:[...globals,...(th[org.id]||[])],installations:ins[org.id]||[]}}
   )
 }
-
-export async function persistOwnerDistrict(service:SupabaseClient,payload:OwnerDistrictPayload){
-  const nowIso=new Date().toISOString(),o=payload.organization
-  const orgPayload:any={...o,updated_at:nowIso}
-  delete orgPayload.id
-  const {data:existing}=await service.from('organizations').select('id,org_code').eq('id',o.id||'00000000-0000-0000-0000-000000000000').maybeSingle()
-  if(existing&&existing.org_code!==o.org_code)throw new Error('Organization code is locked after creation. Contact support workflow to migrate an org code safely.')
-  const {data:orgRow,error:orgError}=await service.from('organizations').upsert(orgPayload,{onConflict:'org_code'}).select('*').single();if(orgError)throw orgError
-  const organizationId=orgRow.id,domains=cleanDomains(payload.domains||[],o.email_domain),admins=cleanAdmins(payload.admins||[]),allowed=cleanAllowedUsers(payload.allowedUsers||[])
-  await service.from('organization_domains').delete().eq('organization_id',organizationId).throwOnError();if(domains.length)await service.from('organization_domains').upsert(domains.map(e=>({organization_id:organizationId,...e,verified_at:e.status==='verified'?nowIso:null,updated_at:nowIso})),{onConflict:'normalized_domain'}).throwOnError()
-  await service.from('organization_admins').delete().eq('organization_id',organizationId).throwOnError();if(admins.length)await service.from('organization_admins').upsert(admins.map(e=>({organization_id:organizationId,...e,updated_at:nowIso})),{onConflict:'organization_id,email'}).throwOnError()
-  await service.from('organization_allowed_users').delete().eq('organization_id',organizationId).throwOnError();if(allowed.length)await service.from('organization_allowed_users').upsert(allowed.map(e=>({organization_id:organizationId,...e,updated_at:nowIso})),{onConflict:'organization_id,email'}).throwOnError()
-  await service.from('audit_logs').insert({organization_id:organizationId,action:'owner_upsert_district',actor_email:null,target_type:'organization',target_id:organizationId,details:{orgCode:orgRow.org_code,licenseStatus:orgRow.license_status,maxUsers:orgRow.max_users,defaultTheme:orgRow.default_theme,lifecycle:orgRow.customer_lifecycle}}).throwOnError()
-  return orgRow
-}
