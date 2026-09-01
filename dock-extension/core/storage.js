@@ -30,6 +30,14 @@ let managedWorkspaceCache = null;
 let managedMetaCache = null;
 let orgStateCache = null;
 
+async function clearManagedWorkspaceState() {
+  managedWorkspaceCache = null;
+  managedMetaCache = null;
+  workspaceCache = null;
+  workspaceLastFetch = 0;
+  await api.storage.local.remove([MANAGED_WS_KEY, MANAGED_META_KEY]);
+}
+
 async function getSavedTabsLocal() {
   const result = await api.storage.local.get(["savedTabs", SAVED_TABS_LITE_KEY]);
   const rawTabs = Array.isArray(result.savedTabs)
@@ -605,7 +613,13 @@ export async function getWorkspace({ force = false, forceRemote = false } = {}) 
         cache: "no-store"
       });
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) {
+        if ([401, 403].includes(res.status)) {
+          await clearManagedWorkspaceState();
+          return [];
+        }
+        throw new Error(`HTTP ${res.status}`);
+      }
       const data = await res.json();
       const workspace = validateManagedPayload(data).workspace;
       workspaceCache = Array.isArray(workspace?.tabs) ? workspace.tabs : [];
@@ -817,7 +831,19 @@ export async function syncManagedWorkspace({ force = false } = {}) {
       if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
       if (org?.orgCode) headers['X-Dock-Org-Code'] = org.orgCode;
       const response = await fetch(org.configUrl, { cache: "no-store", headers });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      if (!response.ok) {
+        if ([401, 403].includes(response.status)) {
+          managedSyncCompletedId = Math.max(managedSyncCompletedId, requestId);
+          await clearManagedWorkspaceState();
+          await saveOrgState({
+            lastSyncedAt: Date.now(),
+            lastSyncStatus: "access-denied",
+            lastError: `HTTP ${response.status}`
+          });
+          return { ok: false, reason: "ACCESS_DENIED", status: response.status };
+        }
+        throw new Error(`HTTP ${response.status}`);
+      }
       const raw = await response.json();
       raw.sourceUrl = org.configUrl;
       const validated = validateManagedPayload(raw);
@@ -934,7 +960,7 @@ export async function saveTab(tab, { skipDuplicates = true } = {}) {
 }
 
 export async function deleteTab(index) {
-  const previousTabs = await getSavedTabs({ localOnly: true });
+  const previousTabs = await getSavedTabsLocal();
   const removed = previousTabs[index] ? [previousTabs[index]] : [];
   const savedTabs = [...previousTabs];
   savedTabs.splice(index, 1);
