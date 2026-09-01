@@ -27,12 +27,6 @@ export function normalizeImageUrl(value: unknown) {
 }
 function color(value: unknown, fallback: string) { const v=normalize(value); return /^#[0-9a-f]{6}$/i.test(v)?v:fallback }
 
-export function ownerEmailSet() {
-  const configured = process.env.DOCK_OWNER_EMAILS || process.env.NEXT_PUBLIC_DOCK_OWNER_EMAILS || ''
-  const defaults = 'mywargarden@gmail.com,drew.lowery@henry.k12.va.us,southcreeksystems@gmail.com'
-  return new Set(`${configured},${defaults}`.split(',').map(normalizeEmail).filter(Boolean))
-}
-
 export async function requireOwner(request: NextRequest) {
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
@@ -43,7 +37,17 @@ export async function requireOwner(request: NextRequest) {
   const user = data?.user
   if (userError || !user?.id) return { error: NextResponse.json({ error: 'Invalid auth token' }, { status: 401 }) }
   const email = normalizeEmail(user.email)
-  if (!ownerEmailSet().has(email)) return { error: NextResponse.json({ error: 'Dock HQ owner access required.' }, { status: 403 }) }
+  if (!email) return { error: NextResponse.json({ error: 'Dock HQ owner access required.' }, { status: 403 }) }
+
+  const { data: ownerGrant, error: grantError } = await service
+    .from('dock_owner_access')
+    .select('email,status')
+    .eq('email', email)
+    .eq('status', 'active')
+    .maybeSingle()
+  if (grantError) return { error: NextResponse.json({ error: grantError.message, code: 'OWNER_ACCESS_CHECK_FAILED' }, { status: 500 }) }
+  if (!ownerGrant?.email) return { error: NextResponse.json({ error: 'Active Dock HQ owner grant required.', code: 'OWNER_GRANT_REQUIRED' }, { status: 403 }) }
+
   return { user, service, ownerEmail: email }
 }
 
