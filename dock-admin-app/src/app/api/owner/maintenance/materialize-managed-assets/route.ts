@@ -8,13 +8,13 @@ function hasInline(value: unknown) { return normalize(value).startsWith('data:im
 
 async function materializeTabs(service: any, orgCode: string, tabs: any[]) {
   const next = []
-  let changed = false
+  let changed = 0
   for (let index = 0; index < tabs.length; index += 1) {
     const tab = tabs[index] || {}
     if (hasInline(tab.icon_url)) {
-      const iconUrl = await materializeManagedImage(service, tab.icon_url, { orgCode, kind: `tab-icon-${index}` })
+      const iconUrl = await materializeManagedImage(service, tab.icon_url, { orgCode, kind: `tab-icon-${tab.position ?? index}` })
       next.push({ ...tab, icon_url: iconUrl || null })
-      changed = true
+      changed += 1
     } else next.push(tab)
   }
   return { tabs: next, changed }
@@ -52,81 +52,77 @@ export async function POST(request: NextRequest) {
 
     const orgCode = normalize(org.org_code)
     const counts = { branding: 0, draftBranding: 0, draftTabs: 0, liveTabs: 0, snapshots: 0, snapshotTabs: 0, snapshotBranding: 0 }
-    const orgPatch: Record<string, any> = {}
 
-    if (hasInline(org.district_logo_url)) {
-      orgPatch.district_logo_url = await materializeManagedImage(auth.service, org.district_logo_url, { orgCode, kind: 'logo' }) || null
+    let liveLogo = normalize(org.district_logo_url)
+    let liveBackground = normalize(org.district_background_url)
+    if (hasInline(liveLogo)) {
+      liveLogo = await materializeManagedImage(auth.service, liveLogo, { orgCode, kind: 'logo' }) || ''
       counts.branding += 1
     }
-    if (hasInline(org.district_background_url)) {
-      orgPatch.district_background_url = await materializeManagedImage(auth.service, org.district_background_url, { orgCode, kind: 'background' }) || null
+    if (hasInline(liveBackground)) {
+      liveBackground = await materializeManagedImage(auth.service, liveBackground, { orgCode, kind: 'background' }) || ''
       counts.branding += 1
     }
 
     const draftBranding = await materializeBranding(auth.service, orgCode, org.draft_branding)
-    if (draftBranding.changed) {
-      orgPatch.draft_branding = draftBranding.branding
-      counts.draftBranding = draftBranding.changed
-    }
+    counts.draftBranding = draftBranding.changed
 
     const draft = await materializeTabs(auth.service, orgCode, Array.isArray(org.draft_tabs) ? org.draft_tabs : [])
-    if (draft.changed) {
-      orgPatch.draft_tabs = draft.tabs
-      counts.draftTabs = draft.tabs.filter((tab: any, index: number) => normalize(tab?.icon_url) !== normalize((org.draft_tabs || [])[index]?.icon_url)).length
-    }
-
-    if (Object.keys(orgPatch).length) {
-      const { error } = await auth.service.from('organizations').update({ ...orgPatch, updated_at: new Date().toISOString() }).eq('id', org.id)
-      if (error) throw error
-    }
+    counts.draftTabs = draft.changed
 
     const { data: workspaces, error: workspaceError } = await auth.service.from('workspaces').select('id').eq('organization_id', org.id)
     if (workspaceError) throw workspaceError
     const workspaceIds = (workspaces || []).map((row: any) => row.id).filter(Boolean)
+    const liveTabRefs: any[] = []
     if (workspaceIds.length) {
-      const { data: liveTabs, error: liveError } = await auth.service.from('workspace_tabs').select('id,workspace_id,icon_url,position').in('workspace_id', workspaceIds).order('position', { ascending: true })
+      const { data: liveTabs, error: liveError } = await auth.service
+        .from('workspace_tabs')
+        .select('id,workspace_id,icon_url,position')
+        .in('workspace_id', workspaceIds)
+        .order('position', { ascending: true })
       if (liveError) throw liveError
       for (let index = 0; index < (liveTabs || []).length; index += 1) {
         const tab = (liveTabs || [])[index]
         if (!hasInline(tab?.icon_url)) continue
         const iconUrl = await materializeManagedImage(auth.service, tab.icon_url, { orgCode, kind: `tab-icon-${tab.position ?? index}` })
-        const { error } = await auth.service.from('workspace_tabs').update({ icon_url: iconUrl || null, updated_at: new Date().toISOString() }).eq('id', tab.id)
-        if (error) throw error
+        liveTabRefs.push({ id: tab.id, icon_url: iconUrl || null })
         counts.liveTabs += 1
       }
     }
 
-    const { data: versions, error: versionsError } = await auth.service.from('workspace_versions').select('id,tabs,branding').eq('organization_id', org.id).order('created_at', { ascending: true })
+    const { data: versions, error: versionsError } = await auth.service
+      .from('workspace_versions')
+      .select('id,tabs,branding')
+      .eq('organization_id', org.id)
+      .order('created_at', { ascending: true })
     if (versionsError) throw versionsError
 
+    const versionRefs: any[] = []
     for (const version of versions || []) {
-      let changed = false
       const snapBranding = await materializeBranding(auth.service, orgCode, version.branding)
-      if (snapBranding.changed) { counts.snapshotBranding += snapBranding.changed; changed = true }
       const snapTabs = Array.isArray(version.tabs) ? version.tabs : []
       const materialized = await materializeTabs(auth.service, orgCode, snapTabs)
-      if (materialized.changed) {
-        counts.snapshotTabs += materialized.tabs.filter((tab: any, index: number) => normalize(tab?.icon_url) !== normalize(snapTabs[index]?.icon_url)).length
-        changed = true
-      }
-      if (changed) {
-        const { error } = await auth.service.from('workspace_versions').update({ tabs: materialized.tabs, branding: snapBranding.branding }).eq('id', version.id).eq('organization_id', org.id)
-        if (error) throw error
+      counts.snapshotBranding += snapBranding.changed
+      counts.snapshotTabs += materialized.changed
+      if (snapBranding.changed || materialized.changed) {
+        versionRefs.push({ id: version.id, tabs: materialized.tabs, branding: snapBranding.branding })
         counts.snapshots += 1
       }
     }
 
-    const { error: auditError } = await auth.service.from('audit_logs').insert({
-      organization_id: org.id,
-      actor_email: auth.ownerEmail,
-      action: 'owner_materialize_managed_assets',
-      target_type: 'organization',
-      target_id: org.id,
-      details: counts,
+    const { data: applied, error: applyError } = await auth.service.rpc('dock_owner_apply_complete_managed_asset_refs', {
+      p_organization_id: org.id,
+      p_live_logo_url: liveLogo || null,
+      p_live_background_url: liveBackground || null,
+      p_draft_branding: draftBranding.branding,
+      p_draft_tabs: draft.tabs,
+      p_live_tabs: liveTabRefs,
+      p_versions: versionRefs,
+      p_actor_email: auth.ownerEmail,
     })
-    if (auditError) throw auditError
+    if (applyError) throw applyError
 
-    return NextResponse.json({ ok: true, organizationId: org.id, orgCode, counts })
+    return NextResponse.json({ ok: true, organizationId: org.id, orgCode, counts, applied })
   } catch (error: any) {
     console.error('Dock managed asset materialization failed', error)
     return NextResponse.json({ error: error?.message || 'Managed asset materialization failed.' }, { status: 400 })
