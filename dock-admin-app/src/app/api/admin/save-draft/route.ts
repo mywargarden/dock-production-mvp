@@ -3,13 +3,16 @@ export const dynamic = 'force-dynamic'
 import { NextRequest, NextResponse } from 'next/server'
 import { validatePayload } from '@/lib/adminServer'
 import { requireActiveAdmin } from '@/lib/adminGuard'
+import { materializeAdminWorkspaceAssets } from '@/lib/managedAssets'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const payload = validatePayload(body)
-    const auth = await requireActiveAdmin(request, payload.organization.org_code)
+    const validated = validatePayload(body)
+    const auth = await requireActiveAdmin(request, validated.organization.org_code)
     if ('error' in auth) return auth.error
+
+    const payload = await materializeAdminWorkspaceAssets(auth.service, validated)
 
     const { data: existingOrg, error: existingError } = await auth.service
       .from('organizations')
