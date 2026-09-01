@@ -52,7 +52,9 @@ export async function POST(request:NextRequest){
       return NextResponse.json({ok:true,...await listReleases(auth.service)})
     }
 
-    const {error}=await auth.service.rpc('dock_owner_save_release',{
+    const artifactSizeRaw=body?.artifact_size_bytes
+    const artifactSize=artifactSizeRaw===null||artifactSizeRaw===undefined||artifactSizeRaw===''?null:Number(artifactSizeRaw)
+    const {error}=await auth.service.rpc('dock_owner_save_release_v2',{
       p_version:version,
       p_channel:normalize(body?.channel),
       p_status:normalize(body?.status),
@@ -65,6 +67,10 @@ export async function POST(request:NextRequest){
       p_managed_config_verified:body?.managed_config_verified===true,
       p_theme_runtime_verified:body?.theme_runtime_verified===true,
       p_actor_email:auth.ownerEmail,
+      p_artifact_sha256:normalize(body?.artifact_sha256),
+      p_source_commit:normalize(body?.source_commit),
+      p_source_tree_sha:normalize(body?.source_tree_sha),
+      p_artifact_size_bytes:Number.isFinite(artifactSize)?artifactSize:null,
     })
     if(error)throw error
     return NextResponse.json({ok:true,...await listReleases(auth.service)})
