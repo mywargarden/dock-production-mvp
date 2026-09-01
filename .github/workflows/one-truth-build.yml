@@ -1,8 +1,9 @@
-name: One Truth Build
+name: Dock Clean Build
 
 on:
   push:
     branches:
+      - main
       - one-truth-next15-candidate
     paths:
       - dock-admin-app/**
