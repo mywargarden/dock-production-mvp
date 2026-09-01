@@ -1,8 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 
 let serviceSupabaseSingleton: SupabaseClient | null = null
-let authSupabaseSingleton: SupabaseClient | null = null
 
 export type CleanAdminTab = {
   title: string
@@ -44,31 +42,13 @@ export function getServiceSupabase() {
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-
   if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
   if (!serviceRoleKey) throw new Error('Missing SUPABASE_SERVICE_ROLE_KEY')
 
   serviceSupabaseSingleton = createClient(url, serviceRoleKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   })
-
   return serviceSupabaseSingleton
-}
-
-function getAuthSupabase() {
-  if (authSupabaseSingleton) return authSupabaseSingleton
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url) throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL')
-  if (!anonKey) throw new Error('Missing NEXT_PUBLIC_SUPABASE_ANON_KEY')
-
-  authSupabaseSingleton = createClient(url, anonKey, {
-    auth: { persistSession: false, autoRefreshToken: false }
-  })
-
-  return authSupabaseSingleton
 }
 
 function normalize(value: unknown) {
@@ -95,10 +75,7 @@ function normalizeUrl(value: unknown) {
   return /^https?:\/\//i.test(raw) ? raw : `https://${raw}`
 }
 
-function sanitizeDomains(
-  rawDomains: any[],
-  primaryDomain: string
-): OrganizationDomainInput[] {
+function sanitizeDomains(rawDomains: any[], primaryDomain: string): OrganizationDomainInput[] {
   const deduped = new Map<string, OrganizationDomainInput>()
   const normalizedPrimary = normalizeDomain(primaryDomain)
 
@@ -165,13 +142,6 @@ export function validatePayload(body: any): AdminWorkspacePayload {
 
   if (!cleanTabs.length) throw new Error('Add at least one tab before saving.')
 
-  const domains = sanitizeDomains(
-    Array.isArray(body?.domains) ? body.domains : [],
-    primaryDomain
-  )
-
-  const admins = sanitizeAdmins(Array.isArray(body?.admins) ? body.admins : [])
-
   return {
     organization: {
       name: normalize(organization.name) || 'District Workspace',
@@ -185,97 +155,9 @@ export function validatePayload(body: any): AdminWorkspacePayload {
     },
     workspaceName,
     tabs: cleanTabs,
-    domains,
-    admins
+    domains: sanitizeDomains(Array.isArray(body?.domains) ? body.domains : [], primaryDomain),
+    admins: sanitizeAdmins(Array.isArray(body?.admins) ? body.admins : [])
   }
-}
-
-export async function requireAdmin(request: NextRequest, orgCode?: string) {
-  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim()
-
-  if (!token) {
-    return { error: NextResponse.json({ error: 'Missing bearer token' }, { status: 401 }) }
-  }
-
-  const auth = getAuthSupabase()
-  const service = getServiceSupabase()
-
-  const { data, error: userError } = await auth.auth.getUser(token)
-  const user = data?.user
-
-  if (userError || !user?.id) {
-    return { error: NextResponse.json({ error: 'Invalid auth token' }, { status: 401 }) }
-  }
-
-  const userEmail = normalizeEmail(user.email)
-  let organizationIdHint = ''
-
-  if (orgCode) {
-    const { data: orgRow, error: orgError } = await service
-      .from('organizations')
-      .select('id, org_code')
-      .eq('org_code', orgCode)
-      .maybeSingle()
-
-    if (orgError) {
-      return { error: NextResponse.json({ error: orgError.message }, { status: 500 }) }
-    }
-
-    organizationIdHint = normalize(orgRow?.id)
-  }
-
-  const { data: profile, error: profileError } = await service
-    .from('profiles')
-    .select('id, role, organization_id, email')
-    .eq('id', user.id)
-    .maybeSingle()
-
-  if (profileError) {
-    return { error: NextResponse.json({ error: profileError.message }, { status: 500 }) }
-  }
-
-  const role = normalize(profile?.role).toLowerCase()
-  const profileOrgId = normalize(profile?.organization_id)
-
-  const { data: adminGrant, error: adminGrantError } = await service
-    .from('organization_admins')
-    .select('id, organization_id, role, email')
-    .eq('email', userEmail)
-    .eq(orgCode ? 'organization_id' : 'email', orgCode ? organizationIdHint : userEmail)
-    .maybeSingle()
-
-  if (adminGrantError) {
-    return { error: NextResponse.json({ error: adminGrantError.message }, { status: 500 }) }
-  }
-
-  const hasProfileAdmin = role === 'admin' || role === 'owner'
-  const hasGrantAdmin = !!adminGrant?.id
-  if (!hasProfileAdmin && !hasGrantAdmin) {
-    return { error: NextResponse.json({ error: 'Admin access required for this organization.' }, { status: 403 }) }
-  }
-
-  const effectiveOrgId = normalize(adminGrant?.organization_id) || profileOrgId || organizationIdHint
-
-  if (organizationIdHint && effectiveOrgId && effectiveOrgId !== organizationIdHint) {
-    return { error: NextResponse.json({ error: 'Profile is not assigned to this organization.' }, { status: 403 }) }
-  }
-
-  if (hasGrantAdmin && (!profile?.id || profileOrgId !== effectiveOrgId || !hasProfileAdmin)) {
-    const nextRole = normalize(adminGrant?.role) === 'owner' ? 'owner' : 'admin'
-    const { error: syncError } = await service.from('profiles').upsert({
-      id: user.id,
-      email: userEmail || null,
-      organization_id: effectiveOrgId || null,
-      role: nextRole
-    }, { onConflict: 'id' })
-
-    if (syncError) {
-      return { error: NextResponse.json({ error: syncError.message }, { status: 500 }) }
-    }
-  }
-
-  return { user, profile: { ...profile, organization_id: effectiveOrgId || profileOrgId, role: hasProfileAdmin ? role : normalize(adminGrant?.role) || 'admin' }, service }
 }
 
 export async function loadOrganizationSettings(service: SupabaseClient, orgCode: string) {
@@ -294,7 +176,6 @@ export async function loadOrganizationSettings(service: SupabaseClient, orgCode:
     .eq('organization_id', orgRow.id)
     .order('domain_type', { ascending: true })
     .order('normalized_domain', { ascending: true })
-
   if (domainError) throw domainError
 
   const { data: admins, error: adminError } = await service
@@ -302,7 +183,6 @@ export async function loadOrganizationSettings(service: SupabaseClient, orgCode:
     .select('id, email, role, user_id')
     .eq('organization_id', orgRow.id)
     .order('email', { ascending: true })
-
   if (adminError) throw adminError
 
   const { data: publishedWorkspace, error: workspaceError } = await service
@@ -314,7 +194,6 @@ export async function loadOrganizationSettings(service: SupabaseClient, orgCode:
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-
   if (workspaceError) throw workspaceError
 
   let tabs: any[] = []
@@ -324,7 +203,6 @@ export async function loadOrganizationSettings(service: SupabaseClient, orgCode:
       .select('title, url, icon_url, is_locked, position')
       .eq('workspace_id', publishedWorkspace.id)
       .order('position', { ascending: true })
-
     if (tabError) throw tabError
     tabs = tabRows || []
   }
@@ -335,75 +213,5 @@ export async function loadOrganizationSettings(service: SupabaseClient, orgCode:
     admins: admins || [],
     publishedWorkspace: publishedWorkspace || null,
     tabs
-  }
-}
-
-export async function persistOrganizationSettings(
-  service: SupabaseClient,
-  organizationId: string,
-  payload: AdminWorkspacePayload
-) {
-  const nowIso = new Date().toISOString()
-  const domains = payload.domains.length
-    ? payload.domains
-    : (payload.organization.email_domain
-      ? [{ domain: payload.organization.email_domain, status: 'verified', domain_type: 'primary' as const }]
-      : [])
-
-  {
-    const { error: deleteDomainError } = await service
-      .from('organization_domains')
-      .delete()
-      .eq('organization_id', organizationId)
-
-    if (deleteDomainError) throw deleteDomainError
-
-    if (domains.length) {
-    const { error: domainUpsertError } = await service
-      .from('organization_domains')
-      .upsert(domains.map((entry) => ({
-        organization_id: organizationId,
-        domain: entry.domain,
-        normalized_domain: entry.domain,
-        status: entry.status,
-        domain_type: entry.domain_type,
-        verified_at: entry.status === 'verified' ? nowIso : null,
-        updated_at: nowIso
-      })), { onConflict: 'normalized_domain' })
-
-    if (domainUpsertError) throw domainUpsertError
-    }
-  }
-
-  {
-    const { error: deleteAdminError } = await service
-      .from('organization_admins')
-      .delete()
-      .eq('organization_id', organizationId)
-
-    if (deleteAdminError) throw deleteAdminError
-
-    if (payload.admins.length) {
-    const adminRows = await Promise.all(payload.admins.map(async (entry) => {
-      const { data: userRow } = await service
-        .from('users')
-        .select('id')
-        .eq('email', entry.email)
-        .maybeSingle()
-
-      return {
-        organization_id: organizationId,
-        email: entry.email,
-        role: entry.role,
-        user_id: normalize(userRow?.id) || null
-      }
-    }))
-
-    const { error: adminUpsertError } = await service
-      .from('organization_admins')
-      .upsert(adminRows, { onConflict: 'organization_id,email' })
-
-    if (adminUpsertError) throw adminUpsertError
-    }
   }
 }
