@@ -118,10 +118,6 @@ export async function GET(request: NextRequest, { params }: { params: { orgCode:
     if (orgError) return NextResponse.json({ error: orgError.message }, { status: 500 });
     if (!org) return NextResponse.json({ error: 'Organization not found' }, { status: 404 });
 
-    if (String((org as any).customer_lifecycle || 'setup').trim().toLowerCase() === 'archived') {
-      return NextResponse.json({ error: 'District is archived.', code: 'DISTRICT_ARCHIVED' }, { status: 403 });
-    }
-
     const auth = await requireActiveUserForOrganization(request, supabase, org);
     if ('error' in auth) return auth.error;
 
