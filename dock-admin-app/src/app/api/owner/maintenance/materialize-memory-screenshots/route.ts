@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
       .limit(500)
     if (loadError) throw loadError
 
-    let migrated = 0
+    const refs: Array<{ id: string; user_id: string; screenshot_path: string }> = []
     const failures: Array<{ id: string; code: string }> = []
 
     for (const row of rows || []) {
@@ -65,29 +65,28 @@ export async function POST(request: NextRequest) {
             upsert: true,
           })
         if (uploadError) throw new Error(`SCREENSHOT_UPLOAD_FAILED:${uploadError.message}`)
-
-        const { data: updated, error: updateError } = await auth.service
-          .from('personal_memories')
-          .update({
-            screenshot_path: path,
-            screenshot_data_url: null,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', id)
-          .eq('user_id', userId)
-          .is('deleted_at', null)
-          .is('screenshot_path', null)
-          .select('id,screenshot_path,screenshot_url')
-          .maybeSingle()
-        if (updateError) throw updateError
-        if (!updated?.id || normalize(updated.screenshot_path) !== path || !normalize(updated.screenshot_url)) {
-          throw new Error('SCREENSHOT_REFERENCE_SWAP_FAILED')
-        }
-        migrated += 1
+        refs.push({ id, user_id: userId, screenshot_path: path })
       } catch (error: any) {
         failures.push({ id: id || 'unknown', code: normalize(error?.message) || 'MIGRATION_FAILED' })
       }
     }
+
+    if (failures.length) {
+      return NextResponse.json({
+        ok: false,
+        found: (rows || []).length,
+        prepared: refs.length,
+        failed: failures.length,
+        failures,
+        message: 'No memory references were changed. Fix upload/validation failures and rerun.',
+      }, { status: 409 })
+    }
+
+    const { data: applied, error: applyError } = await auth.service.rpc('dock_owner_apply_legacy_memory_screenshot_refs', {
+      p_refs: refs,
+      p_actor_email: auth.ownerEmail,
+    })
+    if (applyError) throw applyError
 
     const { count: remainingActive, error: remainingError } = await auth.service
       .from('personal_memories')
@@ -106,29 +105,15 @@ export async function POST(request: NextRequest) {
       .neq('screenshot_data_url', '')
     if (deletedError) throw deletedError
 
-    const details = {
+    return NextResponse.json({
+      ok: (remainingActive || 0) === 0,
       found: (rows || []).length,
-      migrated,
-      failed: failures.length,
+      migrated: Number(applied?.migrated || refs.length || 0),
+      failed: 0,
       remainingActive: remainingActive || 0,
       deletedLegacyRemaining: deletedLegacy || 0,
-    }
-
-    const { error: auditError } = await auth.service.from('audit_logs').insert({
-      organization_id: null,
-      actor_email: auth.ownerEmail,
-      action: 'owner_materialize_legacy_memory_screenshots',
-      target_type: 'personal_memories',
-      target_id: null,
-      details,
-    })
-    if (auditError) throw auditError
-
-    return NextResponse.json({
-      ok: failures.length === 0 && (remainingActive || 0) === 0,
-      ...details,
-      failures,
-    }, { status: failures.length || (remainingActive || 0) ? 409 : 200 })
+      applied,
+    }, { status: (remainingActive || 0) ? 409 : 200 })
   } catch (error: any) {
     console.error('Dock legacy memory screenshot materialization failed', error)
     return NextResponse.json({ error: error?.message || 'Legacy memory screenshot materialization failed.' }, { status: 400 })
