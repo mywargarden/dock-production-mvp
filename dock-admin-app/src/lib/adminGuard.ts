@@ -24,6 +24,25 @@ function getAuthSupabase() {
   return authSupabaseSingleton
 }
 
+function districtStateAllowsAdmin(org: any) {
+  if (!org?.id) return { ok: false, code: 'DISTRICT_NOT_FOUND', message: 'Organization not found.' }
+  if (normalize(org.customer_lifecycle || 'setup').toLowerCase() === 'archived') {
+    return { ok: false, code: 'DISTRICT_ARCHIVED', message: 'District is archived.' }
+  }
+  const status = normalize(org.license_status || 'trial').toLowerCase()
+  if (status === 'suspended' || status === 'expired') {
+    return { ok: false, code: status === 'suspended' ? 'LICENSE_SUSPENDED' : 'LICENSE_EXPIRED', message: `District license is ${status}.` }
+  }
+  if (status === 'past_due') {
+    const renewal = org.license_renewal_date ? new Date(org.license_renewal_date).getTime() : 0
+    const graceDays = Number(org.grace_period_days) || 30
+    if (!renewal || Date.now() > renewal + graceDays * 24 * 60 * 60 * 1000) {
+      return { ok: false, code: 'LICENSE_PAST_DUE', message: 'District license is past due.' }
+    }
+  }
+  return { ok: true, code: 'ACCESS_ALLOWED', message: 'District allows admin access.' }
+}
+
 export async function requireActiveAdmin(request: NextRequest, orgCode?: string) {
   const authHeader = request.headers.get('authorization') || request.headers.get('Authorization') || ''
   const token = authHeader.replace(/^Bearer\s+/i, '').trim()
@@ -37,16 +56,18 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
 
   const userEmail = normalizeEmail(user.email)
   let organizationIdHint = ''
+  let hintedOrg: any = null
 
   if (orgCode) {
     const { data: orgRow, error: orgError } = await service
       .from('organizations')
-      .select('id,org_code')
+      .select('id,org_code,customer_lifecycle,license_status,license_renewal_date,grace_period_days')
       .eq('org_code', orgCode)
       .maybeSingle()
     if (orgError) return { error: NextResponse.json({ error: orgError.message }, { status: 500 }) }
     if (!orgRow?.id) return { error: NextResponse.json({ error: 'Organization not found.' }, { status: 404 }) }
     organizationIdHint = normalize(orgRow.id)
+    hintedOrg = orgRow
   }
 
   const { data: profile, error: profileError } = await service
@@ -104,6 +125,21 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
     return { error: NextResponse.json({ error: 'Admin profile is bound to a different organization.', code: 'TENANT_MISMATCH' }, { status: 403 }) }
   }
 
+  let orgState = hintedOrg
+  if (!orgState || normalize(orgState.id) !== effectiveOrgId) {
+    const { data: orgRow, error: orgError } = await service
+      .from('organizations')
+      .select('id,customer_lifecycle,license_status,license_renewal_date,grace_period_days')
+      .eq('id', effectiveOrgId)
+      .maybeSingle()
+    if (orgError) return { error: NextResponse.json({ error: orgError.message }, { status: 500 }) }
+    orgState = orgRow
+  }
+  const stateCheck = districtStateAllowsAdmin(orgState)
+  if (!stateCheck.ok) {
+    return { error: NextResponse.json({ error: stateCheck.message, code: stateCheck.code }, { status: 403 }) }
+  }
+
   if (!profile?.id || profileRole !== 'admin') {
     const { error: syncError } = await service.from('profiles').upsert({
       id: user.id,
@@ -114,6 +150,13 @@ export async function requireActiveAdmin(request: NextRequest, orgCode?: string)
     }, { onConflict: 'id' })
     if (syncError) return { error: NextResponse.json({ error: syncError.message }, { status: 500 }) }
   }
+
+  const { data: allowed, error: accessError } = await service.rpc('dock_admin_access_allowed', {
+    p_user_id: user.id,
+    p_organization_id: effectiveOrgId,
+  })
+  if (accessError) return { error: NextResponse.json({ error: accessError.message, code: 'ADMIN_ACCESS_CHECK_FAILED' }, { status: 500 }) }
+  if (!allowed) return { error: NextResponse.json({ error: 'Current district admin access required.', code: 'ADMIN_ACCESS_DENIED' }, { status: 403 }) }
 
   return {
     user,
