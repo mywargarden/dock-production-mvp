@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic'
 
 import { NextRequest, NextResponse } from 'next/server'
 import { cleanAdmins, cleanAllowedUsers, cleanDomains, loadOwnerDistricts, requireOwner, validateOwnerDistrictPayload } from '@/lib/ownerServer'
+import { materializeManagedImage } from '@/lib/managedAssets'
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,7 +22,18 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return auth.error
 
     const payload = validateOwnerDistrictPayload(await request.json())
-    const organization = payload.organization
+    const organization = { ...payload.organization }
+    const orgCode = organization.org_code
+
+    organization.district_logo_url = await materializeManagedImage(auth.service, organization.district_logo_url, {
+      orgCode,
+      kind: 'logo',
+    }) || null
+    organization.district_background_url = await materializeManagedImage(auth.service, organization.district_background_url, {
+      orgCode,
+      kind: 'background',
+    }) || null
+
     const domains = cleanDomains(payload.domains || [], organization.email_domain || '')
     const admins = cleanAdmins(payload.admins || [])
     const allowedUsers = cleanAllowedUsers(payload.allowedUsers || [])
