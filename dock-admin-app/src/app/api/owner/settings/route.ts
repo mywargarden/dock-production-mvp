@@ -20,7 +20,10 @@ function safeSettings(raw:any){
  next.default_minimum_version=normalize(next.default_minimum_version)
  next.default_theme=normalize(next.default_theme)||'dock-green'
  next.default_plan=normalize(next.default_plan)||'district'
- for(const key of ['allow_user_theme_override','allow_admin_branding','notify_payment_failed','notify_trial_ending','notify_renewal','notify_suspension','notify_seat_threshold','notify_workspace_failure','notify_incident','notify_outdated_version','notify_new_admin','maintenance_mode','emergency_restrictions'])next[key]=next[key]===true
+ for(const key of ['allow_user_theme_override','allow_admin_branding','notify_payment_failed','notify_trial_ending','notify_renewal','notify_suspension','notify_seat_threshold','notify_workspace_failure','notify_incident','notify_outdated_version','notify_new_admin'])next[key]=next[key]===true
+ // These controls have no RC1 runtime enforcement and therefore cannot be activated.
+ next.maintenance_mode=false
+ next.emergency_restrictions=false
  return next
 }
 
@@ -34,28 +37,18 @@ export async function GET(request:NextRequest){
 export async function POST(request:NextRequest){
  const auth=await requireOwner(request);if('error' in auth)return auth.error
  const body=await request.json();const action=normalize(body?.action)||'save'
+ if(action==='safety')return NextResponse.json({error:'Product-wide safety flags are parked in Dock 1.0 until runtime enforcement exists.',code:'SAFETY_FLAGS_NOT_ACTIVE'},{status:409})
+
  const {data:currentRow,error:readError}=await auth.service.from('owner_settings').select('settings').eq('id','global').maybeSingle()
  if(readError)return NextResponse.json({error:readError.message},{status:400})
  const current=safeSettings(currentRow?.settings)
  const next=safeSettings(body?.settings)
-
- if(action==='safety'){
-   const changedMaintenance=current.maintenance_mode!==next.maintenance_mode
-   const changedEmergency=current.emergency_restrictions!==next.emergency_restrictions
-   if(changedMaintenance||changedEmergency){
-     const confirmation=normalize(body?.confirmation)
-     const reason=normalize(body?.reason)
-     if(confirmation!=='CONFIRM')return NextResponse.json({error:'Type CONFIRM to change product-wide safety flags.'},{status:400})
-     if(reason.length<5)return NextResponse.json({error:'A reason is required for product-wide safety changes.'},{status:400})
-   }
- }
-
  const changed=Object.keys(next).filter(k=>JSON.stringify(current[k])!==JSON.stringify(next[k]))
  const {data:result,error}=await auth.service.rpc('dock_owner_save_settings',{
    p_settings:next,
    p_actor_email:auth.ownerEmail,
-   p_action:action,
-   p_reason:action==='safety'?normalize(body?.reason)||'':null,
+   p_action:'save',
+   p_reason:null,
    p_changed:changed,
  })
  if(error)return NextResponse.json({error:error.message},{status:400})
