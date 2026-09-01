@@ -1,11 +1,12 @@
 import Link from 'next/link'
 
 type DistrictPageProps = {
-  params: { orgCode: string }
+  params: Promise<{ orgCode: string }>
 }
 
 export default async function DistrictWorkspacePage({ params }: DistrictPageProps) {
-  const orgCode = String(params.orgCode || '').trim()
+  const { orgCode: rawOrgCode } = await params
+  const orgCode = String(rawOrgCode || '').trim()
 
   return (
     <main className="publicShell">
