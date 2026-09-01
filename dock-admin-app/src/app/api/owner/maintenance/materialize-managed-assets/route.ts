@@ -1,5 +1,4 @@
 export const dynamic = 'force-dynamic'
-export const maxDuration = 300
 
 import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
