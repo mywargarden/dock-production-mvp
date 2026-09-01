@@ -1,18 +1,20 @@
 export const dynamic = 'force-dynamic'
 
+import { createHash } from 'crypto'
 import { NextRequest, NextResponse } from 'next/server'
 import { materializeManagedImage } from '@/lib/managedAssets'
 import { normalize, requireOwner } from '@/lib/ownerServer'
 
 function hasInline(value: unknown) { return normalize(value).startsWith('data:image/') }
+type Materializer = (value: unknown, kind: string) => Promise<string>
 
-async function materializeTabs(service: any, orgCode: string, tabs: any[]) {
+async function materializeTabs(tabs: any[], materialize: Materializer) {
   const next = []
   let changed = 0
   for (let index = 0; index < tabs.length; index += 1) {
     const tab = tabs[index] || {}
     if (hasInline(tab.icon_url)) {
-      const iconUrl = await materializeManagedImage(service, tab.icon_url, { orgCode, kind: `tab-icon-${tab.position ?? index}` })
+      const iconUrl = await materialize(tab.icon_url, `tab-icon-${tab.position ?? index}`)
       next.push({ ...tab, icon_url: iconUrl || null })
       changed += 1
     } else next.push(tab)
@@ -20,15 +22,15 @@ async function materializeTabs(service: any, orgCode: string, tabs: any[]) {
   return { tabs: next, changed }
 }
 
-async function materializeBranding(service: any, orgCode: string, source: any) {
+async function materializeBranding(source: any, materialize: Materializer) {
   const branding = source && typeof source === 'object' ? { ...source } : {}
   let changed = 0
   if (hasInline(branding.district_logo_url)) {
-    branding.district_logo_url = await materializeManagedImage(service, branding.district_logo_url, { orgCode, kind: 'logo' }) || null
+    branding.district_logo_url = await materialize(branding.district_logo_url, 'logo') || null
     changed += 1
   }
   if (hasInline(branding.district_background_url)) {
-    branding.district_background_url = await materializeManagedImage(service, branding.district_background_url, { orgCode, kind: 'background' }) || null
+    branding.district_background_url = await materialize(branding.district_background_url, 'background') || null
     changed += 1
   }
   return { branding, changed }
@@ -51,23 +53,34 @@ export async function POST(request: NextRequest) {
     if (!org?.id || !org?.org_code) return NextResponse.json({ error: 'District not found.' }, { status: 404 })
 
     const orgCode = normalize(org.org_code)
-    const counts = { branding: 0, draftBranding: 0, draftTabs: 0, liveTabs: 0, snapshots: 0, snapshotTabs: 0, snapshotBranding: 0 }
+    const materializedCache = new Map<string, string>()
+    const materialize: Materializer = async (value, kind) => {
+      const raw = normalize(value)
+      const cacheKey = `${kind}:${createHash('sha256').update(raw).digest('hex')}`
+      const cached = materializedCache.get(cacheKey)
+      if (cached) return cached
+      const url = await materializeManagedImage(auth.service, raw, { orgCode, kind })
+      materializedCache.set(cacheKey, url)
+      return url
+    }
+
+    const counts = { branding: 0, draftBranding: 0, draftTabs: 0, liveTabs: 0, snapshots: 0, snapshotTabs: 0, snapshotBranding: 0, uniqueMaterializations: 0 }
 
     let liveLogo = normalize(org.district_logo_url)
     let liveBackground = normalize(org.district_background_url)
     if (hasInline(liveLogo)) {
-      liveLogo = await materializeManagedImage(auth.service, liveLogo, { orgCode, kind: 'logo' }) || ''
+      liveLogo = await materialize(liveLogo, 'logo') || ''
       counts.branding += 1
     }
     if (hasInline(liveBackground)) {
-      liveBackground = await materializeManagedImage(auth.service, liveBackground, { orgCode, kind: 'background' }) || ''
+      liveBackground = await materialize(liveBackground, 'background') || ''
       counts.branding += 1
     }
 
-    const draftBranding = await materializeBranding(auth.service, orgCode, org.draft_branding)
+    const draftBranding = await materializeBranding(org.draft_branding, materialize)
     counts.draftBranding = draftBranding.changed
 
-    const draft = await materializeTabs(auth.service, orgCode, Array.isArray(org.draft_tabs) ? org.draft_tabs : [])
+    const draft = await materializeTabs(Array.isArray(org.draft_tabs) ? org.draft_tabs : [], materialize)
     counts.draftTabs = draft.changed
 
     const { data: workspaces, error: workspaceError } = await auth.service.from('workspaces').select('id').eq('organization_id', org.id)
@@ -84,7 +97,7 @@ export async function POST(request: NextRequest) {
       for (let index = 0; index < (liveTabs || []).length; index += 1) {
         const tab = (liveTabs || [])[index]
         if (!hasInline(tab?.icon_url)) continue
-        const iconUrl = await materializeManagedImage(auth.service, tab.icon_url, { orgCode, kind: `tab-icon-${tab.position ?? index}` })
+        const iconUrl = await materialize(tab.icon_url, `tab-icon-${tab.position ?? index}`)
         liveTabRefs.push({ id: tab.id, icon_url: iconUrl || null })
         counts.liveTabs += 1
       }
@@ -99,9 +112,9 @@ export async function POST(request: NextRequest) {
 
     const versionRefs: any[] = []
     for (const version of versions || []) {
-      const snapBranding = await materializeBranding(auth.service, orgCode, version.branding)
+      const snapBranding = await materializeBranding(version.branding, materialize)
       const snapTabs = Array.isArray(version.tabs) ? version.tabs : []
-      const materialized = await materializeTabs(auth.service, orgCode, snapTabs)
+      const materialized = await materializeTabs(snapTabs, materialize)
       counts.snapshotBranding += snapBranding.changed
       counts.snapshotTabs += materialized.changed
       if (snapBranding.changed || materialized.changed) {
@@ -109,6 +122,7 @@ export async function POST(request: NextRequest) {
         counts.snapshots += 1
       }
     }
+    counts.uniqueMaterializations = materializedCache.size
 
     const { data: applied, error: applyError } = await auth.service.rpc('dock_owner_apply_complete_managed_asset_refs', {
       p_organization_id: org.id,
