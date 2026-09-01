@@ -7,9 +7,9 @@ export default function Rc1Layout({children}:{children:React.ReactNode}){
       <div style={{maxWidth:1200,margin:'0 auto',display:'flex',gap:10,alignItems:'center',flexWrap:'wrap'}}>
         <strong style={{color:'#fff',marginRight:8}}>Dock 1.0 RC1</strong>
         <Link className="hq2Ghost" href="/hq-rc1">Operations</Link>
+        <Link className="hq2Ghost" href="/hq-rc1/districts">Districts</Link>
         <Link className="hq2Ghost" href="/hq-rc1/settings">Settings</Link>
         <Link className="hq2Ghost" href="/hq-rc1/releases">Releases</Link>
-        <Link className="hq2Ghost" href="/hq-v4-test">Legacy HQ V4</Link>
       </div>
     </div>
     {children}
