@@ -9,13 +9,24 @@ BUNDLE_ID="${DOCK_APP_BUNDLE_ID:-com.anchor.dock.macos}"
 DEVELOPMENT_TEAM="${DOCK_DEVELOPMENT_TEAM:-A4JT7VU8Q4}"
 
 command -v xcrun >/dev/null 2>&1 || { echo "Xcode command line tools are required."; exit 1; }
-xcrun --find safari-web-extension-converter >/dev/null 2>&1 || { echo "Safari Web Extension converter is unavailable in this Xcode install."; exit 1; }
+
+PACKAGER=""
+if xcrun --find safari-web-extension-packager >/dev/null 2>&1; then
+  PACKAGER="safari-web-extension-packager"
+elif xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
+  # Xcode versions before the current rename expose the same tool as converter.
+  PACKAGER="safari-web-extension-converter"
+else
+  echo "Safari Web Extension packager is unavailable in this Xcode install."
+  exit 1
+fi
 
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 echo "Generating Dock Safari Web Extension from the current shared Dock 0.3.7 source..."
-xcrun safari-web-extension-converter "$EXT_DIR" \
+echo "Using: xcrun $PACKAGER"
+xcrun "$PACKAGER" "$EXT_DIR" \
   --project-location "$OUT_DIR" \
   --app-name "$APP_NAME" \
   --bundle-identifier "$BUNDLE_ID" \
