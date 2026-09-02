@@ -1944,35 +1944,96 @@ if (!isAdminCard) {
 
   const noteRow = document.createElement("div");
   noteRow.className = "dockNoteRow";
-  const note = document.createElement("input");
+
+  const noteHeader = document.createElement("div");
+  noteHeader.className = "dockNoteHeader";
+  const noteLabel = document.createElement("label");
+  noteLabel.className = "dockNoteLabel";
+  noteLabel.htmlFor = noteDomId;
+  noteLabel.textContent = "Notes";
+  const noteStatus = document.createElement("span");
+  noteStatus.className = "dockNoteStatus";
+  noteStatus.textContent = opts.readOnlyNote ? "Managed" : "Saved";
+  noteHeader.append(noteLabel, noteStatus);
+
+  const note = document.createElement("textarea");
   note.id = noteDomId;
   note.name = `dockNote-${noteDomId}`;
-  note.setAttribute("aria-label", "Dock note");
+  note.setAttribute("aria-label", "Dock notes");
   note.className = "dockNoteInput";
-  note.type = "text";
-  note.placeholder = opts.readOnlyNote ? "Dock" : "Note…";
+  note.rows = 1;
+  note.maxLength = 500;
+  note.spellcheck = true;
+  note.placeholder = opts.readOnlyNote ? "Managed by your district" : "Add a note for future you…";
   note.value = tab.reason || "";
-  noteRow.appendChild(note);
+  noteRow.append(noteHeader, note);
+
+  if (opts.readOnlyNote && !String(tab.reason || "").trim()) {
+    noteRow.classList.add("dockNoteEmptyManaged");
+  }
+
+  const resizeNote = () => {
+    if (opts.readOnlyNote) return;
+    note.style.height = "auto";
+    note.style.height = `${Math.min(Math.max(note.scrollHeight, 34), 68)}px`;
+  };
+  resizeNote();
 
   let tmr = null;
+  let lastSavedValue = note.value;
+  const persistNote = async () => {
+    if (tmr) {
+      clearTimeout(tmr);
+      tmr = null;
+    }
+    if (typeof noteHandler !== "function") return;
+    const nextValue = note.value.slice(0, 500);
+    if (nextValue === lastSavedValue) {
+      noteStatus.textContent = "Saved";
+      noteStatus.dataset.state = "saved";
+      return;
+    }
+    noteStatus.textContent = "Saving…";
+    noteStatus.dataset.state = "saving";
+    try {
+      await noteHandler(nextValue);
+      lastSavedValue = nextValue;
+      noteStatus.textContent = "Saved";
+      noteStatus.dataset.state = "saved";
+    } catch (error) {
+      console.warn("Dock note save failed", error);
+      noteStatus.textContent = "Not saved";
+      noteStatus.dataset.state = "error";
+    }
+  };
   const queueSave = () => {
+    resizeNote();
+    noteStatus.textContent = "Unsaved";
+    noteStatus.dataset.state = "dirty";
     if (tmr) clearTimeout(tmr);
-    tmr = setTimeout(async () => { await noteHandler(note.value); }, 350);
+    tmr = setTimeout(persistNote, 450);
   };
   if (opts.readOnlyNote) {
     note.disabled = true;
-    note.placeholder = opts.readOnlyPlaceholder || "Read only";
+    note.placeholder = opts.readOnlyPlaceholder || "Managed by your district";
   } else {
     note.addEventListener("input", queueSave);
-    note.addEventListener("blur", queueSave);
+    note.addEventListener("blur", persistNote);
+    note.addEventListener("keydown", (event) => {
+      if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        event.preventDefault();
+        persistNote();
+        note.blur();
+      }
+    });
   }
 
   content.appendChild(title);
   content.appendChild(url);
   if (document.body.dataset.density !== "compact") {
     content.appendChild(meta);
-    content.appendChild(noteRow);
   }
+  content.appendChild(noteRow);
 
   const row = document.createElement("div");
   row.className = "row";
@@ -2077,15 +2138,15 @@ async function renderAll(){
     return;
   }
 
-  const createCard = (t, enableNotes = false) => {
+  const createCard = (t) => {
     const i = t.__index;
     const delHandler = async () => { await deleteTab(i); await load(); };
-    const noteHandler = enableNotes ? async (val) => {
+    const noteHandler = async (val) => {
       const all = await getSavedTabs({ localOnly: true });
       if (!all[i]) return;
-      all[i] = { ...all[i], reason: val };
+      all[i] = { ...all[i], reason: String(val || "").slice(0, 500) };
       await setSavedTabs(all);
-    } : null;
+    };
 
     return makeCard(t, delHandler, noteHandler, {
       selectable: true,
@@ -2102,7 +2163,7 @@ async function renderAll(){
   const firstBatch = tabs.slice(0, FIRST_PAINT_BATCH);
   const rest = tabs.slice(FIRST_PAINT_BATCH);
 
-  const firstNodes = firstBatch.map((t) => createCard(t, false));
+  const firstNodes = firstBatch.map((t) => createCard(t));
   const frag = document.createDocumentFragment();
   firstNodes.forEach((n) => frag.appendChild(n));
   grid.appendChild(frag);
@@ -2110,23 +2171,10 @@ async function renderAll(){
 
   await nextFrame();
 
-  firstNodes.forEach((node, idx) => {
-    const t = firstBatch[idx];
-    const note = node.querySelector("textarea, input.note-input, .note-input");
-    if (!note) return;
-    note.addEventListener("change", async (e) => {
-      const i = t.__index;
-      const all = await getSavedTabs({ localOnly: true });
-      if (!all[i]) return;
-      all[i] = { ...all[i], reason: e.target.value };
-      await setSavedTabs(all);
-    });
-  });
-
   for (let i = 0; i < rest.length; i += CHUNK_BATCH) {
     const chunk = rest.slice(i, i + CHUNK_BATCH);
     const chunkFrag = document.createDocumentFragment();
-    const nodes = chunk.map((t) => createCard(t, false));
+    const nodes = chunk.map((t) => createCard(t));
     nodes.forEach((n) => chunkFrag.appendChild(n));
     grid.appendChild(chunkFrag);
     updateActionButtons();
