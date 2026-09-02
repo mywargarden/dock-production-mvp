@@ -3,23 +3,16 @@
 // Keep Chrome's proven identity path untouched and supply only the missing
 // identity surface when Safari exposes `browser` without `browser.identity`.
 
-const DOCK_AUTH_CALLBACK = "https://dock-production-mvp.vercel.app/auth/extension/callback";
+// Reuse Dock's already-live production site as the OAuth return target instead
+// of introducing a Safari-only backend route. The auth tab is the authority:
+// we only accept the exact Dock production origin/root reached in that tab.
+const DOCK_AUTH_CALLBACK = "https://dock-production-mvp.vercel.app/";
 const AUTH_TIMEOUT_MS = 3 * 60 * 1000;
 
-let pendingAuthState = "";
-
-function randomState() {
-  const bytes = new Uint8Array(24);
-  globalThis.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (value) => value.toString(16).padStart(2, "0")).join("");
-}
-
-function isValidCallbackUrl(value, expectedState) {
+function isValidCallbackUrl(value) {
   try {
     const url = new URL(String(value || ""));
-    if (url.origin !== "https://dock-production-mvp.vercel.app") return false;
-    if (url.pathname !== "/auth/extension/callback") return false;
-    return !!expectedState && url.searchParams.get("dock_state") === expectedState;
+    return url.origin === "https://dock-production-mvp.vercel.app" && url.pathname === "/";
   } catch {
     return false;
   }
@@ -28,19 +21,12 @@ function isValidCallbackUrl(value, expectedState) {
 function createIdentityShim(nativeApi) {
   return {
     getRedirectURL() {
-      pendingAuthState = randomState();
-      const url = new URL(DOCK_AUTH_CALLBACK);
-      url.searchParams.set("dock_source", "safari");
-      url.searchParams.set("dock_state", pendingAuthState);
-      return url.toString();
+      return DOCK_AUTH_CALLBACK;
     },
 
     async launchWebAuthFlow({ url, interactive = true } = {}) {
       if (!interactive) throw new Error("Safari Dock sign-in requires an interactive OAuth tab.");
       if (!url) throw new Error("Safari Dock sign-in URL is missing.");
-
-      const expectedState = pendingAuthState;
-      if (!expectedState) throw new Error("Safari Dock sign-in state is missing.");
 
       let authTabId = null;
       let timeoutId = null;
@@ -50,7 +36,6 @@ function createIdentityShim(nativeApi) {
           if (timeoutId) clearTimeout(timeoutId);
           try { nativeApi.tabs.onUpdated.removeListener(onUpdated); } catch {}
           try { nativeApi.tabs.onRemoved.removeListener(onRemoved); } catch {}
-          pendingAuthState = "";
         };
 
         const finish = async (callbackUrl) => {
@@ -64,7 +49,7 @@ function createIdentityShim(nativeApi) {
         const onUpdated = (tabId, changeInfo, tab) => {
           if (authTabId == null || tabId !== authTabId) return;
           const callbackUrl = String(changeInfo?.url || tab?.url || "");
-          if (!isValidCallbackUrl(callbackUrl, expectedState)) return;
+          if (!isValidCallbackUrl(callbackUrl)) return;
           void finish(callbackUrl);
         };
 
