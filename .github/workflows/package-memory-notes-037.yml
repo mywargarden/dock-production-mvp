@@ -1,0 +1,44 @@
+name: Package Dock 0.3.7 Memory Notes
+
+on:
+  push:
+    branches:
+      - restore-memory-notes-0-3-7
+    paths:
+      - .github/workflows/package-memory-notes-037.yml
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: restore-memory-notes-0-3-7
+      - name: Verify candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check dock-extension/memories.js
+          test "$(node -p "require('./dock-extension/manifest.json').version")" = "0.3.7"
+          grep -Fq 'noteLabel.textContent = "Notes"' dock-extension/memories.js
+          grep -Fq 'body[data-density="compact"] .dockNoteRow{' dock-extension/memories.css
+      - name: Create exact extension ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd dock-extension
+          zip -qr ../dock-0.3.7-memory-notes-candidate.zip .
+          cd ..
+          sha256sum dock-0.3.7-memory-notes-candidate.zip | tee dock-0.3.7-memory-notes-candidate.sha256
+      - name: Upload candidate artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dock-0.3.7-memory-notes-candidate
+          path: |
+            dock-0.3.7-memory-notes-candidate.zip
+            dock-0.3.7-memory-notes-candidate.sha256
+          if-no-files-found: error
+          retention-days: 7
