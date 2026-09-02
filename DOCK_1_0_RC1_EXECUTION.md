@@ -3,94 +3,119 @@
 ## 6 — Convergence build
 
 ### Completed
-- [x] Frozen RC1 viability gate committed to the branch.
-- [x] Owner workspace compare API exists.
-- [x] Owner workspace restore API exists with reason + audit trail.
-- [x] Added owner workspace history endpoint for RC1 recovery UI.
-- [x] Real owner account lifecycle API exists with reason + explicit CONFIRM + audit.
-- [x] Server-backed owner Activity API exists with pagination/search.
-- [x] Structured owner Diagnostics API exists.
-- [x] Theme archive/restore/version-restore APIs exist.
-- [x] Added `/hq-rc1` convergence console exposing the launch-critical missing control loops:
-  - real suspend/archive/reactivate
-  - workspace history/compare/restore
-  - theme lifecycle/version restore
-  - structured diagnostics
-  - paginated audit activity
-- [x] Collapsed Vercel Git realization topology to one canonical consumer: `dock-production-mvp`; detached duplicate `dock-production-mvp-i4b2` and `dock-production-mvp-jywt` projects from the GitHub repository.
-- [x] Verified `/hq-rc1` compiles and serves from the canonical production Vercel project with HTTP 200.
-- [x] Verified representative owner and district-admin API routes fail closed to unauthenticated requests with HTTP 401 and `Missing bearer token`.
+- [x] Frozen RC1 viability gate committed.
+- [x] Owner workspace compare + restore + history controls exist with audit evidence.
+- [x] Owner account lifecycle controls exist with confirmation and audit.
+- [x] Server-backed Owner Activity and structured Diagnostics exist.
+- [x] Theme archive/restore/version-restore controls exist.
+- [x] Vercel Git topology is collapsed to one canonical project: `dock-production-mvp`.
+- [x] Owner Release Control stores cryptographic artifact identity and source identity.
+- [x] Release promotion is governed by dedicated preview/production transitions rather than free-form status selection.
+- [x] Accepted Dock 0.3.6 v11 bytes are canonicalized into `main` without changing the extension subtree.
+- [x] Owner saved the frozen release identity through the intended authenticated Owner path; persisted readback and audit evidence matched.
 
-### Current convergence checkpoint — 2026-09-02
+## Frozen RC1 candidate — 2026-09-02
 
-Observed evidence:
-- Canonical Vercel project `dock-production-mvp` is READY in production.
-- `/hq-rc1` and `/hq-rc1/districts` render from the canonical deployment.
-- The current locally approved extension artifact is Dock `0.3.6`; its zip passes integrity checks and all JavaScript files pass `node --check`.
-- Approved local extension artifact SHA-256: `818411d87c60f39aebc40ec6624430e532385e13250abb4c59b021cf9c9b22c5`.
+The claim boundary for final 7 is frozen here. Any later change to these values creates a new candidate and invalidates inheritance of this final-7 result.
 
-BLOCKER before destructive 7:
-- The approved Dock 0.3.6 extension artifact is not yet identical to the `dock-extension` tree on the canonical GitHub main branch. The approved theme/assets and latest default background therefore do not yet have one canonical source identity. Do not freeze RC1 until source, artifact, and release identity converge.
+- Version: `0.3.6`
+- Accepted ZIP SHA-256: `bd4286c8a9338f690878a9f30d0edbc59bb82ea8e373c1c2f649b0057259d203`
+- Artifact size: `41944447` bytes
+- Canonical `main` source commit: `e8f22d00707f1c216ee8c608a3a40f8150298b42`
+- Exact `dock-extension` Git tree: `d92360a241b27f2a5a4b0343ea398f26dbd945d4`
+- Canonical production deployment: `https://dock-production-hn2al8roj-anchor-technologies.vercel.app`
+- Release record: `0.3.6`, channel `development`, status `draft`
+- Build verified: true
+- Migrations verified: true
+- Managed-config verified: false pending final 7
+- Theme-runtime verified: false pending final 7
+- Preview approval: not yet granted
+- Production approval: not yet granted
 
-Evidence boundary:
-- The HTTP 200/401 checks above prove deployment presence and unauthenticated fail-closed behavior only. They do not prove authenticated owner/admin authorization, tenant isolation, persistence, recovery, or downstream extension delivery.
+### Frozen QA recovery target
 
-### Next convergence work
-- [ ] Converge the approved Dock 0.3.6 extension artifact into the canonical source/release identity without changing its approved behavior or visual design.
-- [ ] Verify command -> effect -> evidence for account lifecycle in live QA.
-- [ ] Verify workspace compare -> restore -> new live version -> audit in live QA.
-- [ ] Verify theme archive/restore/version restore -> audit in live QA.
-- [ ] Verify Activity pagination/search against real audit volume.
-- [ ] Verify Diagnostics identity resolution and PASS/WARNING/FAIL output.
-- [ ] Verify Owner Settings and Releases against the frozen launch kernel; change only if a blocker exists.
-- [ ] Create/confirm permanent QA district, admin, regular user, theme, workspace, and license.
-- [ ] Verify extension/config delivery from that QA district.
-- [ ] Freeze exact RC1 commit + deployment + extension artifact hash.
+Organization: `Dock RC1 QA` (`dock-rc1-qa`)
+
+Pre-attack authoritative workspace state:
+- Workspace: `Dock RC1 QA Dock`
+- Live version: `3`
+- Live tab set: exactly one tab — `Gmail` at `https://mail.google.com/`
+
+Pre-attack access state:
+- Primary verified domain: `rc1-qa.dock.test`
+- Active district admin: `ria.agee13@gmail.com`
+- Active allowed user: `qa-user@rc1-qa.dock.test`
+- License: `trial`
+- Plan: `district`
+- Max users: `10`
+- Default theme: `dock-green`
+- Tenant not suspended or archived
 
 ## 7 — Ground-truth falsification
-Do not begin destructive 7 until the exact RC1 artifact is frozen.
+
+### Test-design lock
+
+Final 7 must test the frozen candidate above. The pass condition may not be redefined after an attack begins.
+
+For the destructive workspace recovery test, the client baseline MUST be observed before the break. The frozen prediction is:
+
+`client(v3 Gmail) -> deliberate published break(v4) -> client(v4 break) -> intended diagnosis -> intended restore(v5) -> client(v5 Gmail)`
+
+Required evidence:
+1. Exact-candidate Dock client visibly consumes pre-break v3 Gmail state.
+2. Break is created through intended district-admin controls, not SQL/service-role rescue.
+3. Exact-candidate Dock visibly consumes the broken published state.
+4. Owner intended diagnostics/compare path identifies the break.
+5. Restore is issued through intended Owner restore control.
+6. Restore creates a new live version rather than rewriting history.
+7. Exact-candidate Dock visibly consumes the restored Gmail state.
+8. Audit/version history preserves the break and restore evidence.
+
+Falsifiers include:
+- client fails to resolve `dock-rc1-qa` under an authorized identity;
+- client does not consume the authoritative published workspace;
+- break is not observable downstream;
+- diagnosis cannot identify the actual change;
+- restore mutates history instead of creating a new version;
+- restored state does not reach the client;
+- tenant/role boundaries can be crossed;
+- consequential state changes lack usable evidence;
+- recovery requires SQL/manual database rescue.
 
 ### Birth
-- [ ] Create a fresh district entirely through intended interfaces.
-- [ ] Configure domain, admin, license, branding/theme, workspace, user.
-- [ ] Confirm the user's Dock resolves the correct district and published state.
-- [ ] No SQL/manual database rescue.
+- [x] Fresh RC1 QA district was created through intended interfaces and backend state matched the declared tenant birth contract.
+- [x] Domain/admin/license/theme/workspace/user authority was established without SQL rescue.
+- [x] Outside-domain district-admin bootstrap authority was corrected and observed resolving the RC1 QA workspace.
 
 ### Operation
-- [ ] District Admin can perform promised customer actions.
-- [ ] Owner HQ can govern promised owner actions.
-- [ ] User Dock consumes the resulting authoritative state.
-- [ ] Every consequential command has evidence.
+- [x] District-admin and Owner command paths have been exercised in QA for published workspace and release control operations.
+- [ ] Reconfirm exact 0.3.6 v11 client consumption under the frozen candidate before destructive attack.
 
 ### Isolation
-- [ ] District A cannot read District B.
-- [ ] District A cannot mutate District B.
-- [ ] District A cannot inherit District B config/theme/workspace.
-- [ ] Unauthenticated access exposes no private tenant data.
-- [ ] Owner-only APIs reject non-owner authenticated users.
+- [x] Unauthenticated representative private routes fail closed.
+- [x] Prior QA isolation/revocation checks established fail-closed behavior at their tested evidence boundary.
+- [ ] Reconfirm no cross-tenant regression discovered during final exact-candidate run.
 
 ### Persistence
-- [ ] Refresh preserves authoritative state.
-- [ ] Sign out/in preserves authoritative state.
-- [ ] New session/browser preserves authoritative state.
-- [ ] Deploy/restart does not corrupt tenant state.
+- [x] Authoritative QA workspace persisted through prior publish/restore/deploy cycles.
+- [ ] Reconfirm exact-candidate client after refresh/reopen during final run.
 
 ### Recovery
-- [ ] Break QA workspace deliberately.
-- [ ] Diagnose the problem using intended controls.
-- [ ] Restore a retained workspace snapshot.
-- [ ] Confirm a new live version is created.
-- [ ] Confirm extension/user state reflects the restored workspace.
-- [ ] Confirm audit evidence exists.
-- [ ] Exercise suspend/reactivate and theme recovery safely.
+- [ ] Observe exact-candidate client pre-break baseline: v3 Gmail.
+- [ ] Deliberately publish v4 break through intended district-admin UI.
+- [ ] Observe exact-candidate client consuming v4 break.
+- [ ] Diagnose v4 vs retained healthy state through intended Owner controls.
+- [ ] Restore retained healthy snapshot through intended Owner control, creating v5.
+- [ ] Observe exact-candidate client consuming v5 Gmail.
+- [ ] Independently verify version history and Owner audit evidence.
 
 ## Finding classification
-Every 7 finding is exactly one of:
+Every final-7 finding is exactly one of:
 - PASS
 - BLOCKER
 - PARK
 
-No new product scope is admitted during 7.
+No new product scope is admitted during final 7.
 
 ## Exit
-When all launch-kernel tests pass and no BLOCKER remains, the frozen artifact has survived 7 and is ready for 8 integration/release judgment.
+When the frozen candidate survives final 7 with no BLOCKER, managed-config and theme-runtime verification may be promoted from false to true only to the extent directly supported by the run. Then preview approval may be considered. Production approval remains a separate 8/release judgment.
