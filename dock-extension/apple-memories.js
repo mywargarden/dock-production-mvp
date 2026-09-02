@@ -150,10 +150,18 @@ async function rebuildShareCache() {
   }
 }
 
-function groupIdForShareButton(button) {
+async function groupIdForShareButton(button) {
   const direct = norm(button?.closest?.(".groupPillWrap")?.dataset?.groupId);
   if (direct) return direct;
-  return "";
+
+  // Some Dock builds expose Share in the top bar instead of only in the Dock
+  // pill menu. Resolve that button against the actual active Dock state.
+  try {
+    const res = await api.storage.local.get(["dockActiveGroup"]);
+    return norm(res?.dockActiveGroup);
+  } catch {
+    return "";
+  }
 }
 
 function finishShareWithLink(link, groupId) {
@@ -259,18 +267,21 @@ clearAllBtn?.addEventListener("click", (event) => {
   });
 }, true);
 
-// Share buttons are created dynamically by memories.js inside each Dock pill,
-// so use capture-phase delegation and recover the owning group id from the pill.
+// Share controls can be created dynamically by memories.js. Capture any Share
+// action and resolve its Dock from either the pill itself or dockActiveGroup.
 document.addEventListener("click", (event) => {
   const button = event.target?.closest?.("button");
-  if (!button || norm(button.textContent) !== "Share") return;
-
-  const groupId = groupIdForShareButton(button);
-  if (!groupId || groupId.startsWith("__")) return;
+  if (!button || !/^Share(?:\s|$|▾)/i.test(norm(button.textContent))) return;
 
   event.preventDefault();
   event.stopImmediatePropagation();
-  portableShare(groupId).catch((error) => {
+  groupIdForShareButton(button).then((groupId) => {
+    if (!groupId || groupId.startsWith("__")) {
+      alert("Open a Dock first, then click Share.");
+      return;
+    }
+    return portableShare(groupId);
+  }).catch((error) => {
     alert(error?.message || "Share failed.");
   });
 }, true);
