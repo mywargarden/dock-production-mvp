@@ -3,6 +3,7 @@ import { api } from "./adapters/index.js";
 import { ensureSignedInInteractive, getAuthSummary, signOut } from "./core/auth.js";
 import { ensureActiveGroup } from "./core/groupEngine.js";
 import { getCachedImage, getPreviewIdentity, retainCachedImage, releaseCachedImage } from "./core/imageCache.js";
+import { applyDockLicenseGateToPage, ensureDockLicenseAllowed } from "./core/license.js";
 
 const DEBUG = false;
 const headerEl = document.querySelector(".header");
@@ -27,6 +28,7 @@ const deleteSubmenu = document.getElementById("deleteSubmenu");
 const themeMenuBtn = document.getElementById("themeMenuBtn");
 const themeMenu = document.getElementById("themeMenu");
 const themeItems = [...document.querySelectorAll(".themeItem")];
+const themeStoreLinkBtn = document.getElementById("themeStoreLinkBtn");
 const densityToggleBtn = document.getElementById("densityToggleBtn");
 const createGroupBtn = document.getElementById("createGroupBtn");
 const addBtn = document.getElementById("addBtn");
@@ -39,13 +41,16 @@ const DENSITY_KEY = "dockDensity";
 const DEFAULT_THEME = "dock-green";
 const DEFAULT_DENSITY = "full";
 const DEFAULT_GROUP_COLOR = "#8fd8c6";
-const THEMES = new Set(["dock-green","skipper-harbor","slate","warm","sunset","tie-dye","rubber-ducky","crazy-ducky","violet-harbor"]);
+const THEMES = new Set(["dock-green","skipper-harbor","smiley-pop","warm","sunset","tie-dye","rubber-ducky","crazy-ducky","violet-harbor"]);
 const THEME_SCENE_ASSETS = {
-  "sunset": "assets/dock-sunset.webp",
+  "sunset": "assets/dock-sunset-hd.png",
   "tie-dye": "assets/tie-dye-bg.webp",
   "rubber-ducky": "assets/rubber-ducky-theme.webp",
-  "crazy-ducky": "assets/crazy-ducky-theme.webp",
-  "skipper-harbor": "assets/skipper-harbor.webp"
+  "crazy-ducky": "assets/cozy-quilt.webp",
+  "skipper-harbor": "assets/skipper-harbor-hd.png",
+  "violet-harbor": "assets/grape-tide.webp",
+  "smiley-pop": "assets/smileys-3d.webp",
+  "warm": "assets/sand-castle-theme.webp"
 };
 
 let activeGroup = "__all__";
@@ -95,6 +100,95 @@ function itemKey(tab){ return `${tab.__kind}:${tab.__index}:${tab.url || ''}:${t
 function isSelectedVisible(tab){ return selectedVisible.has(itemKey(tab)); }
 function toggleVisibleSelection(tab, checked){ const key = itemKey(tab); if (checked) selectedVisible.add(key); else selectedVisible.delete(key); }
 function clearVisibleSelection(){ selectedVisible.clear(); }
+
+/* === FINAL: live visible-card selection for managed admin background ===
+   Admin/district background can make the rendered cards differ from the normal
+   personal-memory selection model. For Dock It and Actions > Open Selected,
+   read the checked visible cards directly from the DOM at click time.
+*/
+function dockVisibleCardItemFromCard(card, fallbackIndex = 0) {
+  if (!card) return null;
+
+  const item =
+    (Array.isArray(visible) && visible[fallbackIndex]) ||
+    ((typeof tabs !== "undefined" && Array.isArray(tabs)) && tabs[fallbackIndex]) ||
+    null;
+
+  if (item && (item.url || item.title)) return item;
+
+  const titleEl = card.querySelector(".title, .cardTitle, h3, h2, strong");
+  const linkEl = card.querySelector("a[href]");
+  const imgEl = card.querySelector("img");
+
+  const title = titleEl?.textContent?.trim() || linkEl?.textContent?.trim() || "";
+  const url = linkEl?.href || card.dataset.url || "";
+  const customIcon = imgEl?.src || "";
+
+  if (!title && !url) return null;
+
+  return {
+    title,
+    url,
+    customIcon,
+    faviconUrl: customIcon
+  };
+}
+
+function dockGetLiveSelectedItemsNow() {
+  const selected = [];
+
+  const checkedInputs = Array.from(document.querySelectorAll(
+    '.memoryCard input[type="checkbox"]:checked, ' +
+    '.card input[type="checkbox"]:checked, ' +
+    'input.cardSelect:checked, ' +
+    'input[type="checkbox"]:checked'
+  ));
+
+  const seenCards = new Set();
+
+  for (const input of checkedInputs) {
+    const card = input.closest(".memoryCard, .card, .previewCard");
+    if (!card || seenCards.has(card)) continue;
+    seenCards.add(card);
+
+    const cards = Array.from(document.querySelectorAll(".memoryCard, .card, .previewCard"));
+    const index = Math.max(0, cards.indexOf(card));
+
+    const item = dockVisibleCardItemFromCard(card, index);
+    if (item && (item.url || item.title)) selected.push(item);
+  }
+
+  if (selected.length) return selected;
+
+  if (typeof getSelectedVisibleItems === "function") {
+    try {
+      const normal = getSelectedVisibleItems();
+      if (Array.isArray(normal) && normal.length) return normal;
+    } catch {}
+  }
+
+  if (typeof getSelectedCloneItems === "function") {
+    try {
+      const clones = getSelectedCloneItems();
+      if (Array.isArray(clones) && clones.length) return clones;
+    } catch {}
+  }
+
+  return [];
+}
+
+function dockGetOpenItemsNow(selectedOnly = false) {
+  if (selectedOnly) return dockGetLiveSelectedItemsNow();
+
+  if (Array.isArray(visible) && visible.length) return visible;
+  if ((typeof tabs !== "undefined" && Array.isArray(tabs)) && tabs.length) return tabs;
+
+  return Array.from(document.querySelectorAll(".memoryCard, .card, .previewCard"))
+    .map((card, index) => dockVisibleCardItemFromCard(card, index))
+    .filter(item => item && (item.url || item.title));
+}
+
+
 function getSelectedVisibleItems(){ return (visible || []).filter(v => isSelectedVisible(v)); }
 function canDeleteCurrentView(){ return activeGroup !== "__admin__"; }
 function currentGroupRecord(){ return (groups || []).find(g => g.id === activeGroup) || null; }
@@ -407,19 +501,112 @@ function getFaviconUrl(rawUrl){
     return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(u.hostname)}&sz=128`;
   } catch { return ""; }
 }
+
+function pickMemoryVisual(item){
+  if (!item) return "";
+
+  // Keep this broad because admin-assigned cards, library cards, imported
+  // cards, and saved tabs have used different field names over time.
+  return (
+    item.screenshot ||
+    item.screenshotUrl ||
+    item.screenshot_url ||
+    item.screenshotDataUrl ||
+    item.screenshotDataURI ||
+    item.screenshot_data_url ||
+    item.previewImage ||
+    item.previewUrl ||
+    item.preview_url ||
+    item.thumbnail ||
+    item.thumbnailUrl ||
+    item.thumbnail_url ||
+    item.image ||
+    item.imageUrl ||
+    item.image_url ||
+    item.uploadedImage ||
+    item.uploadedImageUrl ||
+    item.uploaded_image_url ||
+    item.cardImage ||
+    item.cardImageUrl ||
+    item.card_image_url ||
+    item.customImage ||
+    item.customImageUrl ||
+    item.custom_image_url ||
+    item.icon ||
+    item.iconUrl ||
+    item.faviconUrl ||
+    item.favIconUrl ||
+    ""
+  );
+}
+
 function cloneMemoryItem(item){
-  const out = { ...item };
+  const visual = pickMemoryVisual(item);
+  const out = {
+    ...item,
+
+    // Once copied into a personal dock, this should behave like a normal
+    // personal memory, not like a locked admin card.
+    __kind: "main",
+
+    // Preserve where it came from for future debugging/support.
+    sourceKind: item?.__kind || item?.sourceKind || "",
+    sourceId: item?.id || item?.local_id || item?.url || "",
+    copiedFromAdmin: item?.__kind === "admin" || activeGroup === "__admin__",
+
+    // Critical: personal cards do not render admin customIcon directly.
+    // So promote the admin customIcon into all screenshot/preview fields.
+    screenshot_url: item?.screenshot_url || visual,
+    screenshotUrl: item?.screenshotUrl || visual,
+    screenshotThumb: item?.screenshotThumb || visual,
+    screenshot: item?.screenshot || visual,
+    screenshot_data_url: item?.screenshot_data_url || visual,
+    screenshotDataUrl: item?.screenshotDataUrl || visual,
+    screenshotDataURI: item?.screenshotDataURI || visual,
+
+    // Preserve image aliases too.
+    customIcon: item?.customIcon || visual,
+    icon_url: item?.icon_url || visual,
+    image: item?.image || visual,
+    imageUrl: item?.imageUrl || visual,
+    image_url: item?.image_url || visual,
+    previewImage: item?.previewImage || visual,
+    previewUrl: item?.previewUrl || visual,
+    preview_url: item?.preview_url || visual,
+    thumbnail: item?.thumbnail || visual,
+    thumbnailUrl: item?.thumbnailUrl || visual,
+    thumbnail_url: item?.thumbnail_url || visual,
+    faviconUrl: item?.faviconUrl || item?.favIconUrl || ""
+  };
+
   delete out.__kind;
   delete out.__index;
+  delete out.__adminIndex;
+  delete out.groupId;
+  delete out.scope;
+  delete out.workspaceId;
+  delete out.previewCheckedAt;
+
+  out.id = `mem_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  out.createdAt = Date.now();
+  out.updatedAt = Date.now();
+  out.screenshotBlocked = false;
+
   return out;
 }
 
 function previewValue(item){
-  return item?.screenshot_url
+  return item?.customIcon
+    || item?.icon_url
+    || item?.screenshot_url
     || item?.screenshotUrl
     || item?.screenshotThumb
     || item?.screenshot
     || item?.screenshot_data_url
+    || item?.previewImage
+    || item?.previewUrl
+    || item?.thumbnail
+    || item?.image
     || null;
 }
 
@@ -439,24 +626,9 @@ function mergePreviewFields(item, source){
 }
 
 function getSelectedCloneItems(){
-  const savedByUrl = new Map(
-    (savedTabs || [])
-      .filter((tab) => tab && tab.url)
-      .map((tab) => [tab.url, tab])
-  );
-
-  const workspaceByUrl = new Map();
-  Object.values(groupItems || {}).forEach((items) => {
-    if (!Array.isArray(items)) return;
-    items.forEach((tab) => {
-      if (tab && tab.url && previewValue(tab)) workspaceByUrl.set(tab.url, tab);
-    });
-  });
-
   return getSelectedVisibleItems()
-    .map((item) => mergePreviewFields(item, workspaceByUrl.get(item?.url)))
-    .map((item) => mergePreviewFields(item, savedByUrl.get(item?.url)))
-    .map(cloneMemoryItem);
+    .map(cloneMemoryItem)
+    .filter(item => item && (item.url || item.title));
 }
 function addItemsToGroup(groupId, items){
   if (!groupId || !Array.isArray(items) || !items.length) return;
@@ -493,11 +665,24 @@ function normalizeOrderedItems(items, workspaceId = ""){
 }
 
 function reindexInCurrentOrder(items, workspaceId = ""){
-  return (Array.isArray(items) ? items : []).map((item, index) => ({
-    ...cloneMemoryItem(item),
-    position: index,
-    ...(workspaceId ? { workspaceId } : {})
-  }));
+  /* REORDER_STORAGE_IMAGE_PRESERVE_FIX_20260721
+     Reordering/moving cards must never call cloneMemoryItem().
+     cloneMemoryItem() is for COPY flows. It can rewrite preview/icon aliases.
+     Reorder should preserve the memory exactly and only update position/workspaceId.
+  */
+  return (Array.isArray(items) ? items : []).map((item, index) => {
+    const out = { ...(item || {}) };
+
+    // Remove only temporary render/sort metadata.
+    delete out.__kind;
+    delete out.__index;
+    delete out.__adminIndex;
+
+    out.position = index;
+    if (workspaceId) out.workspaceId = workspaceId;
+
+    return out;
+  });
 }
 
 function arraysDifferByOrderOrPosition(a, b){
@@ -704,7 +889,13 @@ async function persistCardOrderFromKeys(scope, orderedKeys){
   if (scope === '__all__') {
     const current = await getNormalizedSavedTabs();
     const keyed = current.map((item, idx) => ({ ...item, __kind: 'main', __index: idx }));
-    const byKey = new Map(keyed.map((item) => [itemKey(item), cloneMemoryItem(item)]));
+    const byKey = new Map(keyed.map((item) => {
+      const out = { ...item };
+      delete out.__kind;
+      delete out.__index;
+      delete out.__adminIndex;
+      return [itemKey(item), out];
+    }));
     const reordered = orderedKeys.map((key) => byKey.get(key)).filter(Boolean);
     if (reordered.length === current.length) {
       await setSavedTabs(reindexInCurrentOrder(reordered));
@@ -714,7 +905,13 @@ async function persistCardOrderFromKeys(scope, orderedKeys){
   if (!scope || scope === '__admin__') return;
   const current = normalizeOrderedItems(Array.isArray(groupItems[scope]) ? groupItems[scope] : [], scope);
   const keyed = current.map((item, idx) => ({ ...item, __kind: 'group', __index: idx }));
-  const byKey = new Map(keyed.map((item) => [itemKey(item), cloneMemoryItem(item)]));
+  const byKey = new Map(keyed.map((item) => {
+      const out = { ...item };
+      delete out.__kind;
+      delete out.__index;
+      delete out.__adminIndex;
+      return [itemKey(item), out];
+    }));
   const reordered = orderedKeys.map((key) => byKey.get(key)).filter(Boolean);
   if (reordered.length === current.length) {
     groupItems[scope] = reindexInCurrentOrder(reordered, scope);
@@ -888,7 +1085,103 @@ function updateGroupDropTarget(clientX){
 }
 
 function encodeShareData(obj){
-  const json = JSON.stringify(obj);
+  
+/* SAFE_SHARE_ENCODER_SIZE_FIX_20260720
+   Share links are stored in the URL hash. Large data:image screenshots can make
+   the URL too large and the import page receives a truncated JSON payload.
+   Clean oversized image fields before base64 encoding the share payload.
+*/
+function dockMakeSharePayloadSafe20260720(value) {
+  /* SHARE_IMAGE_FIELD_COLLAPSE_FIX_20260720
+     Keep import links readable without deleting medium-size admin images.
+     Problem found:
+       - Gmail image was about 57k chars.
+       - PowerSchool image was about 8k chars.
+       - Old cleaner deleted Gmail because it was over 35k.
+     New behavior:
+       - Keep one share-safe preview up to 90k chars.
+       - Remove duplicate image fields so the same data URL is not repeated 10 times.
+       - Put the kept preview in screenshot_url because import.js reads that field.
+  */
+  const MAX_SHAREABLE_IMAGE_CHARS = 90000;
+
+  const imageFields = [
+    "screenshot_url",
+    "screenshotUrl",
+    "screenshotThumb",
+    "screenshot",
+    "screenshot_data_url",
+    "previewImage",
+    "previewUrl",
+    "image",
+    "imageUrl",
+    "customIcon",
+    "icon_url",
+    "iconUrl",
+    "faviconUrl",
+    "favicon"
+  ];
+
+  function isBadPreview(raw) {
+    const value = String(raw || "").trim();
+    if (!value) return true;
+    if (/screenshot-unavailable/i.test(value)) return true;
+    if (value.startsWith("data:image/") && value.length > MAX_SHAREABLE_IMAGE_CHARS) return true;
+    return false;
+  }
+
+  function pickBestPreview(item) {
+    for (const field of imageFields) {
+      const raw = String(item?.[field] || "").trim();
+      if (!isBadPreview(raw)) return raw;
+    }
+    return "";
+  }
+
+  function cleanItem(item) {
+    if (!item || typeof item !== "object") return item;
+
+    const copy = { ...item };
+    const preview = pickBestPreview(copy);
+
+    // Remove all duplicated image fields first. They were making share URLs huge.
+    for (const field of imageFields) {
+      delete copy[field];
+    }
+
+    // Keep exactly one import-readable preview field.
+    if (preview) {
+      copy.screenshot_url = preview;
+    }
+
+    return copy;
+  }
+
+  function walk(v) {
+    if (Array.isArray(v)) return v.map(walk);
+    if (!v || typeof v !== "object") return v;
+
+    const looksLikeMemoryItem =
+      Object.prototype.hasOwnProperty.call(v, "url") &&
+      (
+        Object.prototype.hasOwnProperty.call(v, "title") ||
+        Object.prototype.hasOwnProperty.call(v, "name")
+      );
+
+    if (looksLikeMemoryItem) return cleanItem(v);
+
+    const out = {};
+    for (const [key, val] of Object.entries(v)) {
+      out[key] = walk(val);
+    }
+    return out;
+  }
+
+  return walk(value);
+}
+
+
+const json = JSON.stringify(dockMakeSharePayloadSafe20260720(obj));
   const bytes = new TextEncoder().encode(json);
   let bin = "";
   const chunk = 0x8000;
@@ -1003,8 +1296,130 @@ if (!payload.workspace.tabs.length) {
   }
 }
 
+
+/* === FINAL: managed admin background live-card bridge ===
+   When district/admin background is active, trust the visible checked cards,
+   not stale internal selection arrays.
+*/
+function dockAdminCardToItem(card, fallbackIndex = 0) {
+  if (!card) return null;
+
+  const source =
+    (Array.isArray(visible) && visible[fallbackIndex]) ||
+    ((typeof tabs !== "undefined" && Array.isArray(tabs)) && tabs[fallbackIndex]) ||
+    null;
+
+  if (source && (source.url || source.title)) {
+    return typeof cloneMemoryItem === "function" ? cloneMemoryItem(source) : { ...source };
+  }
+
+  const titleEl = card.querySelector(".title, .cardTitle, h3, h2, strong");
+  const linkEl = card.querySelector("a[href]");
+  const imgEl = card.querySelector("img");
+
+  const title = titleEl?.textContent?.trim() || "";
+  const url = linkEl?.href || card.dataset.url || "";
+  const customIcon = imgEl?.src || "";
+
+  if (!title && !url) return null;
+
+  return {
+    title,
+    url,
+    customIcon,
+    faviconUrl: customIcon
+  };
+}
+
+function dockAdminLiveSelectedItems() {
+  const inputs = Array.from(document.querySelectorAll(
+    '.memoryCard input[type="checkbox"]:checked, ' +
+    '.card input[type="checkbox"]:checked, ' +
+    '.previewCard input[type="checkbox"]:checked, ' +
+    'input.cardSelect:checked, ' +
+    'input[type="checkbox"]:checked'
+  ));
+
+  const allCards = Array.from(document.querySelectorAll(".memoryCard, .card, .previewCard"));
+  const seen = new Set();
+  const selected = [];
+
+  for (const input of inputs) {
+    const card = input.closest(".memoryCard, .card, .previewCard");
+    if (!card || seen.has(card)) continue;
+    seen.add(card);
+
+    const index = Math.max(0, allCards.indexOf(card));
+    const item = dockAdminCardToItem(card, index);
+
+    if (item && (item.url || item.title)) selected.push(item);
+  }
+
+  if (selected.length) return selected;
+
+  try {
+    if (typeof getSelectedVisibleItems === "function") {
+      const normal = getSelectedVisibleItems();
+      if (Array.isArray(normal) && normal.length) return normal;
+    }
+  } catch {}
+
+  try {
+    if (typeof getSelectedCloneItems === "function") {
+      const normal = getSelectedCloneItems();
+      if (Array.isArray(normal) && normal.length) return normal;
+    }
+  } catch {}
+
+  return [];
+}
+
+function dockAdminAllVisibleItems() {
+  if (Array.isArray(visible) && visible.length) return visible;
+  if ((typeof tabs !== "undefined" && Array.isArray(tabs)) && tabs.length) return tabs;
+
+  return Array.from(document.querySelectorAll(".memoryCard, .card, .previewCard"))
+    .map((card, index) => dockAdminCardToItem(card, index))
+    .filter(item => item && (item.url || item.title));
+}
+
+function dockAdminOpenItems(items) {
+  const list = Array.isArray(items) ? items : [];
+  for (const item of list) {
+    const url = item?.url || "";
+    if (!url) continue;
+
+    try {
+      chrome.tabs.create({ url });
+    } catch {
+      window.open(url, "_blank");
+    }
+  }
+}
+
+function dockAdminIsManagedBackgroundActive() {
+  return document.body?.dataset?.managedDock === "true" || document.body?.getAttribute("data-managed-dock") === "true";
+}
+
 function updateWorkspaceButtons(){
-  const selectedCount = getSelectedVisibleItems().length;
+  const selectedCount = (() => {
+    try {
+      if (document.body?.dataset?.managedDock === "true") {
+        const checked = document.querySelectorAll(
+          ".card input[type='checkbox']:checked, .memoryCard input[type='checkbox']:checked, .previewCard input[type='checkbox']:checked, input[type='checkbox']:checked"
+        ).length;
+        if (checked > 0) return checked;
+      }
+    } catch {}
+
+    try {
+      if (typeof dockAdminIsManagedBackgroundActive === "function" && dockAdminIsManagedBackgroundActive()) {
+        if (typeof dockAdminLiveSelectedItems === "function") return dockAdminLiveSelectedItems().length;
+      }
+    } catch {}
+
+    try { return getSelectedVisibleItems().length; } catch { return 0; }
+  })();
   const locked = activeGroup === "__admin__";
   const editableWorkspace = !!currentGroupRecord() && activeGroup !== "__admin__";
 
@@ -1025,9 +1440,8 @@ function updateWorkspaceButtons(){
 
   if (addBtn){
     const eligibleTargetCount = Math.max(0, (groups || []).length - (activeGroup && activeGroup !== "__all__" && activeGroup !== "__admin__" ? 1 : 0));
-    addBtn.disabled = locked || selectedCount === 0 || eligibleTargetCount === 0;
-    if (locked) addBtn.title = "Dock is locked";
-    else if (!selectedCount) addBtn.title = "Select one or more cards first";
+    addBtn.disabled = selectedCount === 0 || eligibleTargetCount === 0;
+    if (!selectedCount) addBtn.title = "Select one or more cards first";
     else if (!eligibleTargetCount) addBtn.title = "Create another Dock first";
     else addBtn.title = `Add ${selectedCount} selected to another Dock`;
   }
@@ -1036,7 +1450,24 @@ function updateWorkspaceButtons(){
 
 function updateActionButtons(){
   const openCount = getVisibleOpenableItems().length;
-  const selectedCount = getSelectedVisibleItems().length;
+  const selectedCount = (() => {
+    try {
+      if (document.body?.dataset?.managedDock === "true") {
+        const checked = document.querySelectorAll(
+          ".card input[type='checkbox']:checked, .memoryCard input[type='checkbox']:checked, .previewCard input[type='checkbox']:checked, input[type='checkbox']:checked"
+        ).length;
+        if (checked > 0) return checked;
+      }
+    } catch {}
+
+    try {
+      if (typeof dockAdminIsManagedBackgroundActive === "function" && dockAdminIsManagedBackgroundActive()) {
+        if (typeof dockAdminLiveSelectedItems === "function") return dockAdminLiveSelectedItems().length;
+      }
+    } catch {}
+
+    try { return getSelectedVisibleItems().length; } catch { return 0; }
+  })();
   const lockedView = !canDeleteCurrentView();
   if (openAllBtn) {
     openAllBtn.disabled = openCount === 0;
@@ -1311,6 +1742,15 @@ function cleanupGridImageRefs(){
 }
 
 function openWorkspaceModal({ title, subtitle, submitLabel = "Create", suggestedName = "", defaultColor = DEFAULT_GROUP_COLOR, showColor = false, workspaceChoices = [], onSubmit }) {
+
+  /* MODAL_STALE_CLEANUP_FIX_20260719
+     Admin managed-background CSS had hidden/collapsed stale Dock modal nodes.
+     Always remove old Dock modals before creating a new one.
+  */
+  try {
+    document.querySelectorAll(".dockModalBackdrop").forEach(el => el.remove());
+  } catch {}
+
   const backdrop = document.createElement("div");
   backdrop.className = "dockModalBackdrop";
   const modal = document.createElement("div");
@@ -1344,6 +1784,42 @@ function openWorkspaceModal({ title, subtitle, submitLabel = "Create", suggested
 
   backdrop.appendChild(modal);
   document.body.appendChild(backdrop);
+
+  /* REAL_BACKDROP_EXCLUSION_AND_INLINE_MODAL_FIX_20260720
+     Managed-background cleanup was allowed to hide .dockModalBackdrop because
+     only .dockModal was excluded. Force the freshly-created modal/backdrop
+     visible inline so stale managed-background rules cannot collapse it.
+  */
+  try {
+    backdrop.style.setProperty("display", "flex", "important");
+    backdrop.style.setProperty("visibility", "visible", "important");
+    backdrop.style.setProperty("opacity", "1", "important");
+    backdrop.style.setProperty("position", "fixed", "important");
+    backdrop.style.setProperty("inset", "0", "important");
+    backdrop.style.setProperty("width", "100vw", "important");
+    backdrop.style.setProperty("height", "100vh", "important");
+    backdrop.style.setProperty("min-width", "100vw", "important");
+    backdrop.style.setProperty("min-height", "100vh", "important");
+    backdrop.style.setProperty("z-index", "2147483000", "important");
+    backdrop.style.setProperty("pointer-events", "auto", "important");
+    backdrop.style.setProperty("align-items", "center", "important");
+    backdrop.style.setProperty("justify-content", "center", "important");
+
+    modal.style.setProperty("display", "block", "important");
+    modal.style.setProperty("visibility", "visible", "important");
+    modal.style.setProperty("opacity", "1", "important");
+    modal.style.setProperty("position", "relative", "important");
+    modal.style.setProperty("width", "min(560px, calc(100vw - 40px))", "important");
+    modal.style.setProperty("max-width", "560px", "important");
+    modal.style.setProperty("min-width", "min(320px, calc(100vw - 40px))", "important");
+    modal.style.setProperty("height", "auto", "important");
+    modal.style.setProperty("min-height", "0", "important");
+    modal.style.setProperty("z-index", "2147483001", "important");
+    modal.style.setProperty("pointer-events", "auto", "important");
+  } catch (err) {
+    console.warn("Dock modal inline visibility fix failed:", err);
+  }
+
 
   const nameEl = modal.querySelector("#dockGroupName");
   const colorEl = modal.querySelector("#dockGroupColor");
@@ -1406,6 +1882,12 @@ const previewSource = String(
   tab.screenshotThumb ||
   tab.screenshot ||
   tab.screenshot_data_url ||
+  tab.customIcon ||
+  tab.icon_url ||
+  tab.previewImage ||
+  tab.previewUrl ||
+  tab.thumbnail ||
+  tab.image ||
   ''
 ).trim();
 
@@ -1576,6 +2058,9 @@ async function ensureAllMemoriesPreviewsHydrated() {
 }
 let renderAllFullPromise = null;
 
+
+/* === Final admin Dock It direct binder === */
+
 async function renderAll(){
   try { dockRestoreSavedThemeOutsideDistrict(); } catch {}
   try { dockLockDistrictBrandingIfNeeded(); } catch {}
@@ -1724,14 +2209,284 @@ async function renderGroup(groupId){
 }
 
 
-async function createDockFromSelection() {
-  if (!(await requirePersonalSignIn())) return;
-  await loadState();
-  const selected = getSelectedCloneItems();
+
+function getAdminSelectedCloneItemsSafe(){
+  try {
+    if (typeof getSelectedCloneItems === "function") {
+      const selected = Array.isArray(selectionSnapshot) && selectionSnapshot.length
+    ? selectionSnapshot.map(item => (typeof cloneMemoryItem === "function" ? cloneMemoryItem(item) : item)).filter(item => item && (item.url || item.title))
+    : getSelectedCloneItems();
+      if (Array.isArray(selected) && selected.length) return selected;
+    }
+  } catch {}
+
+  try {
+    const source = Array.isArray(adminWorkspace?.tabs) ? adminWorkspace.tabs : [];
+    return source
+      .filter(t => isSelectedVisible(t))
+      .map(t => cloneMemoryItem(t));
+  } catch {}
+
+  return [];
+}
+
+async function createDockFromSelection(selectionSnapshot = null) {
+  try { await ensureDockLicenseAllowed(); } catch (err) { alert(err?.message || "Dock license is inactive."); await applyDockLicenseGateToPage({ page: "memories" }); return; }
+
+  /* ADMIN_BACKGROUND_DOCKIT_SELECTION_FIX_20260718
+     When a managed admin background is active, the visible cards are not always
+     coming through the normal library selection pipeline. Build a real snapshot
+     from the checked visible admin cards before the rest of this function runs.
+  */
+  try {
+    const isManagedAdminBackground =
+      document.body &&
+      document.body.dataset &&
+      document.body.dataset.managedDock === "true";
+
+    const hasSnapshot =
+      Array.isArray(selectionSnapshot) && selectionSnapshot.length > 0;
+
+    if (isManagedAdminBackground && !hasSnapshot) {
+      const checkedCards = Array.from(
+        document.querySelectorAll(
+          ".memoryCard input[type='checkbox']:checked, .card input[type='checkbox']:checked, input[type='checkbox']:checked"
+        )
+      )
+        .map(cb => cb.closest(".memoryCard, .card"))
+        .filter(Boolean);
+
+      const seen = new Set();
+
+      const adminSnapshot = checkedCards.map(card => {
+        const title =
+          card.dataset.title ||
+          card.getAttribute("data-title") ||
+          card.querySelector(".title, .cardTitle, h3, h2, strong")?.textContent?.trim() ||
+          card.querySelector("a")?.textContent?.trim() ||
+          "Untitled";
+
+        const url =
+          card.dataset.url ||
+          card.getAttribute("data-url") ||
+          card.querySelector("a[href]")?.href ||
+          "";
+
+        const note =
+          card.dataset.note ||
+          card.getAttribute("data-note") ||
+          card.querySelector("textarea, input[name='note'], input.note")?.value?.trim() ||
+          "";
+
+        const image =
+          card.dataset.image ||
+          card.getAttribute("data-image") ||
+          card.querySelector("img")?.src ||
+          "";
+
+        return {
+          title,
+          name: title,
+          url,
+          note,
+          image,
+          imageUrl: image,
+          screenshot: image
+        };
+      }).filter(item => {
+        const key = (item.url || "") + "|" + (item.title || "");
+        if (!item.url || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+
+      if (adminSnapshot.length) {
+        console.log("ADMIN BACKGROUND DOCKIT SNAPSHOT USED", adminSnapshot);
+        selectionSnapshot = adminSnapshot;
+      }
+    }
+  } catch (err) {
+    console.warn("Admin background Dock It snapshot fallback failed:", err);
+  }
+
+  // IMPORTANT: capture the user's visible selection before sign-in/loadState can
+  // change activeGroup or rerender the admin dock.
+  const sourceSelection = Array.isArray(selectionSnapshot) && selectionSnapshot.length
+    ? selectionSnapshot
+    : (dockAdminIsManagedBackgroundActive() ? dockAdminLiveSelectedItems() : getSelectedCloneItems());
+
+  const selected = (Array.isArray(sourceSelection) ? sourceSelection : [])
+    .map(cloneMemoryItem)
+    .map(item => {
+      /* ADMIN_DOCK_PREVIEW_PRESERVE_FIX_20260720
+         Admin/managed cards often carry their card image as customIcon/image/faviconUrl
+         instead of screenshot_url/screenshotUrl. When those cards are copied into a
+         personal Dock and then shared/imported, the import path looks for screenshot
+         fields. Mirror the best available preview into all supported preview fields.
+      */
+      try {
+        const preview = String(
+          item.screenshot_url ||
+          item.screenshotUrl ||
+          item.screenshotThumb ||
+          item.screenshot ||
+          item.screenshot_data_url ||
+          item.previewImage ||
+          item.previewUrl ||
+          item.image ||
+          item.imageUrl ||
+          item.customIcon ||
+          item.icon_url ||
+          item.iconUrl ||
+          item.faviconUrl ||
+          item.favicon ||
+          ""
+        ).trim();
+
+        if (preview) {
+          item.screenshot_url = item.screenshot_url || preview;
+          item.screenshotUrl = item.screenshotUrl || preview;
+          item.screenshotThumb = item.screenshotThumb || preview;
+          item.screenshot = item.screenshot || preview;
+          item.screenshot_data_url = item.screenshot_data_url || preview;
+          item.previewImage = item.previewImage || preview;
+          item.previewUrl = item.previewUrl || preview;
+          item.image = item.image || preview;
+          item.imageUrl = item.imageUrl || preview;
+          item.customIcon = item.customIcon || preview;
+          item.faviconUrl = item.faviconUrl || preview;
+        }
+      } catch {}
+      return item;
+    })
+    .filter(item => item && (item.url || item.title));
+
+  /* ADMIN_DOCK_DOM_PREVIEW_FALLBACK_FIX_20260720
+     Some admin/managed cards, especially Gmail, render a visible logo/image in
+     the card DOM but the underlying item copied from the managed workspace has
+     no screenshot/customIcon field. Before saving the new Dock, match selected
+     items back to visible cards by URL/title and copy the card image into every
+     share/import preview field.
+  */
+  try {
+    const normalizeUrlKey = (value) => String(value || "")
+      .trim()
+      .replace(/\/+$/, "")
+      .toLowerCase();
+
+    const normalizeTitleKey = (value) => String(value || "")
+      .trim()
+      .toLowerCase();
+
+    const previewFromItem = (item) => String(
+      item?.screenshot_url ||
+      item?.screenshotUrl ||
+      item?.screenshotThumb ||
+      item?.screenshot ||
+      item?.screenshot_data_url ||
+      item?.previewImage ||
+      item?.previewUrl ||
+      item?.image ||
+      item?.imageUrl ||
+      item?.customIcon ||
+      item?.icon_url ||
+      item?.iconUrl ||
+      item?.faviconUrl ||
+      item?.favicon ||
+      ""
+    ).trim();
+
+    const applyPreview = (item, preview) => {
+      if (!item || !preview) return;
+
+      item.screenshot_url = item.screenshot_url || preview;
+      item.screenshotUrl = item.screenshotUrl || preview;
+      item.screenshotThumb = item.screenshotThumb || preview;
+      item.screenshot = item.screenshot || preview;
+      item.screenshot_data_url = item.screenshot_data_url || preview;
+      item.previewImage = item.previewImage || preview;
+      item.previewUrl = item.previewUrl || preview;
+      item.image = item.image || preview;
+      item.imageUrl = item.imageUrl || preview;
+      item.customIcon = item.customIcon || preview;
+      item.icon_url = item.icon_url || preview;
+      item.iconUrl = item.iconUrl || preview;
+      item.faviconUrl = item.faviconUrl || preview;
+      item.favicon = item.favicon || preview;
+    };
+
+    const previewByUrl = new Map();
+    const previewByTitle = new Map();
+
+    Array.from(document.querySelectorAll(".card, .memoryCard, .previewCard")).forEach((card) => {
+      const img =
+        card.querySelector("img")?.currentSrc ||
+        card.querySelector("img")?.src ||
+        card.dataset.image ||
+        card.dataset.screenshot ||
+        card.getAttribute("data-image") ||
+        card.getAttribute("data-screenshot") ||
+        "";
+
+      const preview = String(img || "").trim();
+
+      // Do not preserve the placeholder as the real screenshot.
+      if (!preview || /screenshot-unavailable/i.test(preview)) return;
+
+      const url =
+        card.dataset.url ||
+        card.getAttribute("data-url") ||
+        card.querySelector("a[href]")?.href ||
+        "";
+
+      const title =
+        card.dataset.title ||
+        card.getAttribute("data-title") ||
+        card.querySelector(".title, .cardTitle, .memoryTitle, h2, h3, strong")?.textContent?.trim() ||
+        "";
+
+      const urlKey = normalizeUrlKey(url);
+      const titleKey = normalizeTitleKey(title);
+
+      if (urlKey && !previewByUrl.has(urlKey)) previewByUrl.set(urlKey, preview);
+      if (titleKey && !previewByTitle.has(titleKey)) previewByTitle.set(titleKey, preview);
+    });
+
+    selected.forEach((item) => {
+      let preview = previewFromItem(item);
+
+      if (!preview || /screenshot-unavailable/i.test(preview)) {
+        preview =
+          previewByUrl.get(normalizeUrlKey(item.url)) ||
+          previewByTitle.get(normalizeTitleKey(item.title || item.name)) ||
+          "";
+      }
+
+      if (preview && !/screenshot-unavailable/i.test(preview)) {
+        applyPreview(item, preview);
+      }
+    });
+
+    console.log("ADMIN DOM PREVIEW FALLBACK APPLIED", selected.map(item => ({
+      title: item.title || item.name,
+      url: item.url,
+      screenshot_url: String(item.screenshot_url || "").slice(0, 80),
+      customIcon: String(item.customIcon || "").slice(0, 80),
+      image: String(item.image || "").slice(0, 80),
+      faviconUrl: String(item.faviconUrl || "").slice(0, 80)
+    })));
+  } catch (err) {
+    console.warn("Admin DOM preview fallback failed:", err);
+  }
+
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
+
+  if (!(await requirePersonalSignIn())) return;
+  await loadState();
+
   openWorkspaceModal({
     title: "Create Dock",
     subtitle: `This will copy ${selected.length} tab(s) into a new Dock.`,
@@ -1755,9 +2510,11 @@ async function createDockFromSelection() {
 async function addSelectedToDock(targetDockId) {
   if (!(await requirePersonalSignIn())) return;
   await loadState();
-  const selected = getSelectedCloneItems();
+  const selected = dockAdminIsManagedBackgroundActive()
+    ? dockAdminLiveSelectedItems()
+    : getSelectedCloneItems();
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
   addItemsToGroup(targetDockId, selected);
@@ -1906,8 +2663,19 @@ window.addEventListener("scroll", () => {
     positionDockPillMenu(activeDockPillMenu, activeDockPillMenu.__dockAnchorBtn);
   }
 }, true);
-createGroupBtn?.addEventListener("click", async () => {
-  await createDockFromSelection();
+createGroupBtn?.addEventListener("click", async (event) => {
+  event?.preventDefault?.();
+  try { await ensureDockLicenseAllowed(); } catch (err) { alert(err?.message || "Dock license is inactive."); await applyDockLicenseGateToPage({ page: "memories" }); return; }
+
+  const selectionSnapshot = dockAdminIsManagedBackgroundActive()
+    ? dockAdminLiveSelectedItems()
+    : getSelectedCloneItems();
+  if (!selectionSnapshot.length) {
+    alert("Select one or more memories first.");
+    return;
+  }
+
+  await createDockFromSelection(selectionSnapshot);
 });
 
 addBtn?.addEventListener("click", async () => {
@@ -1917,9 +2685,11 @@ addBtn?.addEventListener("click", async () => {
     alert("Dock is locked.");
     return;
   }
-  const selected = getSelectedCloneItems();
+  const selected = dockAdminIsManagedBackgroundActive()
+    ? dockAdminLiveSelectedItems()
+    : getSelectedCloneItems();
   if (!selected.length) {
-    alert("Select one or more Docks first.");
+    alert("Select one or more memories first.");
     return;
   }
   const targetChoices = (groups || [])
@@ -2177,6 +2947,29 @@ themeMenuBtn?.addEventListener("click", (e) => {
   if (willShow) themeMenu?.classList.remove("hidden");
 });
 themeItems.forEach(btn => btn.addEventListener("click", async (e) => { e.stopPropagation(); await saveTheme(btn.dataset.theme || DEFAULT_THEME); closeMenus(); }));
+
+/* THEME_STORE_COMING_SOON_LINK_20260814
+   v0.3.1 keeps the store as a safe local coming-soon page.
+   No remote JS, Stripe, Supabase theme fetching, or new permissions are added in this release. */
+themeStoreLinkBtn?.addEventListener("click", (e) => {
+  e.stopPropagation();
+  closeMenus();
+  try {
+    const url = globalThis.chrome?.runtime?.getURL
+      ? chrome.runtime.getURL("theme-store.html")
+      : "theme-store.html";
+
+    const tabsApi = globalThis.chrome?.tabs || api?.tabs;
+    if (tabsApi?.create) {
+      tabsApi.create({ url });
+      return;
+    }
+
+    window.open(url, "_blank", "noopener,noreferrer");
+  } catch {
+    window.open("theme-store.html", "_blank", "noopener,noreferrer");
+  }
+});
 actionsMenuBtn?.addEventListener("click", (e) => {
   e.stopPropagation();
   const willShow = actionsMenu?.classList.contains("hidden");
@@ -2422,6 +3215,7 @@ let hasInitialized = false;
 async function init() {
   if (hasInitialized) return;
   hasInitialized = true;
+  await applyDockLicenseGateToPage({ page: "memories" }).catch(() => {});
   await keepDockAsFirstTab();
   await hydratePage({ forceSync: true });
   await keepDockAsFirstTab();
@@ -2452,7 +3246,7 @@ init().catch(() => {});
     const isBigEnough = rect.width >= 160 && rect.height >= 90;
     const isCenteredX = cx > vw * 0.30 && cx < vw * 0.72;
     const isLowerThanHeader = cy > vh * 0.28;
-    const isNotCard = !el.closest(".card,.memoryCard,.previewCard,.menuPanel,.dockModal,.dockDrawer,.saveDrawer,#themeMenu,.themeMenuPanel,header,.header,.topBar,.groupBar,.groupPillWrap,.groupPillsRail,nav");
+    const isNotCard = !el.closest(".card,.memoryCard,.previewCard,.menuPanel,.dockModal,.dockModalBackdrop,.modal,.modalBackdrop,.workspaceModal,.workspaceModalBackdrop,.dockDrawer,.saveDrawer,#themeMenu,.themeMenuPanel,header,.header,.topBar,.groupBar,.groupPillWrap,.groupPillsRail,nav");
 
     const txt = String(el.textContent || "").trim().toLowerCase();
     const alt = String(el.getAttribute?.("alt") || "").toLowerCase();
@@ -2512,3 +3306,196 @@ init().catch(() => {});
   window.dockHideCenterDockWatermark = hideCenterDockWatermark;
 })();
 
+/* === FINAL: managed admin background click bridge ===
+   Handles the exact case where the admin background visually sits between
+   the pointer event and the intended Dock/Open control.
+*/
+
+
+/* === FINAL CLEAN FIX: admin managed background clicks === */
+function dockAdminClickRepairActive20260718() {
+  try {
+    return (
+      activeGroup === "__admin__" ||
+      document.body?.dataset?.managedDock === "true" ||
+      document.body?.classList?.contains("managedDistrictBackgroundActive") ||
+      document.documentElement?.classList?.contains("managedDistrictBackgroundActive")
+    );
+  } catch {
+    return false;
+  }
+}
+
+function dockAdminClickRepairCards20260718() {
+  return Array.from(grid?.querySelectorAll(".card, .memoryCard, .previewCard") || []);
+}
+
+function dockAdminClickRepairItems20260718() {
+  const source = Array.isArray(visible) ? visible : [];
+  const cards = dockAdminClickRepairCards20260718();
+
+  if (!cards.length) {
+    return source.filter(item => item && (item.url || item.title));
+  }
+
+  return cards.map((card, index) => {
+    const existing = source[index];
+    if (existing && (existing.url || existing.title)) return existing;
+
+    const title = card.querySelector(".title, .cardTitle, h3, h2, strong")?.textContent?.trim() || "";
+    const href = card.querySelector("a.url, a[href]")?.getAttribute("href") || "";
+    const img = card.querySelector("img")?.getAttribute("src") || "";
+
+    return {
+      title: title || href || "Untitled",
+      url: href && href !== "#" ? href : "",
+      customIcon: img,
+      faviconUrl: img
+    };
+  }).filter(item => item && (item.url || item.title));
+}
+
+function dockAdminClickRepairSelected20260718() {
+  const items = dockAdminClickRepairItems20260718();
+  const cards = dockAdminClickRepairCards20260718();
+
+  if (cards.length) {
+    return cards.map((card, index) => {
+      const cb = card.querySelector('input.selBox[type="checkbox"], input.cardSelect[type="checkbox"], .cardSelect input[type="checkbox"], input[type="checkbox"]');
+      return cb?.checked ? items[index] : null;
+    }).filter(item => item && (item.url || item.title));
+  }
+
+  try {
+    const fallback = getSelectedVisibleItems();
+    if (Array.isArray(fallback) && fallback.length) return fallback;
+  } catch {}
+
+  return [];
+}
+
+async function dockAdminClickRepairOpen20260718(items) {
+  const openable = (Array.isArray(items) ? items : []).filter(item => item?.url);
+  if (!openable.length) return;
+  await openWorkspaceItems(openable);
+}
+
+let dockAdminDockItLastRun20260718 = 0;
+
+function dockAdminHitFromPoint20260718(event, selector) {
+  const x = Number(event?.clientX);
+  const y = Number(event?.clientY);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return null;
+
+  const stack = document.elementsFromPoint(x, y);
+  for (const el of stack) {
+    if (el?.matches?.(selector)) return el;
+    const found = el?.closest?.(selector);
+    if (found) return found;
+  }
+  return null;
+}
+
+async function dockAdminRunDockItFromPointer20260718(event) {
+  // VISUAL_ONLY_ADMIN_BACKGROUND_DOCKIT_FIX_20260718
+  // Managed/admin background must not hijack Dock It. The native #createGroupBtn
+  // click handler owns createDockFromSelection/openWorkspaceModal.
+  // This repair path is intentionally left inert for Dock It so the background
+  // remains visual-only.
+  return false;
+}
+
+document.addEventListener("click", async function dockAdminCleanManagedClickRepair20260718(event) {
+  if (!dockAdminClickRepairActive20260718()) return;
+
+  const stack = document.elementsFromPoint(event.clientX, event.clientY);
+
+  const insideModal = stack.some(el =>
+    el?.closest?.(".dockModal, .dockModalBackdrop, .modal, .modalBackdrop, .workspaceModal")
+  );
+  if (insideModal) return;
+
+  const hit = (selector) => {
+    for (const el of stack) {
+      if (el?.matches?.(selector)) return el;
+      const found = el?.closest?.(selector);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  const createBtn = hit("#createGroupBtn, .groupCreateBtn");
+  if (createBtn) {
+    // VISUAL_ONLY_ADMIN_BACKGROUND_DOCKIT_FIX_20260718
+    // Let the native Dock It button click handler run. Do not preventDefault,
+    // stopPropagation, or manually call createDockFromSelection here.
+    return;
+  }
+
+  const actionItem = hit("#actionsMenu button, #openSubmenu button, .actionsMenuPanel button, .subMenuPanel button, #openMenuToggle, #openAllBtn, #openSelectedBtn");
+  if (actionItem) {
+    const text = String(actionItem.textContent || "").trim().toLowerCase();
+    const actionRoot = actionItem.closest("#actionsMenu, .actionsMenuPanel, #openSubmenu, .subMenuPanel");
+
+    if (actionRoot) {
+      if (actionItem.id === "openMenuToggle" || text === "open") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+
+        try {
+          openSubmenu?.classList.toggle("hidden");
+          deleteSubmenu?.classList.add("hidden");
+        } catch {}
+        return;
+      }
+
+      if (actionItem.id === "openSelectedBtn" || text === "open selected") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+
+        const selected = dockAdminClickRepairSelected20260718().filter(item => item?.url);
+        if (!selected.length) {
+          alert("Select one or more tabs first.");
+          return;
+        }
+
+        try { closeMenus(); } catch {}
+        await dockAdminClickRepairOpen20260718(selected);
+        return;
+      }
+
+      if (actionItem.id === "openAllBtn" || text === "open all") {
+        event.preventDefault();
+        event.stopPropagation();
+        event.stopImmediatePropagation?.();
+
+        try { closeMenus(); } catch {}
+        await dockAdminClickRepairOpen20260718(dockAdminClickRepairItems20260718());
+        return;
+      }
+    }
+  }
+
+  const cardButton = hit(".card button, .memoryCard button, .previewCard button");
+  if (cardButton && String(cardButton.textContent || "").trim().toLowerCase() === "open") {
+    const card = cardButton.closest(".card, .memoryCard, .previewCard");
+    const cards = dockAdminClickRepairCards20260718();
+    const index = cards.indexOf(card);
+    const item = dockAdminClickRepairItems20260718()[index];
+
+    if (item?.url) {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation?.();
+      await dockAdminClickRepairOpen20260718([item]);
+      return;
+    }
+  }
+}, true);
+/* === END FINAL CLEAN FIX === */
+
+/* Removed bad managed-background Dock It bridge: it stopped native createGroupBtn clicks. */
+
+/* LICENSE_GATE_PATCH_20260818 */

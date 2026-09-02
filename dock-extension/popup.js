@@ -3,6 +3,7 @@ import { isInternalUrl } from "./core/logic.js";
 import { ensureSignedInInteractive, getAuthSummary, signOut } from "./core/auth.js";
 import { api } from "./adapters/index.js";
 import { getCachedImage, getPreviewIdentity } from "./core/imageCache.js";
+import { applyDockLicenseGateToPage, ensureDockLicenseAllowed } from "./core/license.js";
 
 const DEBUG = false;
 const saveBtn = document.getElementById("saveBtn");
@@ -49,7 +50,7 @@ const THEME_KEY = "dockTheme";
 const DEFAULT_THEME = "dock-green";
 const THEMES = new Set([
   "dock-green",
-  "slate",
+  "smiley-pop",
   "warm",
   "sunset",
   "tie-dye",
@@ -59,11 +60,14 @@ const THEMES = new Set([
   "skipper-harbor"
 ]);
 const THEME_SCENE_ASSETS = {
-  "sunset": "assets/dock-sunset.webp",
+  "sunset": "assets/dock-sunset-hd.png",
   "tie-dye": "assets/tie-dye-bg.webp",
   "rubber-ducky": "assets/rubber-ducky-theme.webp",
-  "crazy-ducky": "assets/crazy-ducky-theme.webp",
-  "skipper-harbor": "assets/skipper-harbor.webp"
+  "crazy-ducky": "assets/cozy-quilt.webp",
+  "skipper-harbor": "assets/skipper-harbor-hd.png",
+  "violet-harbor": "assets/grape-tide.webp",
+  "smiley-pop": "assets/smileys-3d.webp",
+  "warm": "assets/sand-castle-theme.webp"
 };
 
 function applyTheme(theme) {
@@ -413,6 +417,7 @@ workspaceSelect?.addEventListener("change", async () => {
 });
 
 saveBtn?.addEventListener("click", async () => {
+  try { await ensureDockLicenseAllowed(); } catch (err) { alert(err?.message || "Dock license is inactive."); await applyDockLicenseGateToPage({ page: "popup" }); return; }
   if (!(await requirePersonalSignIn())) return;
 
   const [tab] = await api.tabs.query({ active: true, currentWindow: true });
@@ -511,6 +516,7 @@ async function focusOrOpenViewAllAtEnd() {
 }
 
 saveAllBtn?.addEventListener("click", async () => {
+  try { await ensureDockLicenseAllowed(); } catch (err) { alert(err?.message || "Dock license is inactive."); await applyDockLicenseGateToPage({ page: "popup" }); return; }
   if (!(await requirePersonalSignIn())) return;
 
   const reason = reasonInput.value.trim();
@@ -632,6 +638,7 @@ function afterFirstPaint() {
 async function bootPopup() {
   // First paint must stay local and lightweight so the Chrome action popup can surface immediately.
   try { await loadTheme(); } catch {}
+  try { await applyDockLicenseGateToPage({ page: "popup" }); } catch {}
   try { await refreshAuthUi(); } catch {}
   try { await loadWorkspaceOptions(); } catch {}
   try { await loadTabs(); } catch {}
@@ -678,8 +685,12 @@ if (api.storage?.onChanged?.addListener) {
   api.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
     if (changes?.[THEME_KEY]) applyTheme(changes[THEME_KEY].newValue || DEFAULT_THEME);
+    if (changes?.dockPlanState || changes?.dockSimulatedPlanState || changes?.dockLicenseStatus) {
+      applyDockLicenseGateToPage({ page: "popup" }).catch(() => {});
+    }
     if (changes?.savedTabs || changes?.dockGroupItems || changes?.dockGroups) {
       schedulePopupRefresh();
     }
   });
 }
+/* LICENSE_GATE_PATCH_20260818 */
