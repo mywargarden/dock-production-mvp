@@ -1,0 +1,83 @@
+name: Dock Apple Parity Check
+
+on:
+  push:
+    branches:
+      - apple-parity-from-0-3-7
+    paths:
+      - dock-extension/**
+      - apple/**
+      - .github/workflows/apple-parity-check.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Parse Apple manifest
+        run: python3 -m json.tool dock-extension/manifest.json >/dev/null
+
+      - name: Check extension JavaScript syntax
+        run: |
+          find dock-extension -type f -name '*.js' -print0 | xargs -0 -n1 node --check
+
+      - name: Freeze Apple compatibility invariants
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          manifest = json.loads(Path('dock-extension/manifest.json').read_text())
+          perms = set(manifest.get('permissions', []))
+          assert manifest.get('version') == '0.3.7', manifest.get('version')
+          assert 'nativeMessaging' in perms, perms
+          assert 'identity' not in perms, perms
+          assert 'identity.email' not in perms, perms
+          assert manifest.get('background', {}).get('service_worker') == 'background.js'
+
+          adapter = Path('dock-extension/adapters/safariAdapter.js').read_text()
+          assert 'launchWebAuthFlow' in adapter
+          assert 'DOCK_GET_MANAGED_POLICY' in adapter
+          assert 'sendNativeMessage' in adapter
+          assert 'storage' in adapter
+
+          handler = Path('apple/SafariWebExtensionHandler.swift').read_text()
+          assert 'DOCK_GET_MANAGED_POLICY' in handler
+          assert 'SFExtensionMessageKey' in handler
+
+          generator = Path('apple/generate_xcode_project.command').read_text()
+          assert 'safari-web-extension-converter' in generator
+          assert 'dock-extension' in generator
+          print('Apple parity static contract PASS')
+          PY
+
+      - name: Verify old localhost helper is not in current product path
+        run: |
+          if grep -R -nE '127\.0\.0\.1:47831|DockHelper' dock-extension apple; then
+            echo 'Old macOS-only DockHelper leaked into Apple parity candidate.' >&2
+            exit 1
+          fi
+
+      - name: Package Apple source candidate
+        run: |
+          mkdir -p artifact
+          cp -R dock-extension artifact/dock-extension
+          cp -R apple artifact/apple
+          printf '%s\n' "${GITHUB_SHA}" > artifact/APPLE_CANDIDATE_COMMIT.txt
+          cd artifact
+          zip -qr ../dock-apple-parity-0.3.7-source.zip .
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dock-apple-parity-0.3.7-source
+          path: dock-apple-parity-0.3.7-source.zip
+          if-no-files-found: error
