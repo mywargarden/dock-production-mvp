@@ -4,6 +4,7 @@
 // Safari may tear down the action popup as soon as focus leaves it.
 
 import { getAuthSummary, signOut } from "./core/auth.js";
+import { getSavedTabs } from "./core/storage.js";
 import { api } from "./adapters/index.js";
 
 const authBtn = document.getElementById("authBtn");
@@ -21,6 +22,64 @@ function showProgress(text) {
 function targetGroupId() {
   const value = workspaceSelect?.value || "__all__";
   return value === "__all__" ? "" : value;
+}
+
+function normalizeUrl(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  try {
+    const url = new URL(raw);
+    if (!["http:", "https:"].includes(url.protocol)) return "";
+    url.hash = "";
+    const params = [...url.searchParams.entries()]
+      .filter(([key]) => !["utm_source","utm_medium","utm_campaign","utm_term","utm_content","fbclid","gclid"].includes(String(key).toLowerCase()))
+      .sort(([aKey, aValue], [bKey, bValue]) => aKey.localeCompare(bKey) || aValue.localeCompare(bValue));
+    url.search = "";
+    for (const [key, val] of params) url.searchParams.append(key, val);
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return "";
+  }
+}
+
+function isDockInternalUrl(value) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return true;
+  try {
+    const url = new URL(normalized);
+    if (url.hostname !== "dock-production-mvp.vercel.app") return false;
+    const path = url.pathname || "/";
+    return path === "/" || path === "/admin" || path.startsWith("/admin/") || path.startsWith("/api/");
+  } catch {
+    return true;
+  }
+}
+
+async function allEligibleTabsAlreadyDocked(groupId) {
+  const tabs = await api.tabs.query({ currentWindow: true });
+  const eligible = (Array.isArray(tabs) ? tabs : [])
+    .map((tab) => normalizeUrl(tab?.url))
+    .filter((url) => url && !isDockInternalUrl(url));
+
+  if (!eligible.length) return { allDuplicates: false, eligibleCount: 0 };
+
+  let existing = [];
+  if (groupId) {
+    const res = await api.storage.local.get(["dockGroupItems"]);
+    const groupItems = res?.dockGroupItems && typeof res.dockGroupItems === "object" ? res.dockGroupItems : {};
+    existing = Array.isArray(groupItems[groupId]) ? groupItems[groupId] : [];
+  } else {
+    existing = await getSavedTabs({ localOnly: true });
+  }
+
+  const existingUrls = new Set((Array.isArray(existing) ? existing : []).map((item) => normalizeUrl(item?.url)).filter(Boolean));
+  const uniqueEligible = [...new Set(eligible)];
+  const novel = uniqueEligible.filter((url) => !existingUrls.has(url));
+  return {
+    allDuplicates: uniqueEligible.length > 0 && novel.length === 0,
+    eligibleCount: uniqueEligible.length,
+    novelCount: novel.length
+  };
 }
 
 async function beginDurableAuth(action, extra = {}) {
@@ -46,6 +105,24 @@ saveAllBtn?.addEventListener("click", async (event) => {
     const groupId = targetGroupId();
 
     if (auth?.signedIn) {
+      // Safari live 7 found that a second Dock'em All could spend ~30 seconds
+      // recapturing tabs that shared background.js would later reject as URL
+      // duplicates. Prove the no-op case before any capture work begins.
+      const duplicateCheck = await allEligibleTabsAlreadyDocked(groupId);
+      if (duplicateCheck.allDuplicates) {
+        showProgress(`Done — ${duplicateCheck.eligibleCount} already Docked`);
+        try {
+          await api.storage.local.set({
+            dockSafariLastBulkFastPath: {
+              ok: true,
+              skippedDuplicates: duplicateCheck.eligibleCount,
+              at: Date.now()
+            }
+          });
+        } catch {}
+        return;
+      }
+
       showProgress("Starting Dock'em All…");
       const result = await api.runtime.sendMessage({
         type: "SAVE_ALL_OPEN_TABS",
