@@ -1,0 +1,24 @@
+/* Safari/iPad final popup parity layer.
+   popup.css contains years of theme overrides, including older rules that make
+   Dock'em All transparent because it carries the historical .secondary class.
+   Keep Apple rendering deterministic by making the final cascade explicit. */
+
+#saveAllBtn,
+#saveAllBtn.secondary {
+  background: linear-gradient(
+    135deg,
+    var(--primary, #4fb3c5) 0%,
+    var(--primary-2, #7b96e8) 100%
+  ) !important;
+  color: #ffffff !important;
+  border: 1px solid rgba(255,255,255,0.18) !important;
+  box-shadow: 0 8px 18px rgba(20,28,40,0.14), inset 0 1px 0 rgba(255,255,255,0.22) !important;
+  opacity: 1 !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+#saveAllBtn:disabled,
+#saveAllBtn.secondary:disabled {
+  opacity: 0.62 !important;
+}
