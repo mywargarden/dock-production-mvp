@@ -29,12 +29,13 @@ jobs:
           set -euo pipefail
           node --check dock-extension/memories.js
           test "$(node -p "require('./dock-extension/manifest.json').version")" = "0.3.7"
-          grep -q 'noteLabel.textContent = "Notes"' dock-extension/memories.js
-          grep -q 'firstBatch.map((t) => createCard(t))' dock-extension/memories.js
-          grep -q 'chunk.map((t) => createCard(t))' dock-extension/memories.js
-          ! grep -q 'createCard(t, false)' dock-extension/memories.js
-          grep -q 'Dock 0.3.7 personal memory notes restoration' dock-extension/memories.css
-          grep -q 'body\[data-density="compact"\] .dockNoteRow{display:block' dock-extension/memories.css
+          grep -Fq 'noteLabel.textContent = "Notes"' dock-extension/memories.js
+          grep -Fq 'firstBatch.map((t) => createCard(t))' dock-extension/memories.js
+          grep -Fq 'chunk.map((t) => createCard(t))' dock-extension/memories.js
+          ! grep -Fq 'createCard(t, false)' dock-extension/memories.js
+          grep -Fq 'Dock 0.3.7 personal memory notes restoration' dock-extension/memories.css
+          grep -Fq 'body[data-density="compact"] .dockNoteRow{' dock-extension/memories.css
+          grep -Fq 'display:block !important;' dock-extension/memories.css
           test -f dock-extension/RELEASE_NOTES_v0.3.7.md
 
       - name: Commit source candidate
