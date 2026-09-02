@@ -77,9 +77,18 @@ jobs:
           mkdir -p artifact
           cp -R dock-extension artifact/dock-extension
           cp -R apple artifact/apple
+          chmod +x artifact/apple/generate_xcode_project.command
+          cat > artifact/START_DOCK_APPLE.command <<'SH'
+          #!/bin/bash
+          set -e
+          cd "$(dirname "$0")"
+          chmod +x apple/generate_xcode_project.command
+          exec ./apple/generate_xcode_project.command
+          SH
+          chmod +x artifact/START_DOCK_APPLE.command
           printf '%s\n' "${GITHUB_SHA}" > artifact/APPLE_CANDIDATE_COMMIT.txt
           cd artifact
-          zip -qr ../dock-apple-parity-0.3.7-source.zip .
+          zip -qry ../dock-apple-parity-0.3.7-source.zip .
 
       - uses: actions/upload-artifact@v4
         with:
