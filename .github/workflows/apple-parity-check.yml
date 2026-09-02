@@ -42,7 +42,7 @@ jobs:
           assert 'nativeMessaging' in perms, perms
           assert 'identity' not in perms, perms
           assert 'identity.email' not in perms, perms
-          assert manifest.get('background', {}).get('service_worker') == 'background.js'
+          assert manifest.get('background', {}).get('service_worker') == 'apple-background.js'
 
           adapter = Path('dock-extension/adapters/safariAdapter.js').read_text()
           assert 'launchWebAuthFlow' in adapter
@@ -50,11 +50,16 @@ jobs:
           assert 'sendNativeMessage' in adapter
           assert 'storage' in adapter
 
+          bootstrap = Path('dock-extension/apple-background.js').read_text()
+          assert 'DOCK_GET_MANAGED_POLICY' in bootstrap
+          assert 'importScripts("background.js")' in bootstrap
+
           handler = Path('apple/SafariWebExtensionHandler.swift').read_text()
           assert 'DOCK_GET_MANAGED_POLICY' in handler
           assert 'SFExtensionMessageKey' in handler
 
           generator = Path('apple/generate_xcode_project.command').read_text()
+          assert 'safari-web-extension-packager' in generator
           assert 'safari-web-extension-converter' in generator
           assert 'dock-extension' in generator
           print('Apple parity static contract PASS')
