@@ -1704,3 +1704,509 @@ body[data-theme="crazy-ducky"] #saveAllBtn.secondary{
   height: 30% !important;
   border-radius: 999px !important;
 }
+
+/* === POPUP WIDTH LOCK FIX 20260810 ===
+   Fixes oversized Chrome action popup with blank right-side padding.
+   This locks the popup document itself and prevents wide child elements
+   from forcing Chrome's extension popup wider than the content.
+*/
+html,
+body {
+  width: 372px !important;
+  min-width: 372px !important;
+  max-width: 372px !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+body {
+  padding: 12px !important;
+}
+
+body *,
+body *::before,
+body *::after {
+  box-sizing: border-box !important;
+}
+
+body > * {
+  max-width: 100% !important;
+}
+
+.topbar,
+#reason,
+.saveToRow,
+#workspaceSelect,
+.btnRow,
+#tabList,
+.progress,
+.modal,
+.replaceList {
+  width: 100% !important;
+  max-width: 100% !important;
+}
+
+.topbar {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 8px !important;
+  flex-wrap: nowrap !important;
+  overflow: hidden !important;
+}
+
+.brand {
+  flex: 0 0 92px !important;
+  width: 92px !important;
+  min-width: 92px !important;
+  max-width: 92px !important;
+  overflow: hidden !important;
+}
+
+.brandLogo {
+  width: 92px !important;
+  max-width: 92px !important;
+  height: auto !important;
+  display: block !important;
+}
+
+.topActions {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+  max-width: calc(100% - 100px) !important;
+  display: flex !important;
+  justify-content: flex-end !important;
+  align-items: center !important;
+  gap: 8px !important;
+  overflow: hidden !important;
+}
+
+#authBtn.linkBtn,
+#viewAllBtn.linkBtn {
+  width: auto !important;
+  height: 34px !important;
+  min-height: 34px !important;
+  padding: 0 12px !important;
+  border-radius: 18px !important;
+  font-size: 11px !important;
+  white-space: nowrap !important;
+  flex: 0 1 auto !important;
+}
+
+#authBtn.linkBtn {
+  min-width: 84px !important;
+  max-width: 96px !important;
+}
+
+#viewAllBtn.linkBtn {
+  min-width: 106px !important;
+  max-width: 118px !important;
+}
+
+#reason,
+#workspaceSelect {
+  display: block !important;
+  width: 100% !important;
+}
+
+#tabList {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  overflow-x: hidden !important;
+}
+
+.tabItem {
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+}
+
+.tabItem .main,
+.main,
+.title,
+.meta {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+}
+
+.modal {
+  left: 12px !important;
+  right: 12px !important;
+  max-width: calc(100% - 24px) !important;
+}
+
+
+/* === Dock 0.3.5 Smiley Pop === */
+body[data-theme="smiley-pop"]{
+  --bg:#f8fbff; --primary:#58bfe3; --primary-2:#8d78e7;
+  background-image:linear-gradient(rgba(255,255,255,.24),rgba(255,255,255,.24)),url("assets/smiley-pop.svg") !important;
+  background-position:center center !important; background-size:cover !important;
+}
+
+
+/* === Dock 0.3.6 popup theme fidelity === */
+body[data-theme="sunset"]{background:linear-gradient(rgba(255,247,241,.26),rgba(255,241,233,.24)),var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="tie-dye"]{background:linear-gradient(rgba(255,255,255,.20),rgba(255,255,255,.18)),var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="rubber-ducky"]{background:linear-gradient(rgba(255,252,239,.24),rgba(255,248,225,.22)),var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="crazy-ducky"]{background:linear-gradient(rgba(255,250,244,.22),rgba(255,245,236,.20)),var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="smiley-pop"]{background:linear-gradient(rgba(255,255,255,.10),rgba(255,255,255,.08)),url("assets/smileys-3d.svg") center/cover no-repeat fixed !important;}
+body[data-theme="warm"]{background:linear-gradient(rgba(255,255,255,.12),rgba(255,255,255,.08)),url("assets/sand-dunes.svg") center/cover no-repeat fixed !important;}
+body[data-theme="sunset"] .popup-wrap,body[data-theme="tie-dye"] .popup-wrap,body[data-theme="rubber-ducky"] .popup-wrap,body[data-theme="crazy-ducky"] .popup-wrap,body[data-theme="smiley-pop"] .popup-wrap,body[data-theme="warm"] .popup-wrap{background:rgba(255,255,255,.14) !important;backdrop-filter:blur(4px) saturate(1.10) !important;-webkit-backdrop-filter:blur(4px) saturate(1.10) !important;}
+body[data-theme="sunset"] input,body[data-theme="sunset"] select,body[data-theme="tie-dye"] input,body[data-theme="tie-dye"] select,body[data-theme="smiley-pop"] input,body[data-theme="smiley-pop"] select,body[data-theme="warm"] input,body[data-theme="warm"] select{background:rgba(255,255,255,.88) !important;}
+
+/* === Dock 0.3.6 canonical popup contrast delta 20260901 ===
+   Theme-aware readability without re-styling the popup architecture. */
+body[data-theme="skipper-harbor"]{
+  background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;
+}
+/* No broad frosted shell on image themes. */
+body[data-theme="tie-dye"] .popup-wrap,
+body[data-theme="skipper-harbor"] .popup-wrap,
+body[data-theme="smiley-pop"] .popup-wrap,
+body[data-theme="rubber-ducky"] .popup-wrap,
+body[data-theme="crazy-ducky"] .popup-wrap,
+body[data-theme="sunset"] .popup-wrap,
+body[data-theme="warm"] .popup-wrap{
+  background:transparent !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  border-color:transparent !important;
+  box-shadow:none !important;
+}
+/* Dark/busy image themes: exposed copy needs a light foreground. */
+body[data-theme="tie-dye"] .dockFieldLabel,
+body[data-theme="tie-dye"] .sectionLabel,
+body[data-theme="tie-dye"] .title,
+body[data-theme="tie-dye"] .meta,
+body[data-theme="skipper-harbor"] .dockFieldLabel,
+body[data-theme="skipper-harbor"] .sectionLabel,
+body[data-theme="skipper-harbor"] .title,
+body[data-theme="skipper-harbor"] .meta,
+body[data-theme="smiley-pop"] .dockFieldLabel,
+body[data-theme="smiley-pop"] .sectionLabel{
+  color:#ffffff !important;
+  text-shadow:0 1px 4px rgba(13,30,52,.72),0 0 10px rgba(13,30,52,.32) !important;
+}
+/* Keep editable/readable surfaces local and crisp rather than frosting the whole popup. */
+body[data-theme="tie-dye"] input,
+body[data-theme="tie-dye"] select,
+body[data-theme="skipper-harbor"] input,
+body[data-theme="skipper-harbor"] select,
+body[data-theme="smiley-pop"] input,
+body[data-theme="smiley-pop"] select{
+  color:#24344a !important;
+  background:rgba(255,255,255,.92) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+/* Cozy Quilt: every popup action uses white copy. */
+body[data-theme="crazy-ducky"] .linkBtn,
+body[data-theme="crazy-ducky"] #authBtn,
+body[data-theme="crazy-ducky"] #viewAllBtn,
+body[data-theme="crazy-ducky"] #saveBtn,
+body[data-theme="crazy-ducky"] #saveAllBtn,
+body[data-theme="crazy-ducky"] #saveAllBtn.secondary,
+body[data-theme="crazy-ducky"] .secondaryAction,
+body[data-theme="crazy-ducky"] .deleteBtn,
+body[data-theme="crazy-ducky"] button{
+  color:#ffffff !important;
+  text-shadow:0 1px 3px rgba(20,38,64,.28) !important;
+}
+
+
+/* === Dock 0.3.6 approved popup theme restoration 20260901 === */
+body[data-theme="warm"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="smiley-pop"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="violet-harbor"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="tie-dye"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="rubber-ducky"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+body[data-theme="crazy-ducky"]{background:var(--dock-theme-scene,none) center/cover no-repeat fixed !important;}
+
+/* Beach Sunset docked-tab copy must stay readable over the sunset image. */
+body[data-theme="sunset"] .tabItem .title,
+body[data-theme="sunset"] .tabItem .meta,
+body[data-theme="sunset"] #tabList .title,
+body[data-theme="sunset"] #tabList .meta{
+  color:#fff !important;
+  text-shadow:0 1px 4px rgba(48,24,16,.72),0 0 8px rgba(48,24,16,.28) !important;
+}
+
+/* Preserve image visibility: no full-shell frosting on approved image themes. */
+body[data-theme="skipper-harbor"] .popup-wrap,
+body[data-theme="smiley-pop"] .popup-wrap,
+body[data-theme="tie-dye"] .popup-wrap,
+body[data-theme="violet-harbor"] .popup-wrap,
+body[data-theme="warm"] .popup-wrap,
+body[data-theme="sunset"] .popup-wrap,
+body[data-theme="rubber-ducky"] .popup-wrap,
+body[data-theme="crazy-ducky"] .popup-wrap{
+  background:transparent !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  box-shadow:none !important;
+}
+
+/* Cozy Quilt popup buttons: white text on every button state. */
+body[data-theme="crazy-ducky"] button,
+body[data-theme="crazy-ducky"] .linkBtn,
+body[data-theme="crazy-ducky"] #saveBtn,
+body[data-theme="crazy-ducky"] #saveAllBtn,
+body[data-theme="crazy-ducky"] .secondaryAction{
+  color:#fff !important;
+  text-shadow:0 1px 3px rgba(20,38,64,.32) !important;
+}
+
+/* === Dock 0.3.6 popup visual QA correction 20260901-2228 === */
+
+/* Docked-tab cascade: force readable white copy over image themes. */
+body[data-theme="warm"] #tabList .tabItem .title,
+body[data-theme="warm"] #tabList .tabItem .meta,
+body[data-theme="smiley-pop"] #tabList .tabItem .title,
+body[data-theme="smiley-pop"] #tabList .tabItem .meta,
+body[data-theme="violet-harbor"] #tabList .tabItem .title,
+body[data-theme="violet-harbor"] #tabList .tabItem .meta,
+body[data-theme="rubber-ducky"] #tabList .tabItem .title,
+body[data-theme="rubber-ducky"] #tabList .tabItem .meta,
+body[data-theme="crazy-ducky"] #tabList .tabItem .title,
+body[data-theme="crazy-ducky"] #tabList .tabItem .meta,
+body[data-theme="sunset"] #tabList .tabItem .title,
+body[data-theme="sunset"] #tabList .tabItem .meta{
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  text-shadow: 0 1px 3px rgba(7,22,40,.80), 0 0 7px rgba(7,22,40,.36) !important;
+}
+
+/* Cozy Quilt: the docked-tab row itself is not a shaded bubble; only clean white text remains. */
+body[data-theme="crazy-ducky"] #tabList,
+body[data-theme="crazy-ducky"] #tabList .tabItem,
+body[data-theme="crazy-ducky"] #tabList .tabItem:hover,
+body[data-theme="crazy-ducky"] #tabList li{
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
+}
+
+/* Universal popup brand lift: no badge/plate, just controlled edge separation. */
+.topbar .brandLogo,
+.brand .brandLogo{
+  position: relative !important;
+  z-index: 3 !important;
+  filter:
+    drop-shadow(0 1px 1px rgba(255,255,255,.82))
+    drop-shadow(0 3px 7px rgba(9,28,52,.40))
+    drop-shadow(0 0 7px rgba(118,230,238,.22)) !important;
+}
+
+/* === 2026-09-01 popup de-frost + brand lock === */
+/* Keep the theme art visible. Controls are crisp translucent surfaces, never blurred glass. */
+body[data-theme] .popup-wrap,
+body[data-theme] .topbar,
+body[data-theme] .btnRow,
+body[data-theme] #tabList{
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+body[data-theme] #reason,
+body[data-theme] #workspaceSelect{
+  background: rgba(255,255,255,.90) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 0 1px 4px rgba(16,28,44,.10) !important;
+}
+body[data-theme] #tabList .tabItem{
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+body[data-theme="warm"] #tabList .tabItem .title,
+body[data-theme="warm"] #tabList .tabItem .meta,
+body[data-theme="smiley-pop"] #tabList .tabItem .title,
+body[data-theme="smiley-pop"] #tabList .tabItem .meta,
+body[data-theme="violet-harbor"] #tabList .tabItem .title,
+body[data-theme="violet-harbor"] #tabList .tabItem .meta,
+body[data-theme="rubber-ducky"] #tabList .tabItem .title,
+body[data-theme="rubber-ducky"] #tabList .tabItem .meta,
+body[data-theme="crazy-ducky"] #tabList .tabItem .title,
+body[data-theme="crazy-ducky"] #tabList .tabItem .meta,
+body[data-theme="sunset"] #tabList .tabItem .title,
+body[data-theme="sunset"] #tabList .tabItem .meta,
+body[data-theme="tie-dye"] #tabList .tabItem .title,
+body[data-theme="tie-dye"] #tabList .tabItem .meta,
+body[data-theme="skipper-harbor"] #tabList .tabItem .title,
+body[data-theme="skipper-harbor"] #tabList .tabItem .meta{
+  color:#fff !important;
+  -webkit-text-fill-color:#fff !important;
+  text-shadow:0 1px 3px rgba(5,18,36,.88),0 0 8px rgba(5,18,36,.38) !important;
+}
+
+/* === 2026-09-01 final Grape Tide + Cozy Quilt popup readability lock ===
+   These two backgrounds are visually dense; keep only exposed/non-form copy light.
+   Inputs/selects remain dark-on-light for readability. */
+body[data-theme="violet-harbor"] .dockFieldLabel,
+body[data-theme="violet-harbor"] .sectionLabel,
+body[data-theme="violet-harbor"] .topbar .brandName,
+body[data-theme="violet-harbor"] .topbar .brandText,
+body[data-theme="violet-harbor"] .topbar .brandTitle,
+body[data-theme="violet-harbor"] #tabList .title,
+body[data-theme="violet-harbor"] #tabList .meta,
+body[data-theme="crazy-ducky"] .dockFieldLabel,
+body[data-theme="crazy-ducky"] .sectionLabel,
+body[data-theme="crazy-ducky"] .topbar .brandName,
+body[data-theme="crazy-ducky"] .topbar .brandText,
+body[data-theme="crazy-ducky"] .topbar .brandTitle,
+body[data-theme="crazy-ducky"] #tabList .title,
+body[data-theme="crazy-ducky"] #tabList .meta{
+  color:#fff !important;
+  -webkit-text-fill-color:#fff !important;
+  text-shadow:0 1px 3px rgba(6,16,34,.92),0 0 8px rgba(6,16,34,.50) !important;
+}
+
+/* Make the Dock mark itself read cleanly on these two busy themes without a plate. */
+body[data-theme="violet-harbor"] .topbar .brandLogo,
+body[data-theme="violet-harbor"] .brand .brandLogo,
+body[data-theme="crazy-ducky"] .topbar .brandLogo,
+body[data-theme="crazy-ducky"] .brand .brandLogo{
+  filter:
+    drop-shadow(0 0 1px rgba(255,255,255,1))
+    drop-shadow(0 1px 2px rgba(255,255,255,.92))
+    drop-shadow(0 3px 7px rgba(8,18,42,.72))
+    drop-shadow(0 0 8px rgba(112,230,240,.28)) !important;
+}
+
+/* Preserve readable form fields on both themes. */
+body[data-theme="violet-harbor"] #reason,
+body[data-theme="violet-harbor"] #workspaceSelect,
+body[data-theme="crazy-ducky"] #reason,
+body[data-theme="crazy-ducky"] #workspaceSelect{
+  color:#24344a !important;
+  -webkit-text-fill-color:#24344a !important;
+  text-shadow:none !important;
+  background:rgba(255,255,255,.92) !important;
+}
+
+/* === 2026-09-01 final popup lightness + busy-theme logo glow ===
+   Every image theme popup is lifted a touch above its source art. Default stays untouched.
+   This is a flat image-lightening layer, not blur/frosted glass. */
+body[data-theme="skipper-harbor"]::before,
+body[data-theme="warm"]::before,
+body[data-theme="smiley-pop"]::before,
+body[data-theme="violet-harbor"]::before,
+body[data-theme="tie-dye"]::before,
+body[data-theme="sunset"]::before,
+body[data-theme="rubber-ducky"]::before,
+body[data-theme="crazy-ducky"]::before{
+  content:"" !important;
+  position:fixed !important;
+  inset:0 !important;
+  z-index:0 !important;
+  pointer-events:none !important;
+  background:rgba(255,255,255,.075) !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+}
+body[data-theme="skipper-harbor"] > *,
+body[data-theme="warm"] > *,
+body[data-theme="smiley-pop"] > *,
+body[data-theme="violet-harbor"] > *,
+body[data-theme="tie-dye"] > *,
+body[data-theme="sunset"] > *,
+body[data-theme="rubber-ducky"] > *,
+body[data-theme="crazy-ducky"] > *{
+  position:relative !important;
+  z-index:1 !important;
+}
+
+/* Grape Tide + Cozy Quilt need a stronger luminous edge around the transparent Dock PNG. */
+body[data-theme="violet-harbor"] .brandLogo,
+body[data-theme="crazy-ducky"] .brandLogo{
+  filter:
+    drop-shadow(0 0 1px rgba(255,255,255,1))
+    drop-shadow(0 0 3px rgba(255,255,255,.98))
+    drop-shadow(0 0 7px rgba(134,238,255,.92))
+    drop-shadow(0 0 13px rgba(83,205,235,.68))
+    drop-shadow(0 3px 5px rgba(3,13,32,.82)) !important;
+}
+
+/* === 2026-09-01 clean logo + Skipper cascade contrast lock ===
+   Clean transparent logo everywhere; no frosted/baked halo. */
+.topbar .brandLogo,
+.brand .brandLogo{
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter:
+    drop-shadow(0 1px 2px rgba(7,24,44,.52))
+    drop-shadow(0 0 4px rgba(255,255,255,.68))
+    drop-shadow(0 0 7px rgba(77,190,216,.28)) !important;
+}
+
+/* Skipper: navy close X's so they stay visible over bright water. */
+body[data-theme="skipper-harbor"] #tabList .deleteBtn{
+  color:#17324a !important;
+  -webkit-text-fill-color:#17324a !important;
+  text-shadow:0 1px 2px rgba(255,255,255,.55) !important;
+  background:transparent !important;
+  box-shadow:none !important;
+}
+body[data-theme="skipper-harbor"] #tabList .deleteBtn:hover{
+  color:#0d2338 !important;
+  -webkit-text-fill-color:#0d2338 !important;
+}
+
+/* === 2026-09-01 popout brand proportion lock ===
+   Smaller Dock mark in every theme popout; no plate/frosting, only the existing optical lift. */
+.topbar .brand,
+.brand{
+  flex:0 0 66px !important;
+  width:66px !important;
+  min-width:66px !important;
+  max-width:66px !important;
+  overflow:visible !important;
+}
+.topbar .brandLogo,
+.brand .brandLogo,
+.brandLogo{
+  width:66px !important;
+  max-width:66px !important;
+  height:auto !important;
+  display:block !important;
+  background:transparent !important;
+  box-shadow:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  mix-blend-mode:normal !important;
+  filter:
+    drop-shadow(0 1px 2px rgba(7,24,44,.52))
+    drop-shadow(0 0 4px rgba(255,255,255,.72))
+    drop-shadow(0 0 7px rgba(77,190,216,.30)) !important;
+}
+.topActions{
+  max-width:calc(100% - 74px) !important;
+}
+
+/* === 2026-09-01 popout logo final sizing lock ===
+   Keep the Dock mark at button-scale in every theme popout. */
+.topbar .brand,
+.brand{
+  flex:0 0 44px !important;
+  width:44px !important;
+  min-width:44px !important;
+  max-width:44px !important;
+}
+.topbar .brandLogo,
+.brand .brandLogo,
+.brandLogo{
+  width:44px !important;
+  max-width:44px !important;
+  height:auto !important;
+}
+.topActions{
+  max-width:calc(100% - 52px) !important;
+}

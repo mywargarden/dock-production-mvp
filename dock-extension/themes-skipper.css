@@ -110,8 +110,8 @@ body[data-theme="skipper-harbor"]{
 body[data-theme="skipper-harbor"] .header,
 body[data-theme="skipper-harbor"] .groupBar{
   background: var(--skipper-bar-wash) !important;
-  backdrop-filter: blur(14px) saturate(1.06) !important;
-  -webkit-backdrop-filter: blur(14px) saturate(1.06) !important;
+  backdrop-filter: blur(8px) saturate(1.04) !important;
+  -webkit-backdrop-filter: blur(8px) saturate(1.04) !important;
 }
 
 /* keep cards calm and premium */
@@ -182,4 +182,36 @@ body[data-theme="skipper-harbor"] .toggleShell{
 /* theme should stay clean, no global muting */
 body[data-theme="skipper-harbor"] *{
   filter: none !important;
+}
+
+
+/* 0.3.5 Smiley Pop scene */
+body[data-theme="smiley-pop"]{
+  --skipper-scene-image:var(--dock-theme-scene,none);
+  --skipper-scene-overlay:linear-gradient(rgba(255,255,255,.10),rgba(255,255,255,.10));
+  --skipper-bar-wash:rgba(255,255,255,.34);
+}
+
+/* === 2026-09-01 final no-frost lock === */
+body[data-theme="skipper-harbor"]{
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0), rgba(255,255,255,0)) !important;
+  --skipper-bar-wash: transparent !important;
+}
+body[data-theme="tie-dye"]{
+  --skipper-scene-overlay: linear-gradient(rgba(255,255,255,0), rgba(255,255,255,0)) !important;
+  --skipper-bar-wash: transparent !important;
+}
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] #groupBar,
+body[data-theme="skipper-harbor"] .groupBar,
+body[data-theme="tie-dye"] .header,
+body[data-theme="tie-dye"] #groupBar,
+body[data-theme="tie-dye"] .groupBar{
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-color: transparent !important;
 }
