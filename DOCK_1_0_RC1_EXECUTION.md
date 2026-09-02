@@ -18,9 +18,25 @@
   - structured diagnostics
   - paginated audit activity
 - [x] Collapsed Vercel Git realization topology to one canonical consumer: `dock-production-mvp`; detached duplicate `dock-production-mvp-i4b2` and `dock-production-mvp-jywt` projects from the GitHub repository.
+- [x] Verified `/hq-rc1` compiles and serves from the canonical production Vercel project with HTTP 200.
+- [x] Verified representative owner and district-admin API routes fail closed to unauthenticated requests with HTTP 401 and `Missing bearer token`.
+
+### Current convergence checkpoint — 2026-09-02
+
+Observed evidence:
+- Canonical Vercel project `dock-production-mvp` is READY in production.
+- `/hq-rc1` and `/hq-rc1/districts` render from the canonical deployment.
+- The current locally approved extension artifact is Dock `0.3.6`; its zip passes integrity checks and all JavaScript files pass `node --check`.
+- Approved local extension artifact SHA-256: `818411d87c60f39aebc40ec6624430e532385e13250abb4c59b021cf9c9b22c5`.
+
+BLOCKER before destructive 7:
+- The approved Dock 0.3.6 extension artifact is not yet identical to the `dock-extension` tree on the canonical GitHub main branch. The approved theme/assets and latest default background therefore do not yet have one canonical source identity. Do not freeze RC1 until source, artifact, and release identity converge.
+
+Evidence boundary:
+- The HTTP 200/401 checks above prove deployment presence and unauthenticated fail-closed behavior only. They do not prove authenticated owner/admin authorization, tenant isolation, persistence, recovery, or downstream extension delivery.
 
 ### Next convergence work
-- [ ] Verify `/hq-rc1` compiles and deploys from the canonical Vercel project.
+- [ ] Converge the approved Dock 0.3.6 extension artifact into the canonical source/release identity without changing its approved behavior or visual design.
 - [ ] Verify command -> effect -> evidence for account lifecycle in live QA.
 - [ ] Verify workspace compare -> restore -> new live version -> audit in live QA.
 - [ ] Verify theme archive/restore/version restore -> audit in live QA.
@@ -29,7 +45,7 @@
 - [ ] Verify Owner Settings and Releases against the frozen launch kernel; change only if a blocker exists.
 - [ ] Create/confirm permanent QA district, admin, regular user, theme, workspace, and license.
 - [ ] Verify extension/config delivery from that QA district.
-- [ ] Freeze exact RC1 commit + deployment.
+- [ ] Freeze exact RC1 commit + deployment + extension artifact hash.
 
 ## 7 — Ground-truth falsification
 Do not begin destructive 7 until the exact RC1 artifact is frozen.
