@@ -1,0 +1,207 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #f5f7fb;
+  --card: rgba(255, 255, 255, 0.88);
+  --ink: #22324a;
+  --muted: #63728a;
+  --line: rgba(47, 83, 111, 0.14);
+  --blue: #4db8d0;
+  --green: #7bd7bf;
+  --warn: #f3b34c;
+  --bad: #e66b6b;
+  --good: #35a66f;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: linear-gradient(135deg, #edf8fb, #f7f1e8);
+  color: var(--ink);
+}
+
+.shell {
+  width: min(1120px, calc(100vw - 32px));
+  margin: 32px auto;
+}
+
+.hero {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  margin-bottom: 24px;
+}
+
+.logo {
+  width: 104px;
+  height: auto;
+}
+
+.eyebrow {
+  margin: 0 0 4px;
+  color: var(--blue);
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+
+h1 {
+  margin: 0;
+  font-size: 34px;
+  line-height: 1.05;
+}
+
+.sub {
+  margin: 8px 0 0;
+  color: var(--muted);
+}
+
+.statusGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  padding: 20px;
+  box-shadow: 0 18px 48px rgba(37, 57, 80, .10);
+  backdrop-filter: blur(10px);
+}
+
+.card.wide {
+  margin-top: 16px;
+}
+
+h2 {
+  margin: 0 0 14px;
+  font-size: 18px;
+}
+
+dl {
+  margin: 0;
+}
+
+dl > div {
+  display: grid;
+  grid-template-columns: 170px 1fr;
+  gap: 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+dt {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  background: rgba(76, 184, 208, .15);
+  color: #236276;
+}
+
+.badge.good {
+  background: rgba(53, 166, 111, .14);
+  color: var(--good);
+}
+
+.badge.warn {
+  background: rgba(243, 179, 76, .17);
+  color: #9a6500;
+}
+
+.badge.bad {
+  background: rgba(230, 107, 107, .16);
+  color: var(--bad);
+}
+
+pre {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  color: #30445f;
+}
+
+code {
+  background: rgba(47, 83, 111, .09);
+  padding: 2px 6px;
+  border-radius: 7px;
+}
+
+.simPanel p {
+  margin: 0 0 14px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.simActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+#simulatedPolicyStatus {
+  background: rgba(47, 83, 111, .06);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+}
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+button,
+a {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, var(--blue), #6d91e8);
+  color: #fff;
+  font-weight: 800;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+button.secondary {
+  background: linear-gradient(135deg, #91a0b5, #6d7b90);
+}
+
+a {
+  background: linear-gradient(135deg, var(--green), var(--blue));
+}
+
+@media (max-width: 780px) {
+  .statusGrid {
+    grid-template-columns: 1fr;
+  }
+
+  dl > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}

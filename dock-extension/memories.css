@@ -7019,3 +7019,980 @@ body[data-managed-dock="true"] .themeBackdrop {
   background-image: none !important;
   opacity: 0 !important;
 }
+
+/* === Safety: district/admin branding background must never block memory clicks === */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"] [data-district-hidden-watermark="true"] {
+  pointer-events: none !important;
+}
+
+/* Cards and controls must stay clickable above district branding. */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .cardSelect,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button {
+  pointer-events: auto !important;
+}
+
+/* === Admin/District Dock click + visual safety v1 === */
+
+/* District branding must be visual-only. It must never intercept card checks or Dock It. */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"] [data-district-hidden-watermark="true"] {
+  pointer-events: none !important;
+}
+
+/* Keep all controls above district branding. */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupPillsRail,
+body[data-managed-dock="true"] .groupBarRight,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .container,
+body[data-managed-dock="true"] .grid {
+  position: relative !important;
+  z-index: 20 !important;
+}
+
+/* Cards and buttons stay clickable. */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] .selWrap,
+body[data-managed-dock="true"] .cardSelect,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button,
+body[data-managed-dock="true"] .groupPillMenu,
+body[data-managed-dock="true"] .groupPillMenu * {
+  pointer-events: auto !important;
+}
+
+/* Modal must always appear above district/admin branding. */
+.dockModalBackdrop {
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+}
+.dockModal {
+  position: relative !important;
+  z-index: 2147483001 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === Safe district/admin layering fix ===
+   Background branding must be visual-only.
+   Do NOT reposition checkboxes/buttons/cards globally.
+*/
+
+/* Only district/admin visual background layers are non-clickable */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+body[data-managed-dock="true"][data-district-hidden-watermark="true"] {
+  pointer-events: none !important;
+}
+
+/* The actual app shell remains clickable, but we do not alter child positioning */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupPillsRail,
+body[data-managed-dock="true"] .groupBarRight,
+body[data-managed-dock="true"] .workspace,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .container,
+body[data-managed-dock="true"] .grid {
+  z-index: 20 !important;
+}
+
+/* Cards stay above the district background without moving internal checkbox layout */
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard {
+  z-index: 30 !important;
+  pointer-events: auto !important;
+}
+
+/* Buttons/pills stay clickable, but no forced positioning on checkboxes */
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] .groupPill,
+body[data-managed-dock="true"] .groupPill button,
+body[data-managed-dock="true"] .groupPillMenu,
+body[data-managed-dock="true"] .groupPillMenu * {
+  z-index: 50 !important;
+  pointer-events: auto !important;
+}
+
+/* Create/Edit Dock modal must always sit above district branding */
+.modalBackdrop,
+.dockModalBackdrop,
+.workspaceModalBackdrop,
+.createDockBackdrop,
+.backdrop,
+.overlay {
+  z-index: 99998 !important;
+  pointer-events: auto !important;
+}
+
+.modal,
+.dockModal,
+.workspaceModal,
+.createDockModal,
+.dialog,
+[role="dialog"] {
+  z-index: 99999 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === Final admin Dock It click safety === */
+body[data-managed-dock="true"] #createGroupBtn {
+  pointer-events: auto !important;
+  position: relative !important;
+  z-index: 999999 !important;
+}
+
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground {
+  pointer-events: none !important;
+}
+
+/* === FINAL ADMIN BACKGROUND DOCK IT SAFETY ===
+   Managed district/admin branding must never sit above Dock controls or modals. */
+body[data-managed-dock="true"] .dockModalBackdrop {
+  position: fixed !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .dockModal {
+  position: relative !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] #createGroupBtn {
+  position: relative !important;
+  z-index: 100000 !important;
+  pointer-events: auto !important;
+}
+
+/* === FINAL ADMIN BACKGROUND CLICK/MODAL SAFETY === */
+body[data-managed-dock="true"] .dockModalBackdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .dockModal {
+  position: relative !important;
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] #createGroupBtn,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupBar {
+  position: relative !important;
+  z-index: 100000 !important;
+  pointer-events: auto !important;
+}
+
+/* === FINAL: managed admin background must be visual-only === */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+/* Real app controls must stay clickable above visual branding. */
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn {
+  position: relative;
+  z-index: 100000 !important;
+  pointer-events: auto !important;
+}
+
+/* Menus/modals must overlay without reflowing the screen. */
+body[data-managed-dock="true"] #actionsMenu,
+body[data-managed-dock="true"] .actionsMenuPanel {
+  position: absolute !important;
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+  visibility: visible;
+}
+
+body[data-managed-dock="true"] #actionsMenu.hidden {
+  display: none !important;
+}
+
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .workspaceModal {
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === FINAL: admin background is visual only, never a click layer === */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn {
+  position: relative;
+  z-index: 100000 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] #actionsMenu,
+body[data-managed-dock="true"] .actionsMenuPanel,
+body[data-managed-dock="true"] #openSubmenu,
+body[data-managed-dock="true"] #deleteSubmenu,
+body[data-managed-dock="true"] .subMenuPanel {
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .workspaceModal {
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === FINAL: admin background is visual only, never a click layer === */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] input[type="checkbox"],
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] .actionBtn,
+body[data-managed-dock="true"] #createGroupBtn {
+  position: relative;
+  z-index: 100000 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] #actionsMenu,
+body[data-managed-dock="true"] .actionsMenuPanel,
+body[data-managed-dock="true"] #openSubmenu,
+body[data-managed-dock="true"] #deleteSubmenu,
+body[data-managed-dock="true"] .subMenuPanel {
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .workspaceModal {
+  z-index: 2147483647 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === FINAL CLEAN FIX: admin background is visual only; controls stay live === */
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+html.managedDistrictBackgroundActive::before,
+html.managedDistrictBackgroundActive::after,
+body.managedDistrictBackgroundActive::before,
+body.managedDistrictBackgroundActive::after {
+  pointer-events: none !important;
+}
+
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] #groupBar,
+body[data-managed-dock="true"] .groupBar,
+body[data-managed-dock="true"] .actions,
+body[data-managed-dock="true"] .menuWrap,
+body[data-managed-dock="true"] .library,
+body[data-managed-dock="true"] .content,
+body[data-managed-dock="true"] .grid,
+body[data-managed-dock="true"] .card,
+body[data-managed-dock="true"] .memoryCard,
+body[data-managed-dock="true"] .previewCard,
+body[data-managed-dock="true"] button,
+body[data-managed-dock="true"] input[type="checkbox"] {
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] .header,
+body[data-managed-dock="true"] .topBar,
+body[data-managed-dock="true"] .actions,
+body[data-managed-dock="true"] .menuWrap {
+  position: relative !important;
+  z-index: 100000 !important;
+  overflow: visible !important;
+}
+
+body[data-managed-dock="true"] #actionsMenu,
+body[data-managed-dock="true"] .actionsMenuPanel {
+  position: absolute !important;
+  top: calc(100% + 8px) !important;
+  right: 0 !important;
+  left: auto !important;
+  z-index: 100001 !important;
+  pointer-events: auto !important;
+  overflow: visible !important;
+}
+
+body[data-managed-dock="true"] #openSubmenu,
+body[data-managed-dock="true"] #deleteSubmenu,
+body[data-managed-dock="true"] .subMenuPanel {
+  position: static !important;
+  inset: auto !important;
+  z-index: auto !important;
+  pointer-events: auto !important;
+}
+
+body[data-managed-dock="true"] #actionsMenu.hidden,
+body[data-managed-dock="true"] #openSubmenu.hidden,
+body[data-managed-dock="true"] #deleteSubmenu.hidden {
+  display: none !important;
+}
+
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .dockModalBackdrop,
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .workspaceModal {
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+}
+
+
+/* === FINAL DOCK IT ONLY FIX: keep Dock It clickable above managed background === */
+body[data-managed-dock="true"] #createGroupBtn {
+  pointer-events: auto !important;
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+
+/* === DOCK IT NATIVE ADMIN BACKGROUND FIX 20260718 === */
+body[data-managed-dock="true"] #createGroupBtn {
+  pointer-events: auto !important;
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+/* === FINAL DOCK IT ADMIN BACKGROUND BRIDGE 20260718 === */
+body[data-managed-dock="true"] #createGroupBtn {
+  pointer-events: auto !important;
+  z-index: 100002 !important;
+  position: relative !important;
+}
+
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after {
+  pointer-events: none !important;
+}
+
+
+/* VISUAL_ONLY_ADMIN_BACKGROUND_DOCKIT_FIX_20260718
+   Admin/district backgrounds are visual only. They must never catch clicks or
+   sit above the normal Dock It modal flow. */
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockCenterLogo::before,
+body[data-managed-dock="true"] .dockCenterLogo::after,
+body[data-managed-dock="true"] .dockWatermark,
+body[data-managed-dock="true"] .dockWatermark::before,
+body[data-managed-dock="true"] .dockWatermark::after,
+html.managedDistrictBackgroundActive::before,
+html.managedDistrictBackgroundActive::after,
+body.managedDistrictBackgroundActive::before,
+body.managedDistrictBackgroundActive::after {
+  pointer-events: none !important;
+}
+
+body[data-managed-dock="true"] .dockModalBackdrop,
+body[data-managed-dock="true"] .dockModal,
+body[data-managed-dock="true"] .modalBackdrop,
+body[data-managed-dock="true"] .modal,
+body[data-managed-dock="true"] .workspaceModal {
+  pointer-events: auto !important;
+  z-index: 2147483647 !important;
+}
+
+
+/* === REAL_MODAL_VISIBILITY_MANAGED_BACKGROUND_FIX_20260720 ===
+   FINAL OVERRIDE:
+   Admin/managed background may hide/collapse .dockModal and .dockModalBackdrop.
+   Dock creation modal must always remain visible above managed backgrounds.
+*/
+body[data-managed-dock="true"] .dockModalBackdrop,
+body.managedDistrictBackgroundActive .dockModalBackdrop,
+html.managedDistrictBackgroundActive body .dockModalBackdrop,
+.dockModalBackdrop {
+  display: flex !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: fixed !important;
+  inset: 0 !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  min-width: 100vw !important;
+  min-height: 100vh !important;
+  z-index: 2147483000 !important;
+  pointer-events: auto !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(18, 20, 24, 0.42) !important;
+}
+
+body[data-managed-dock="true"] .dockModalBackdrop > .dockModal,
+body[data-managed-dock="true"] .dockModal,
+body.managedDistrictBackgroundActive .dockModal,
+html.managedDistrictBackgroundActive body .dockModal,
+.dockModalBackdrop > .dockModal,
+.dockModal {
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  position: relative !important;
+  width: min(560px, calc(100vw - 40px)) !important;
+  max-width: 560px !important;
+  min-width: min(320px, calc(100vw - 40px)) !important;
+  height: auto !important;
+  min-height: 0 !important;
+  z-index: 2147483001 !important;
+  pointer-events: auto !important;
+}
+
+/* Keep managed background layers behind the modal. */
+body[data-managed-dock="true"]::before,
+body[data-managed-dock="true"]::after,
+body[data-managed-dock="true"] .themeBackdrop,
+body[data-managed-dock="true"] .managedDockBg,
+body[data-managed-dock="true"] .managedDockBackground,
+body[data-managed-dock="true"] .districtDockBg,
+body[data-managed-dock="true"] .districtBackground,
+body[data-managed-dock="true"] .dockCenterLogo,
+body[data-managed-dock="true"] .dockWatermark {
+  pointer-events: none !important;
+}
+
+
+/* === THEME STORE COMING SOON TILE 20260814 === */
+.themeStoreSection .themeWaffleGrid {
+  grid-template-columns: 1fr;
+}
+
+.themeStoreTile,
+.themeMenuPanel .themeStoreTile {
+  height: 92px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  justify-content: center !important;
+  align-items: center !important;
+  background:
+    radial-gradient(circle at 20% 10%, rgba(255,255,255,.58), transparent 30%),
+    linear-gradient(135deg, rgba(43,140,143,.96), rgba(109,145,232,.96)) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,.38) !important;
+}
+
+.themeStoreTile:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 18px 34px rgba(43,140,143,.22) !important;
+}
+
+.themeStoreTitle {
+  display: block;
+  font-size: 16px;
+  font-weight: 950;
+  line-height: 1;
+}
+
+.themeStoreSub {
+  display: block;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  opacity: .86;
+}
+
+
+/* === Dock 0.3.5 theme-menu polish === */
+.themeChoicesSection{ margin-top:0 !important; }
+#themeMenu .themeChoicesSection .themeWaffleGrid{ margin-top:0 !important; }
+#themeMenu .themeStoreSection{ display:flex !important; justify-content:center !important; margin-top:18px !important; }
+#themeMenu .themeStoreSection .themeWaffleGrid{ width:100% !important; grid-template-columns:repeat(3,minmax(0,1fr)) !important; }
+#themeMenu .themeStoreTile{ grid-column:2 !important; text-align:center !important; align-items:center !important; justify-content:center !important; }
+#themeMenu .themeStoreTile .themeStoreTitle,
+#themeMenu .themeStoreTile .themeStoreSub{ width:100% !important; text-align:center !important; }
+#themeMenu .themeItem.themeTile[data-theme="skipper-harbor"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)),url("assets/skipper-harbor.png") !important;
+  filter:saturate(1.06) contrast(1.04) !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="smiley-pop"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.03),rgba(255,255,255,.03)),url("assets/smiley-pop.svg") !important;
+  background-size:cover !important;
+}
+body[data-theme="smiley-pop"]{
+  --bg:#f8fbff; --primary:#58bfe3; --primary-2:#8d78e7;
+  background-image:linear-gradient(rgba(255,255,255,.22),rgba(255,255,255,.22)),url("assets/smiley-pop.svg") !important;
+  background-position:center center !important; background-size:cover !important; background-repeat:no-repeat !important; background-attachment:fixed !important;
+}
+body[data-theme="smiley-pop"] .header, body[data-theme="smiley-pop"] .groupBar{
+  background:rgba(255,255,255,.42) !important; backdrop-filter:blur(10px) saturate(1.08) !important; -webkit-backdrop-filter:blur(10px) saturate(1.08) !important;
+}
+body[data-theme="smiley-pop"] .actionBtn, body[data-theme="smiley-pop"] .linkBtn, body[data-theme="smiley-pop"] .saveBtn, body[data-theme="smiley-pop"] .openBtn{
+  background:linear-gradient(135deg,#55c8e7,#8d78e7) !important; color:#fff !important;
+}
+
+
+/* === Dock 0.3.6 visual polish === */
+#themeMenu .themeItem.themeTile{color:#fff !important;text-shadow:0 2px 7px rgba(16,31,48,.72) !important;}
+#themeMenu .themeItem.themeTile[data-theme="crazy-ducky"]{color:#fff !important;}
+#themeMenu .themeItem.themeTile[data-theme="skipper-harbor"]::before{background-image:linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02)),url("assets/skipper-harbor-hd.png") !important;filter:saturate(1.10) contrast(1.06) !important;}
+#themeMenu .themeItem.themeTile[data-theme="sunset"]::before{background-image:linear-gradient(rgba(255,243,232,.03),rgba(255,243,232,.03)),url("assets/dock-sunset-hd.png") !important;filter:saturate(1.12) contrast(1.08) !important;}
+#themeMenu .themeItem.themeTile[data-theme="warm"]::before{background-image:linear-gradient(rgba(255,255,255,.04),rgba(255,255,255,.04)),url("assets/sand-dunes.svg") !important;background-size:cover !important;}
+#themeMenu .themeItem.themeTile[data-theme="smiley-pop"]::before{background-image:linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02)),url("assets/smileys-3d.svg") !important;background-size:cover !important;}
+body[data-theme="smiley-pop"]{background-image:linear-gradient(rgba(255,255,255,.06),rgba(255,255,255,.06)),url("assets/smileys-3d.svg") !important;}
+body[data-theme="warm"]{--bg:linear-gradient(rgba(255,255,255,.08),rgba(255,255,255,.08)),var(--dock-theme-scene,none) center/cover fixed !important;background:var(--bg) !important;}
+
+/* === Dock 0.3.6 canonical theme delta 20260901 ===
+   Narrow visual-only correction: preserve approved assets and behavior. */
+/* Tie Dye + Skipper: image must flow cleanly behind the top chrome; no frosting. */
+body[data-theme="tie-dye"] .header,
+body[data-theme="tie-dye"] #groupBar,
+body[data-theme="tie-dye"] .groupBar,
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] #groupBar,
+body[data-theme="skipper-harbor"] .groupBar{
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+body[data-theme="skipper-harbor"]{
+  --bg: var(--dock-theme-scene, none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+/* Cozy Quilt: all actionable button copy stays white. */
+body[data-theme="crazy-ducky"] .actionBtn,
+body[data-theme="crazy-ducky"] #refreshBtn,
+body[data-theme="crazy-ducky"] #adminWorkspaceBtn,
+body[data-theme="crazy-ducky"] .groupCreateBtn,
+body[data-theme="crazy-ducky"] .row button,
+body[data-theme="crazy-ducky"] .dockBtn,
+body[data-theme="crazy-ducky"] .groupPill,
+body[data-theme="crazy-ducky"] #densityToggleBtn,
+body[data-theme="crazy-ducky"] #densityToggleBtn .densityKnob{
+  color:#ffffff !important;
+  text-shadow:0 1px 3px rgba(20,38,64,.30) !important;
+}
+
+
+/* === Dock 0.3.6 approved theme asset restoration 20260901 ===
+   User-approved image set only. No behavior changes. */
+body[data-theme="warm"]{
+  --bg: linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+body[data-theme="smiley-pop"]{
+  --bg: linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+body[data-theme="violet-harbor"]{
+  --bg: linear-gradient(rgba(28,13,70,.02),rgba(28,13,70,.02)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+body[data-theme="tie-dye"]{
+  --bg: linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+body[data-theme="rubber-ducky"]{
+  --bg: linear-gradient(rgba(255,255,255,.015),rgba(255,255,255,.015)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+body[data-theme="crazy-ducky"]{
+  --bg: linear-gradient(rgba(255,255,255,.015),rgba(255,255,255,.015)), var(--dock-theme-scene,none) center/cover fixed !important;
+  background: var(--bg) !important;
+}
+
+/* Approved thumbnails */
+#themeMenu .themeItem.themeTile[data-theme="warm"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.02),rgba(255,255,255,.02)),url("assets/sand-castle-theme.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="smiley-pop"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)),url("assets/smileys-3d.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="violet-harbor"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)),url("assets/grape-tide.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="tie-dye"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)),url("assets/tie-dye-bg.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="rubber-ducky"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)),url("assets/rubber-ducky-theme.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+#themeMenu .themeItem.themeTile[data-theme="crazy-ducky"]::before{
+  background-image:linear-gradient(rgba(255,255,255,.01),rgba(255,255,255,.01)),url("assets/cozy-quilt.webp") !important;
+  background-size:cover !important; background-position:center !important;
+}
+
+/* No frosted top strip on approved image themes. */
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] #groupBar,
+body[data-theme="skipper-harbor"] .groupBar,
+body[data-theme="smiley-pop"] .header,
+body[data-theme="smiley-pop"] #groupBar,
+body[data-theme="smiley-pop"] .groupBar,
+body[data-theme="tie-dye"] .header,
+body[data-theme="tie-dye"] #groupBar,
+body[data-theme="tie-dye"] .groupBar{
+  background:transparent !important;
+  background-color:transparent !important;
+  background-image:none !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  border-color:transparent !important;
+  box-shadow:none !important;
+}
+body[data-theme="skipper-harbor"] .header::before,
+body[data-theme="skipper-harbor"] .header::after,
+body[data-theme="skipper-harbor"] #groupBar::before,
+body[data-theme="skipper-harbor"] #groupBar::after,
+body[data-theme="smiley-pop"] .header::before,
+body[data-theme="smiley-pop"] .header::after,
+body[data-theme="smiley-pop"] #groupBar::before,
+body[data-theme="smiley-pop"] #groupBar::after,
+body[data-theme="tie-dye"] .header::before,
+body[data-theme="tie-dye"] .header::after,
+body[data-theme="tie-dye"] #groupBar::before,
+body[data-theme="tie-dye"] #groupBar::after{
+  background:transparent !important;
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  box-shadow:none !important;
+}
+
+/* Cozy Quilt main controls: white labels everywhere. */
+body[data-theme="crazy-ducky"] .actionBtn,
+body[data-theme="crazy-ducky"] .actions button,
+body[data-theme="crazy-ducky"] .groupCreateBtn,
+body[data-theme="crazy-ducky"] .dockBtn,
+body[data-theme="crazy-ducky"] .row button,
+body[data-theme="crazy-ducky"] .groupPill,
+body[data-theme="crazy-ducky"] #densityToggleBtn,
+body[data-theme="crazy-ducky"] #densityToggleBtn *{
+  color:#fff !important;
+  text-shadow:0 1px 3px rgba(20,38,64,.34) !important;
+}
+
+/* === Dock 0.3.6 visual QA correction 20260901-2228 ===
+   Ground truth: user screenshots. Visual-only; no behavior changes. */
+
+/* Skipper + Tie Dye: absolutely no frosted/header plate. Let the scene run continuously. */
+body[data-theme="skipper-harbor"] .header,
+body[data-theme="skipper-harbor"] #groupBar,
+body[data-theme="skipper-harbor"] .groupBar,
+body[data-theme="tie-dye"] .header,
+body[data-theme="tie-dye"] #groupBar,
+body[data-theme="tie-dye"] .groupBar{
+  background: none !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border: 0 !important;
+  opacity: 1 !important;
+}
+body[data-theme="skipper-harbor"] .header::before,
+body[data-theme="skipper-harbor"] .header::after,
+body[data-theme="skipper-harbor"] #groupBar::before,
+body[data-theme="skipper-harbor"] #groupBar::after,
+body[data-theme="skipper-harbor"] .groupBar::before,
+body[data-theme="skipper-harbor"] .groupBar::after,
+body[data-theme="tie-dye"] .header::before,
+body[data-theme="tie-dye"] .header::after,
+body[data-theme="tie-dye"] #groupBar::before,
+body[data-theme="tie-dye"] #groupBar::after,
+body[data-theme="tie-dye"] .groupBar::before,
+body[data-theme="tie-dye"] .groupBar::after{
+  content: none !important;
+  display: none !important;
+  background: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+}
+
+/* Universal brand lift: preserve the logo itself, add only optical separation. */
+.brandHeader .brandLogo,
+.header .brandLogo{
+  position: relative !important;
+  z-index: 2 !important;
+  filter:
+    drop-shadow(0 2px 1px rgba(255,255,255,.72))
+    drop-shadow(0 4px 9px rgba(11,31,55,.32))
+    drop-shadow(0 0 8px rgba(116,224,235,.20)) !important;
+}
+.brandHeader .safeHarborText,
+.brandHeader .brandText{
+  position: relative !important;
+  z-index: 2 !important;
+  text-shadow:
+    0 1px 1px rgba(255,255,255,.66),
+    0 2px 6px rgba(14,34,56,.22) !important;
+}
+
+/* === 2026-09-01 logo cleanup lock ===
+   Use the clean transparent Dock mark. No baked white/frosted plate; only a controlled glow. */
+.brandHeader .brandLogo,
+.header .brandLogo{
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter:
+    drop-shadow(0 1px 2px rgba(7,24,44,.48))
+    drop-shadow(0 0 4px rgba(255,255,255,.62))
+    drop-shadow(0 0 7px rgba(77,190,216,.24)) !important;
+}
+
+/* === 2026-09-01 brand proportion + Safe Harbor color lock ===
+   Main theme header: larger Dock mark. Popout is handled separately in popup.css. */
+.header .brandHeader .brandLogo,
+.brandHeader .brandLogo{
+  height: 54px !important;
+  width: auto !important;
+  max-width: none !important;
+  flex: 0 0 auto !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  filter:
+    drop-shadow(0 1px 2px rgba(7,24,44,.48))
+    drop-shadow(0 0 4px rgba(255,255,255,.70))
+    drop-shadow(0 0 7px rgba(77,190,216,.26)) !important;
+}
+
+/* Safe Harbor follows the cyan-to-deep-blue Dock palette on every theme. */
+.header .brandText h1,
+.header .safeHarborText h1,
+.brandHeader .brandText h1,
+.brandHeader .safeHarborText h1{
+  color:#148fbd !important;
+  background:linear-gradient(180deg,#12b7d8 0%,#177fae 52%,#214b8e 100%) !important;
+  -webkit-background-clip:text !important;
+  background-clip:text !important;
+  -webkit-text-fill-color:transparent !important;
+  text-shadow:0 1px 1px rgba(255,255,255,.58),0 2px 4px rgba(9,33,58,.18) !important;
+}
+
+/* Fine white edge so the tagline survives both bright and dark artwork without a plate. */
+.header .brandText .muted,
+.header .safeHarborText .muted,
+.brandHeader .brandText .muted,
+.brandHeader .safeHarborText .muted{
+  color:#29445f !important;
+  -webkit-text-fill-color:#29445f !important;
+  -webkit-text-stroke:.28px rgba(255,255,255,.92) !important;
+  paint-order:stroke fill !important;
+  text-shadow:
+    0 0 2px rgba(255,255,255,.95),
+    0 1px 1px rgba(255,255,255,.78),
+    0 2px 4px rgba(8,28,48,.22) !important;
+}
+
+@media (max-width: 900px){
+  .header .brandHeader .brandLogo,
+  .brandHeader .brandLogo{height:48px !important;}
+}
+
+/* === Dock 0.3.6 default theme background final 20260901 ===
+   User-approved full-scene default background. */
+body[data-theme="dock-green"],
+body[data-theme="dock-default"]{
+  --bg: url("assets/dock-default-theme-20260901.png") center center / cover fixed no-repeat !important;
+  background: var(--bg) !important;
+}
+body[data-theme="dock-green"]::before,
+body[data-theme="dock-default"]::before{
+  content: none !important;
+  display: none !important;
+}

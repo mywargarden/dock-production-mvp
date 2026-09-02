@@ -167,20 +167,210 @@ function stripHeavyFields(tab) {
   return next;
 }
 
+function dockPreviewScoreForLite20260721(value) {
+  const s = String(value || "").trim();
+  if (!s) return -1;
+  if (/screenshot-unavailable/i.test(s)) return -1;
+
+  const isDataImage = /^data:image\//i.test(s);
+  const isRemote = /^https?:\/\//i.test(s);
+  const isFavicon = /google\.com\/s2\/favicons|favicon\.ico|apple-touch-icon|\/favicon/i.test(s);
+
+  // Prefer real saved screenshots / meaningful data images over tiny favicons.
+  if (isDataImage && s.length > 30000) return 1000000 + s.length;
+  if (isDataImage && s.length > 1000) return 500000 + s.length;
+  if (isRemote && !isFavicon) return 250000 + s.length;
+  if (isDataImage) return 10000 + s.length;
+  if (isRemote) return 1000 + s.length;
+  return s.length;
+}
+
+function dockBestPreviewForLite20260721(tab) {
+  const fields = [
+    "screenshot_url",
+    "screenshotUrl",
+    "screenshotThumb",
+    "screenshot",
+    "screenshot_data_url",
+    "screenshotDataUrl",
+    "previewImage",
+    "previewUrl",
+    "thumbnail",
+    "thumbnailUrl",
+    "image",
+    "imageUrl",
+    "image_url",
+    "customIcon",
+    "icon_url",
+    "iconUrl",
+    "faviconUrl",
+    "favIconUrl"
+  ];
+
+  let best = "";
+  let bestScore = -1;
+
+  for (const field of fields) {
+    const candidate = String(tab?.[field] || "").trim();
+    const score = dockPreviewScoreForLite20260721(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return bestScore > 0 ? best : "";
+}
+
+
+function dockPreviewScoreForSave20260721(value) {
+  const s = String(value || "").trim();
+  if (!s) return -1;
+  if (/screenshot-unavailable/i.test(s)) return -1;
+
+  const isDataImage = /^data:image\//i.test(s);
+  const isRemote = /^https?:\/\//i.test(s);
+  const isFavicon = /google\.com\/s2\/favicons|favicon\.ico|apple-touch-icon|\/favicon/i.test(s);
+
+  if (isDataImage && s.length > 30000) return 100000000 + s.length;
+  if (isDataImage && s.length > 1000) return 50000000 + s.length;
+  if (isRemote && !isFavicon) return 20000000 + s.length;
+  if (isDataImage) return 1000000 + s.length;
+  if (isRemote && isFavicon) return 1000 + s.length;
+  if (isRemote) return 500000 + s.length;
+  return s.length;
+}
+
+function dockBestPreviewForSave20260721(tab) {
+  const fields = [
+    "screenshot_url",
+    "screenshotUrl",
+    "screenshotThumb",
+    "screenshot",
+    "screenshot_data_url",
+    "screenshotDataUrl",
+    "screenshotDataURI",
+    "previewImage",
+    "previewUrl",
+    "preview_url",
+    "thumbnail",
+    "thumbnailUrl",
+    "thumbnail_url",
+    "image",
+    "imageUrl",
+    "image_url",
+    "customIcon",
+    "icon_url",
+    "iconUrl",
+    "faviconUrl",
+    "favIconUrl",
+    "favicon"
+  ];
+
+  let best = "";
+  let bestScore = -1;
+
+  for (const field of fields) {
+    const candidate = String(tab?.[field] || "").trim();
+    const score = dockPreviewScoreForSave20260721(candidate);
+    if (score > bestScore) {
+      best = candidate;
+      bestScore = score;
+    }
+  }
+
+  return { value: bestScore > 0 ? best : "", score: bestScore };
+}
+
+function dockApplyPreviewForSave20260721(tab, preview) {
+  const out = { ...(tab || {}) };
+  const value = String(preview || "").trim();
+  if (!value) return out;
+
+  // Normalize the winning preview into the fields the renderer/importer actually trust.
+  out.screenshot_url = value;
+  out.screenshotUrl = value;
+  out.screenshotThumb = value;
+
+  out.previewMissing = false;
+  out.screenshotBlocked = false;
+  out.previewCheckedAt = Number(out.previewCheckedAt || 0) || Date.now();
+
+  return out;
+}
+
+async function dockPreservePreviewsAcrossSave20260721(nextTabs, previousTabs) {
+  /* SAVE_PREVIEW_PRESERVE_BY_URL_FIX_20260721
+     Drag/reorder may pass setSavedTabs() a reordered list whose current objects
+     already lost the full screenshot and only carry a favicon. Before writing
+     savedTabs, recover the best preview by URL from previous savedTabs,
+     savedTabsLite, dockManagedWorkspace, and the incoming tabs.
+  */
+  const next = Array.isArray(nextTabs) ? nextTabs : [];
+  const previous = Array.isArray(previousTabs) ? previousTabs : [];
+
+  let lite = [];
+  let managedTabs = [];
+
+  try {
+    const res = await api.storage.local.get([SAVED_TABS_LITE_KEY, MANAGED_WS_KEY]);
+    lite = Array.isArray(res?.[SAVED_TABS_LITE_KEY]) ? res[SAVED_TABS_LITE_KEY] : [];
+    managedTabs = Array.isArray(res?.[MANAGED_WS_KEY]?.tabs) ? res[MANAGED_WS_KEY].tabs : [];
+  } catch {}
+
+  const bestByUrl = new Map();
+
+  const addSource = (tab) => {
+    const key = normalizeUrl(tab?.url || "") || String(tab?.local_id || tab?.id || "");
+    if (!key) return;
+
+    const best = dockBestPreviewForSave20260721(tab);
+    if (!best.value) return;
+
+    const current = bestByUrl.get(key);
+    if (!current || best.score > current.score) {
+      bestByUrl.set(key, best);
+    }
+  };
+
+  previous.forEach(addSource);
+  lite.forEach(addSource);
+  managedTabs.forEach(addSource);
+  next.forEach(addSource);
+
+  return next.map((tab) => {
+    const key = normalizeUrl(tab?.url || "") || String(tab?.local_id || tab?.id || "");
+    const currentBest = dockBestPreviewForSave20260721(tab);
+    const storedBest = key ? bestByUrl.get(key) : null;
+
+    const chosen =
+      storedBest && storedBest.score > currentBest.score
+        ? storedBest.value
+        : currentBest.value;
+
+    return chosen
+      ? dockApplyPreviewForSave20260721(tab, chosen)
+      : { ...(tab || {}) };
+  });
+}
+
 function toPrunedLocalTab(tab) {
   if (!tab || typeof tab !== "object") return tab;
-  const next = { ...tab };
-  const thumb = String(next.screenshot_url || next.screenshotUrl || next.screenshotThumb || next.screenshot || next.screenshot_data_url || "").trim();
-  if (thumb) {
-    next.screenshotThumb = thumb;
-    next.previewMissing = false;
-    next.previewCheckedAt = Number(next.previewCheckedAt || 0) || Date.now();
+
+  let next = { ...tab };
+  const best = dockBestPreviewForSave20260721(next);
+
+  if (best.value) {
+    next = dockApplyPreviewForSave20260721(next, best.value);
   } else if (!isHydratableUrl(next.url || "") || next.screenshotBlocked) {
     next.previewMissing = true;
     next.previewCheckedAt = Number(next.previewCheckedAt || 0) || Date.now();
   }
+
+  // Keep savedTabs light, but preserve the normalized screenshot_url/screenshotThumb fields.
   delete next.screenshot;
   delete next.screenshot_data_url;
+
   return next;
 }
 
@@ -521,10 +711,37 @@ function normalizePlanState(raw) {
     ...base,
     label: sanitizeText(raw?.label || base.label, 40),
     source: sanitizeText(raw?.source || "local", 40),
+    status: sanitizeText(raw?.status || raw?.licenseStatus || "active", 40).toLowerCase(),
+    expiresAt: sanitizeText(raw?.expiresAt || raw?.expirationDate || "", 80),
+    graceUntil: sanitizeText(raw?.graceUntil || "", 80),
+    minExtensionVersion: sanitizeText(raw?.minExtensionVersion || raw?.minimumExtensionVersion || "", 40),
     maxPersonalItems: Number.isFinite(maxPersonalItems) && maxPersonalItems > 0 ? maxPersonalItems : base.maxPersonalItems,
     maxWorkspaces: Number.isFinite(maxWorkspaces) && maxWorkspaces > 0 ? maxWorkspaces : base.maxWorkspaces,
     maxUsers: Number.isFinite(maxUsers) && maxUsers > 0 ? maxUsers : (base.maxUsers || null)
   };
+}
+
+/* === LICENSE ENFORCEMENT 20260818 === */
+const LICENSE_BLOCKED_STATUSES = new Set(["suspended", "inactive", "expired", "canceled", "cancelled", "disabled", "terminated"]);
+function licenseDateMs(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+function isPlanLicenseBlocked(plan) {
+  const status = sanitizeText(plan?.status || "active", 40).toLowerCase();
+  if (LICENSE_BLOCKED_STATUSES.has(status)) return true;
+  const expiresAt = licenseDateMs(plan?.expiresAt);
+  const graceUntil = licenseDateMs(plan?.graceUntil);
+  if (expiresAt && Date.now() > expiresAt && (!graceUntil || Date.now() > graceUntil)) return true;
+  return false;
+}
+function licenseBlockedMessage(plan) {
+  const status = sanitizeText(plan?.status || "inactive", 40).toLowerCase();
+  if (status === "expired") return "Dock license has expired.";
+  if (status === "suspended") return "Dock is inactive for this district.";
+  return "Dock license is inactive.";
 }
 
 function validateManagedPayload(payload) {
@@ -570,6 +787,10 @@ function validateManagedPayload(payload) {
     license: normalizePlanState({
       plan: license.plan || "district",
       label: license.label || "District",
+      status: license.status || license.licenseStatus || "active",
+      expiresAt: license.expiresAt || license.expirationDate || "",
+      graceUntil: license.graceUntil || "",
+      minExtensionVersion: license.minExtensionVersion || license.minimumExtensionVersion || "",
       maxUsers: license.maxUsers,
       source: "managed"
     })
@@ -672,7 +893,8 @@ export async function getSavedTabsLite(options = {}) {
 
 export async function setSavedTabs(savedTabs, options = {}) {
   const previous = await getSavedTabsLocal();
-  const nextTabs = filterMemoryTabs(savedTabs);
+  const nextTabsRaw = filterMemoryTabs(savedTabs);
+  const nextTabs = await dockPreservePreviewsAcrossSave20260721(nextTabsRaw, previous);
   const nextLiteTabs = makeSavedTabsLite(nextTabs);
   if (JSON.stringify(previous || []) === JSON.stringify(nextTabs)) return;
 
@@ -690,7 +912,13 @@ export async function setSavedTabs(savedTabs, options = {}) {
   if (explicitRemovedTabs.length) await addDeletedTombstonesForTabs(explicitRemovedTabs);
   if (addedTabs.length) await clearDeletedTombstonesForTabs(addedTabs);
 
-  await api.storage.local.set({ savedTabs: nextLiteTabs, [SAVED_TABS_LITE_KEY]: nextLiteTabs });
+  /* SAVEDTABS_FULL_LOCAL_STORE_FIX_20260729
+   savedTabs must store the full canonical memory objects.
+   savedTabsLite is the pruned/light cache.
+   Writing nextLiteTabs into savedTabs caused drag/drop reorder to replace
+   real screenshots with tiny favicon/remote icon previews.
+*/
+await api.storage.local.set({ savedTabs: nextTabs, [SAVED_TABS_LITE_KEY]: nextLiteTabs });
   syncSavedTabsDiff(previous, nextTabs)
     .then(async () => {
       if (explicitRemovedTabs.length) {
@@ -939,6 +1167,12 @@ export async function getTotalPersonalMemoryCount() {
 
 export async function assertCanSavePersonalMemory() {
   const plan = await getPlanState();
+  if (isPlanLicenseBlocked(plan)) {
+    const err = new Error(licenseBlockedMessage(plan));
+    err.code = "LICENSE_BLOCKED";
+    err.plan = plan;
+    throw err;
+  }
   if (!Number.isFinite(plan.maxPersonalItems)) return { ok: true, plan };
   const count = await getTotalPersonalMemoryCount();
   if (count >= plan.maxPersonalItems) throw "LIMIT_REACHED";
@@ -960,7 +1194,7 @@ export async function saveTab(tab, { skipDuplicates = true } = {}) {
 }
 
 export async function deleteTab(index) {
-  const previousTabs = await getSavedTabsLocal();
+  const previousTabs = await getSavedTabs({ localOnly: true });
   const removed = previousTabs[index] ? [previousTabs[index]] : [];
   const savedTabs = [...previousTabs];
   savedTabs.splice(index, 1);

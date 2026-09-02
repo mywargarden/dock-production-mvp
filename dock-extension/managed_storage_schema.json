@@ -36,6 +36,22 @@
     "supabaseAnonKey": {
       "type": "string",
       "title": "Dock Supabase anon key"
+    },
+    "districtId": {
+      "type": "string",
+      "title": "Dock district ID"
+    },
+    "licenseStatus": {
+      "type": "string",
+      "title": "Dock license status"
+    },
+    "licenseExpiresAt": {
+      "type": "string",
+      "title": "Dock license expiration ISO date"
+    },
+    "licenseGraceUntil": {
+      "type": "string",
+      "title": "Dock license grace-until ISO date"
     }
   }
 }

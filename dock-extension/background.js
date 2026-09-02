@@ -20,6 +20,32 @@ const BACKGROUND_MANAGED_SYNC_TTL_MS = 3 * 60 * 60 * 1000;
 
 const PERSONAL_MEMORIES_API = `${DEFAULT_API_BASE_URL}/api/user/memories`;
 
+/* === LICENSE ENFORCEMENT 20260818 === */
+const LICENSE_BLOCKED_STATUSES = new Set(["suspended", "inactive", "expired", "canceled", "cancelled", "disabled", "terminated"]);
+function licenseDateMs20260818(value) {
+  const numeric = Number(value);
+  if (Number.isFinite(numeric) && numeric > 0) return numeric;
+  const parsed = Date.parse(String(value || ""));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+function isLicenseBlocked20260818(plan = {}) {
+  const status = String(plan?.status || plan?.licenseStatus || "active").trim().toLowerCase();
+  if (LICENSE_BLOCKED_STATUSES.has(status)) return true;
+  const expiresAt = licenseDateMs20260818(plan?.expiresAt || plan?.expirationDate);
+  const graceUntil = licenseDateMs20260818(plan?.graceUntil);
+  if (expiresAt && Date.now() > expiresAt && (!graceUntil || Date.now() > graceUntil)) return true;
+  return false;
+}
+async function ensureBackgroundLicenseAllowed20260818() {
+  const res = await api.storage.local.get([PLAN_KEY, "dockSimulatedPlanState"]);
+  const plan = { ...(res[PLAN_KEY] || {}), ...(res.dockSimulatedPlanState || {}) };
+  if (!isLicenseBlocked20260818(plan)) return { ok: true, plan };
+  const err = new Error("Dock license is inactive for this district.");
+  err.code = "LICENSE_BLOCKED";
+  err.plan = plan;
+  throw err;
+}
+
 async function getDockAuthToken() {
   try {
     const res = await api.storage.local.get(["dockAuthSession"]);
@@ -425,6 +451,10 @@ function normalizePlanState(raw) {
   const maxPersonalItems = Number(raw?.maxPersonalItems);
   return {
     ...base,
+    status: sanitizeText(raw?.status || raw?.licenseStatus || "active", 40).toLowerCase(),
+    expiresAt: sanitizeText(raw?.expiresAt || raw?.expirationDate || "", 80),
+    graceUntil: sanitizeText(raw?.graceUntil || "", 80),
+    minExtensionVersion: sanitizeText(raw?.minExtensionVersion || raw?.minimumExtensionVersion || "", 40),
     maxPersonalItems: Number.isFinite(maxPersonalItems) && maxPersonalItems > 0 ? maxPersonalItems : base.maxPersonalItems
   };
 }
@@ -451,10 +481,74 @@ async function ensureCanSavePersonalMemory() {
 function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
 
 function makeSavedTabsLite(tabs = []) {
+  /* BACKGROUND_SAVEDTABS_LITE_BEST_PREVIEW_FIX_20260721
+     Keep the best real preview when background saves personal memories.
+     Do not let a tiny favicon overwrite an existing screenshot during reorder/sync.
+  */
+  const fields = [
+    "screenshot_url",
+    "screenshotUrl",
+    "screenshotThumb",
+    "screenshot",
+    "screenshot_data_url",
+    "screenshotDataUrl",
+    "previewImage",
+    "previewUrl",
+    "thumbnail",
+    "thumbnailUrl",
+    "image",
+    "imageUrl",
+    "image_url",
+    "customIcon",
+    "icon_url",
+    "iconUrl",
+    "faviconUrl",
+    "favIconUrl"
+  ];
+
+  function score(value) {
+    const s = String(value || "").trim();
+    if (!s) return -1;
+    if (/screenshot-unavailable/i.test(s)) return -1;
+
+    const isDataImage = /^data:image\//i.test(s);
+    const isRemote = /^https?:\/\//i.test(s);
+    const isFavicon = /google\.com\/s2\/favicons|favicon\.ico|apple-touch-icon|\/favicon/i.test(s);
+
+    if (isDataImage && s.length > 30000) return 1000000 + s.length;
+    if (isDataImage && s.length > 1000) return 500000 + s.length;
+    if (isRemote && !isFavicon) return 250000 + s.length;
+    if (isDataImage) return 10000 + s.length;
+    if (isRemote) return 1000 + s.length;
+    return s.length;
+  }
+
+  function bestPreview(tab) {
+    let best = "";
+    let bestScore = -1;
+
+    for (const field of fields) {
+      const candidate = String(tab?.[field] || "").trim();
+      const candidateScore = score(candidate);
+      if (candidateScore > bestScore) {
+        best = candidate;
+        bestScore = candidateScore;
+      }
+    }
+
+    return bestScore > 0 ? best : "";
+  }
+
   return (Array.isArray(tabs) ? tabs : []).map((tab) => {
     const next = { ...(tab || {}) };
-    const thumb = String(next.screenshot_url || next.screenshotUrl || next.screenshotThumb || next.screenshot || next.screenshot_data_url || "").trim();
-    if (thumb) next.screenshotThumb = thumb;
+    const thumb = bestPreview(next);
+
+    if (thumb) {
+      next.screenshot_url = thumb;
+      next.screenshotUrl = thumb;
+      next.screenshotThumb = thumb;
+    }
+
     delete next.screenshot;
     delete next.screenshot_data_url;
     return next;
@@ -533,7 +627,14 @@ function validateManagedPayload(payload) {
       publishedAt: parsedPublishedAt,
       tabs
     },
-    license: normalizePlanState({ plan: license.plan || "district", maxUsers: license.maxUsers })
+    license: normalizePlanState({
+      plan: license.plan || "district",
+      status: license.status || license.licenseStatus || "active",
+      expiresAt: license.expiresAt || license.expirationDate || "",
+      graceUntil: license.graceUntil || "",
+      minExtensionVersion: license.minExtensionVersion || license.minimumExtensionVersion || "",
+      maxUsers: license.maxUsers
+    })
   };
 }
 
@@ -647,11 +748,21 @@ async function setSavedTabs(savedTabs) {
   const nextTabs = Array.isArray(savedTabs) ? savedTabs : [];
   const nextLiteTabs = makeSavedTabsLite(nextTabs);
   if (JSON.stringify(previous || []) === JSON.stringify(nextTabs)) return;
+
+  /* FAST_OPEN_AFTER_DOCKEMALL_FIX_20260810
+     Dock'em All should not wait on remote sync/API calls before opening Safe Harbor.
+     Save locally first, open the Library quickly, then sync personal memories quietly
+     in the background. Also keep savedTabs as the full source of truth and
+     savedTabsLite as the light cache.
+  */
   await api.storage.local.set({
-    savedTabs: nextLiteTabs,
+    savedTabs: nextTabs,
     savedTabsLite: nextLiteTabs
   });
-  await syncSavedTabsToPersonalMemories(previous, nextTabs);
+
+  syncSavedTabsToPersonalMemories(previous, nextTabs).catch((err) => {
+    DEBUG && console.error("Dock background personal memory sync failed", err);
+  });
 }
 
 async function getGroupState() {
@@ -781,11 +892,11 @@ async function ensureWindowFocused(windowId) {
 }
 
 // Chrome limits captureVisibleTab calls. Without a throttle, bulk capture can
-// reliably lose the 3rd/4th tab because the service worker hits the capture
-// rate limit before the page has a chance to paint. Keep this deliberately
-// conservative for district deployments: slower is better than missing cards.
+// can lose later tabs when the service worker crosses Chrome's capture budget.
+// 525ms stays just above the documented 2 captures/sec ceiling while cutting
+// avoidable tail latency. Retries still respect the same shared budget.
 let lastVisibleCaptureAt = 0;
-const MIN_CAPTURE_INTERVAL_MS = 650;
+const MIN_CAPTURE_INTERVAL_MS = 525;
 
 async function waitForCaptureBudget() {
   const now = Date.now();
@@ -809,8 +920,8 @@ async function captureVisibleWithRetries(windowId, profile = "normal") {
   // made the next tab look like "Screenshot Unavailable."
   const delays =
     profile === "strong"
-      ? [0, 700, 900]
-      : [0, 700];
+      ? [0, 575, 825]
+      : [0, 575];
 
   for (const d of delays) {
     if (d) await sleep(d);
@@ -1065,6 +1176,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (msg?.type === "SAVE_ALL_OPEN_TABS") {
     (async () => {
       try {
+        await ensureBackgroundLicenseAllowed20260818();
         const result = await saveAllOpenTabs({
           reason: msg.reason || "",
           openMemories: !!msg.openMemories,
@@ -1074,6 +1186,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, ...result });
       } catch (err) {
         if (err === "LIMIT_REACHED") return sendResponse({ ok: false, code: "LIMIT_REACHED" });
+        if (err?.code === "LICENSE_BLOCKED") return sendResponse({ ok: false, code: "LICENSE_BLOCKED", error: err.message });
         sendResponse({ ok: false, code: "SAVE_ALL_FAILED", error: err?.message || String(err) });
       }
     })();
@@ -1101,6 +1214,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       const { payload, targetGroupId, skipDuplicates = true } = msg;
       if (!targetGroupId || !payload) return sendResponse({ ok: false });
       try {
+        await ensureBackgroundLicenseAllowed20260818();
         await ensureCanSavePersonalMemory();
         const state = await getGroupState();
         const cur = Array.isArray(state.groupItems[targetGroupId]) ? [...state.groupItems[targetGroupId]] : [];
@@ -1112,6 +1226,7 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
         sendResponse({ ok: true, skippedDuplicate: false });
       } catch (err) {
         if (err === "LIMIT_REACHED") return sendResponse({ ok: false, code: "LIMIT_REACHED" });
+        if (err?.code === "LICENSE_BLOCKED") return sendResponse({ ok: false, code: "LICENSE_BLOCKED", error: err.message });
         sendResponse({ ok: false, code: "SAVE_FAILED", error: err?.message || String(err) });
       }
     })();
@@ -1123,3 +1238,6 @@ api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
 api.runtime.onInstalled?.addListener(() => { ensureManagedSyncAlarm().catch(() => {}); ensureBootstrapOrgState().then(() => backgroundSyncManagedWorkspace({ force: true })).catch(() => {}); });
 api.runtime.onStartup?.addListener(() => { ensureManagedSyncAlarm().catch(() => {}); ensureBootstrapOrgState().catch(() => {}); });
 api.alarms?.onAlarm?.addListener((alarm) => { if (alarm?.name === MANAGED_SYNC_ALARM) ensureBootstrapOrgState().then(() => backgroundSyncManagedWorkspace()).catch(() => {}); });
+
+
+/* LICENSE_GATE_SILENT_TRIAL_PATCH_20260823 */
