@@ -4,7 +4,6 @@
 // identity surface when Safari exposes `browser` without `browser.identity`.
 
 const DOCK_AUTH_CALLBACK = "https://dock-production-mvp.vercel.app/auth/extension/callback";
-const AUTH_CALLBACK_MESSAGE = "dock-safari-auth-callback";
 const AUTH_TIMEOUT_MS = 3 * 60 * 1000;
 
 let pendingAuthState = "";
@@ -49,7 +48,8 @@ function createIdentityShim(nativeApi) {
       return await new Promise(async (resolve, reject) => {
         const cleanup = () => {
           if (timeoutId) clearTimeout(timeoutId);
-          try { nativeApi.runtime.onMessage.removeListener(onMessage); } catch {}
+          try { nativeApi.tabs.onUpdated.removeListener(onUpdated); } catch {}
+          try { nativeApi.tabs.onRemoved.removeListener(onRemoved); } catch {}
           pendingAuthState = "";
         };
 
@@ -61,16 +61,22 @@ function createIdentityShim(nativeApi) {
           resolve(callbackUrl);
         };
 
-        const onMessage = (message) => {
-          if (message?.type !== AUTH_CALLBACK_MESSAGE) return undefined;
-          const callbackUrl = String(message?.url || "");
-          if (!isValidCallbackUrl(callbackUrl, expectedState)) return undefined;
+        const onUpdated = (tabId, changeInfo, tab) => {
+          if (authTabId == null || tabId !== authTabId) return;
+          const callbackUrl = String(changeInfo?.url || tab?.url || "");
+          if (!isValidCallbackUrl(callbackUrl, expectedState)) return;
           void finish(callbackUrl);
-          return undefined;
+        };
+
+        const onRemoved = (tabId) => {
+          if (authTabId == null || tabId !== authTabId) return;
+          cleanup();
+          reject(new Error("Safari Dock sign-in was cancelled before the OAuth callback returned."));
         };
 
         try {
-          nativeApi.runtime.onMessage.addListener(onMessage);
+          nativeApi.tabs.onUpdated.addListener(onUpdated);
+          nativeApi.tabs.onRemoved.addListener(onRemoved);
           timeoutId = setTimeout(() => {
             cleanup();
             reject(new Error("Safari Dock sign-in timed out before the OAuth callback returned."));
@@ -78,6 +84,7 @@ function createIdentityShim(nativeApi) {
 
           const tab = await nativeApi.tabs.create({ url, active: true });
           authTabId = tab?.id ?? null;
+          if (authTabId == null) throw new Error("Safari Dock could not open the OAuth tab.");
         } catch (error) {
           cleanup();
           reject(error);
