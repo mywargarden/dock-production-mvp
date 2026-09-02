@@ -1961,7 +1961,7 @@ if (!isAdminCard) {
   note.name = `dockNote-${noteDomId}`;
   note.setAttribute("aria-label", "Dock notes");
   note.className = "dockNoteInput";
-  note.rows = 2;
+  note.rows = 1;
   note.maxLength = 500;
   note.spellcheck = true;
   note.placeholder = opts.readOnlyNote ? "Managed by your district" : "Add a note for future you…";
@@ -1975,7 +1975,7 @@ if (!isAdminCard) {
   const resizeNote = () => {
     if (opts.readOnlyNote) return;
     note.style.height = "auto";
-    note.style.height = `${Math.min(Math.max(note.scrollHeight, 46), 116)}px`;
+    note.style.height = `${Math.min(Math.max(note.scrollHeight, 34), 68)}px`;
   };
   resizeNote();
 
