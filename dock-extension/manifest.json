@@ -9,8 +9,7 @@
     "tabs",
     "activeTab",
     "alarms",
-    "identity",
-    "identity.email"
+    "nativeMessaging"
   ],
   "host_permissions": [
     "<all_urls>",
@@ -51,8 +50,5 @@
         "<all_urls>"
       ]
     }
-  ],
-  "storage": {
-    "managed_schema": "managed_storage_schema.json"
-  }
+  ]
 }
