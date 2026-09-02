@@ -50,18 +50,53 @@ jobs:
           assert any('https://dock-production-mvp.vercel.app/*' in entry.get('matches', []) for entry in callback_scripts)
 
           popup_html = Path('dock-extension/popup.html').read_text()
+          assert 'href="popup.css"' in popup_html
+          assert 'href="apple-popup.css"' in popup_html
+          assert popup_html.index('href="popup.css"') < popup_html.index('href="apple-popup.css"')
           assert 'src="apple-popup.js"' in popup_html
           assert 'src="popup.js"' not in popup_html
 
           apple_popup = Path('dock-extension/apple-popup.js').read_text()
           assert 'DOCK_SAFARI_BEGIN_AUTH' in apple_popup
           assert 'SAVE_ALL_OPEN_TABS' in apple_popup
+          assert 'allEligibleTabsAlreadyDocked' in apple_popup
+          assert 'dockSafariLastBulkFastPath' in apple_popup
           assert 'await import("./popup.js")' in apple_popup
           assert 'stopImmediatePropagation' in apple_popup
+
+          apple_popup_css = Path('dock-extension/apple-popup.css').read_text()
+          assert '#saveAllBtn' in apple_popup_css
+          assert 'opacity: 1 !important' in apple_popup_css
+          assert 'background: linear-gradient' in apple_popup_css
+
+          memories_html = Path('dock-extension/memories.html').read_text()
+          assert 'src="apple-memories.js"' in memories_html
+          assert 'src="memories.js"' not in memories_html
+
+          apple_memories = Path('dock-extension/apple-memories.js').read_text()
+          assert 'setSavedTabs([], { removedTabs: all })' in apple_memories
+          assert 'dockSafariLastDeleteAll' in apple_memories
+          assert 'dock-share' in apple_memories
+          assert 'dockSafariLastShare' in apple_memories
+          assert 'stopImmediatePropagation' in apple_memories
+          assert 'await import("./memories.js")' in apple_memories
+          assert 'https://dock-production-mvp.vercel.app/' in apple_memories
+
+          # Previously passing Safe Harbor behavior must remain implemented by the
+          # unchanged shared runtime underneath the Apple bridge.
+          shared_memories = Path('dock-extension/memories.js').read_text()
+          assert 'openSelectedBtn?.addEventListener' in shared_memories
+          assert 'openAllBtn?.addEventListener' in shared_memories
+          assert 'closeOtherTabsBtn?.addEventListener' in shared_memories
+          assert 'deleteSelectedBtn?.addEventListener' in shared_memories
+          assert 'reason' in shared_memories or 'Note' in shared_memories
 
           callback = Path('dock-extension/safari-auth-callback.js').read_text()
           assert 'DOCK_SAFARI_AUTH_CALLBACK' in callback
           assert 'access_token' in callback
+          assert 'dock-share' in callback
+          assert 'dockSafariLastShareImport' in callback
+          assert 'dockGroups' in callback and 'dockGroupItems' in callback
 
           adapter = Path('dock-extension/adapters/safariAdapter.js').read_text()
           assert 'DOCK_GET_MANAGED_POLICY' in adapter
