@@ -7,6 +7,8 @@ OUT_DIR="${DOCK_APPLE_OUT_DIR:-$ROOT_DIR/DockAppleHost}"
 APP_NAME="Dock"
 BUNDLE_ID="${DOCK_APP_BUNDLE_ID:-com.anchor.dock.macos}"
 DEVELOPMENT_TEAM="${DOCK_DEVELOPMENT_TEAM:-A4JT7VU8Q4}"
+DOCK_VERSION="${DOCK_APPLE_VERSION:-0.3.7}"
+DOCK_BUILD_NUMBER="${DOCK_APPLE_BUILD_NUMBER:-37}"
 
 command -v xcrun >/dev/null 2>&1 || { echo "Xcode command line tools are required."; exit 1; }
 
@@ -24,7 +26,7 @@ fi
 rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
-echo "Generating Dock Safari Web Extension from the current shared Dock 0.3.7 source..."
+echo "Generating Dock Safari Web Extension from the current shared Dock ${DOCK_VERSION} source..."
 echo "Using: xcrun $PACKAGER"
 xcrun "$PACKAGER" "$EXT_DIR" \
   --project-location "$OUT_DIR" \
@@ -42,24 +44,46 @@ fi
 
 cp "$ROOT_DIR/apple/SafariWebExtensionHandler.swift" "$HANDLER_FILE"
 
-# Preserve the Apple Developer team recovered from the earlier Dock Safari build,
-# while allowing an explicit override if the account/team changed.
-python3 - "$PROJECT_FILE" "$DEVELOPMENT_TEAM" <<'PY'
+# Preserve the Apple Developer team recovered from the earlier Dock Safari build.
+# Also force every generated Apple target to advertise the exact Dock candidate
+# version. Safari Settings reports the native extension target's marketing
+# version, not the WebExtension manifest version, so leaving the packager's
+# default here can make a current 0.3.7 runtime appear to be an old 0.2.1 build.
+python3 - "$PROJECT_FILE" "$DEVELOPMENT_TEAM" "$DOCK_VERSION" "$DOCK_BUILD_NUMBER" <<'PY'
 from pathlib import Path
 import re, sys
 path = Path(sys.argv[1])
 team = sys.argv[2].strip()
+version = sys.argv[3].strip()
+build = sys.argv[4].strip()
 text = path.read_text()
+
 if team:
     if 'DEVELOPMENT_TEAM =' in text:
         text = re.sub(r'DEVELOPMENT_TEAM = [^;]+;', f'DEVELOPMENT_TEAM = {team};', text)
     else:
         text = text.replace('CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tDEVELOPMENT_TEAM = {team};')
+
+# Patch all generated app/extension targets, not just one scheme.
+if 'MARKETING_VERSION =' in text:
+    text = re.sub(r'MARKETING_VERSION = [^;]+;', f'MARKETING_VERSION = {version};', text)
+else:
+    text = text.replace('CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tMARKETING_VERSION = {version};')
+
+if 'CURRENT_PROJECT_VERSION =' in text:
+    text = re.sub(r'CURRENT_PROJECT_VERSION = [^;]+;', f'CURRENT_PROJECT_VERSION = {build};', text)
+else:
+    text = text.replace('CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tCURRENT_PROJECT_VERSION = {build};')
+
+# Some generated projects use Info.plist build settings directly.
+text = re.sub(r'INFOPLIST_KEY_CFBundleShortVersionString = [^;]+;', f'INFOPLIST_KEY_CFBundleShortVersionString = {version};', text)
+text = re.sub(r'INFOPLIST_KEY_CFBundleVersion = [^;]+;', f'INFOPLIST_KEY_CFBundleVersion = {build};', text)
+
 path.write_text(text)
 PY
 
 printf '\nGenerated Apple candidate at:\n  %s\n' "$OUT_DIR"
-printf 'Bundle base: %s\nDeveloper team: %s\n' "$BUNDLE_ID" "$DEVELOPMENT_TEAM"
+printf 'Bundle base: %s\nDeveloper team: %s\nDock version: %s (%s)\n' "$BUNDLE_ID" "$DEVELOPMENT_TEAM" "$DOCK_VERSION" "$DOCK_BUILD_NUMBER"
 printf '\nOpen the generated .xcodeproj and run the Dock app target on macOS first.\nThen select an iPad simulator/device target and run the same project.\n'
 
 open "$(find "$OUT_DIR" -name '*.xcodeproj' -print -quit)"
