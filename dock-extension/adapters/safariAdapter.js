@@ -1,13 +1,14 @@
 // Safari WebExtension adapter.
-// Safari intentionally does not implement the WebExtensions identity API.
-// Keep Chrome's proven identity path untouched and supply only the missing
-// identity surface when Safari exposes `browser` without `browser.identity`.
+// Chrome remains Dock's behavior contract. Safari receives only the missing
+// browser authority required to run that same shared core on macOS/iPadOS.
 
-// Reuse Dock's already-live production site as the OAuth return target instead
-// of introducing a Safari-only backend route. The auth tab is the authority:
-// we only accept the exact Dock production origin/root reached in that tab.
 const DOCK_AUTH_CALLBACK = "https://dock-production-mvp.vercel.app/";
 const AUTH_TIMEOUT_MS = 3 * 60 * 1000;
+const NATIVE_HOST_ID = "dock.apple.host";
+const MANAGED_POLICY_TTL_MS = 15 * 1000;
+
+let managedPolicyCache = null;
+let managedPolicyCachedAt = 0;
 
 function isValidCallbackUrl(value) {
   try {
@@ -91,22 +92,113 @@ function createIdentityShim(nativeApi) {
     },
 
     async clearAllCachedAuthTokens() {
-      // Dock owns its Supabase session in extension local storage. auth.js clears
-      // that state directly; Safari has no separate browser identity token cache.
+      // auth.js clears Dock's Supabase session directly. Safari has no separate
+      // WebExtensions identity token cache to clear.
       return undefined;
     }
   };
 }
 
+function pickManagedValues(policy, keys) {
+  const source = policy && typeof policy === "object" ? policy : {};
+  if (keys == null) return { ...source };
+
+  if (typeof keys === "string") {
+    return Object.prototype.hasOwnProperty.call(source, keys) ? { [keys]: source[keys] } : {};
+  }
+
+  if (Array.isArray(keys)) {
+    const result = {};
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) result[key] = source[key];
+    }
+    return result;
+  }
+
+  if (keys && typeof keys === "object") {
+    const result = { ...keys };
+    for (const key of Object.keys(keys)) {
+      if (Object.prototype.hasOwnProperty.call(source, key)) result[key] = source[key];
+    }
+    return result;
+  }
+
+  return {};
+}
+
+async function readNativeManagedPolicy(nativeApi, { force = false } = {}) {
+  const now = Date.now();
+  if (!force && managedPolicyCache && (now - managedPolicyCachedAt) < MANAGED_POLICY_TTL_MS) {
+    return managedPolicyCache;
+  }
+
+  try {
+    if (!nativeApi.runtime?.sendNativeMessage) return {};
+    const response = await nativeApi.runtime.sendNativeMessage(NATIVE_HOST_ID, {
+      type: "DOCK_GET_MANAGED_POLICY"
+    });
+    const policy = response?.managedPolicy;
+    managedPolicyCache = policy && typeof policy === "object" ? policy : {};
+    managedPolicyCachedAt = now;
+    return managedPolicyCache;
+  } catch {
+    // Unmanaged personal Safari installs are valid. An unavailable native policy
+    // channel must behave exactly like Chrome storage.managed with no policy set.
+    managedPolicyCache = {};
+    managedPolicyCachedAt = now;
+    return managedPolicyCache;
+  }
+}
+
+function createManagedStorageShim(nativeApi) {
+  return {
+    async get(keys = null) {
+      const policy = await readNativeManagedPolicy(nativeApi);
+      return pickManagedValues(policy, keys);
+    },
+
+    async getKeys() {
+      const policy = await readNativeManagedPolicy(nativeApi);
+      return Object.keys(policy);
+    },
+
+    async getBytesInUse(keys = null) {
+      const selected = pickManagedValues(await readNativeManagedPolicy(nativeApi), keys);
+      try {
+        return new TextEncoder().encode(JSON.stringify(selected)).byteLength;
+      } catch {
+        return 0;
+      }
+    }
+  };
+}
+
+function createStorageShim(nativeApi) {
+  const nativeStorage = nativeApi.storage || {};
+  if (nativeStorage.managed?.get) return nativeStorage;
+  const managed = createManagedStorageShim(nativeApi);
+
+  return new Proxy(nativeStorage, {
+    get(target, property, receiver) {
+      if (property === "managed") return managed;
+      return Reflect.get(target, property, receiver);
+    }
+  });
+}
+
 export function getSafariApi() {
   const nativeApi = globalThis.browser;
   if (!nativeApi) return undefined;
-  if (nativeApi.identity?.launchWebAuthFlow && nativeApi.identity?.getRedirectURL) return nativeApi;
 
-  const identity = createIdentityShim(nativeApi);
+  const identity = nativeApi.identity?.launchWebAuthFlow && nativeApi.identity?.getRedirectURL
+    ? nativeApi.identity
+    : createIdentityShim(nativeApi);
+  const storage = createStorageShim(nativeApi);
+
   return new Proxy(nativeApi, {
     get(target, property, receiver) {
       if (property === "identity") return identity;
+      if (property === "storage") return storage;
       return Reflect.get(target, property, receiver);
     }
   });
