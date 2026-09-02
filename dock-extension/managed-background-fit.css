@@ -1,0 +1,12 @@
+/* Dock 0.3.8 — managed district background fit
+   Preserve the entire administrator-selected artwork instead of cropping it.
+   The soft district background color fills any unused canvas around the image. */
+body[data-managed-dock="true"],
+body.managedDockMode {
+  background-color: var(--managed-dock-soft-bg, #eef6f1) !important;
+  background-image: var(--managed-dock-bg) !important;
+  background-size: contain !important;
+  background-position: center center !important;
+  background-repeat: no-repeat !important;
+  background-attachment: fixed !important;
+}
