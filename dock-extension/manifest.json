@@ -29,6 +29,13 @@
   "background": {
     "service_worker": "apple-background.js"
   },
+  "content_scripts": [
+    {
+      "matches": ["https://dock-production-mvp.vercel.app/*"],
+      "js": ["safari-auth-callback.js"],
+      "run_at": "document_start"
+    }
+  ],
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
