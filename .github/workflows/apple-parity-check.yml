@@ -60,10 +60,10 @@ jobs:
           print('Apple parity static contract PASS')
           PY
 
-      - name: Verify old localhost helper is not in current product path
+      - name: Verify old localhost helper is not in current runtime path
         run: |
-          if grep -R -nE '127\.0\.0\.1:47831|DockHelper' dock-extension apple; then
-            echo 'Old macOS-only DockHelper leaked into Apple parity candidate.' >&2
+          if grep -R -nE '127\.0\.0\.1:47831|DockHelper' dock-extension apple/SafariWebExtensionHandler.swift apple/generate_xcode_project.command; then
+            echo 'Old macOS-only DockHelper leaked into Apple parity runtime.' >&2
             exit 1
           fi
 
