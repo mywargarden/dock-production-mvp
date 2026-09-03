@@ -3,7 +3,7 @@ name: Dock Apple Parity Check
 on:
   push:
     branches:
-      - apple-parity-from-0-3-7
+      - apple-parity-0-3-9
     paths:
       - dock-extension/**
       - apple/**
@@ -30,7 +30,7 @@ jobs:
         run: |
           find dock-extension -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 
-      - name: Freeze Apple compatibility invariants
+      - name: Freeze Dock 0.3.9 Apple parity invariants
         run: |
           python3 - <<'PY'
           import json, re
@@ -38,16 +38,20 @@ jobs:
 
           manifest = json.loads(Path('dock-extension/manifest.json').read_text())
           perms = set(manifest.get('permissions', []))
-          assert manifest.get('version') == '0.3.7', manifest.get('version')
+          assert manifest.get('version') == '0.3.9', manifest.get('version')
           assert 'nativeMessaging' in perms, perms
           assert 'identity' not in perms, perms
           assert 'identity.email' not in perms, perms
-          assert manifest.get('background', {}).get('service_worker') == 'apple-background.js'
+          assert manifest.get('background', {}).get('service_worker') == 'apple-entry.js'
 
           content_scripts = manifest.get('content_scripts', [])
           callback_scripts = [entry for entry in content_scripts if 'safari-auth-callback.js' in entry.get('js', [])]
           assert callback_scripts, content_scripts
           assert any('https://dock-production-mvp.vercel.app/*' in entry.get('matches', []) for entry in callback_scripts)
+
+          resources = [item for entry in manifest.get('web_accessible_resources', []) for item in entry.get('resources', [])]
+          assert 'import.html' in resources
+          assert 'import-v2.js' in resources
 
           popup_html = Path('dock-extension/popup.html').read_text()
           assert 'href="popup.css"' in popup_html
@@ -67,41 +71,81 @@ jobs:
           apple_popup_css = Path('dock-extension/apple-popup.css').read_text()
           assert '#saveAllBtn' in apple_popup_css
           assert 'opacity: 1 !important' in apple_popup_css
-          assert 'background: linear-gradient' in apple_popup_css
 
           memories_html = Path('dock-extension/memories.html').read_text()
+          assert 'managed-background-fit.css' in memories_html
+          assert 'drag-sort-fix.css' in memories_html
+          assert 'src="apple-parity-guard.js"' in memories_html
           assert 'src="apple-memories.js"' in memories_html
           assert 'src="memories.js"' not in memories_html
 
           apple_memories = Path('dock-extension/apple-memories.js').read_text()
-          assert 'setSavedTabs([], { removedTabs: all })' in apple_memories
-          assert 'dockSafariLastDeleteAll' in apple_memories
-          assert 'dock-share' in apple_memories
-          assert 'dockSafariLastShare' in apple_memories
-          assert 'stopImmediatePropagation' in apple_memories
+          assert 'await import("./short-share.js")' in apple_memories
           assert 'await import("./memories.js")' in apple_memories
-          assert 'https://dock-production-mvp.vercel.app/' in apple_memories
 
-          # Previously passing Safe Harbor behavior must remain implemented by the
-          # unchanged shared runtime underneath the Apple bridge.
+          short_share = Path('dock-extension/short-share.js').read_text()
+          assert "https://dock-production-mvp.vercel.app/api/share" in short_share
+          assert 'body: JSON.stringify({ payload })' in short_share
+          assert 'extensionId:' not in short_share
+          assert 'safari-web-extension' in short_share
+          assert 'screenshot_url' not in short_share
+          assert 'reason:' not in short_share
+
+          import_html = Path('dock-extension/import.html').read_text()
+          assert 'src="import-v2.js"' in import_html
+          assert 'src="import.js"' not in import_html
+          import_v2 = Path('dock-extension/import-v2.js').read_text()
+          assert "https://dock-production-mvp.vercel.app/api/share" in import_v2
+          assert "hash.get('share')" in import_v2
+          assert 'safari-web-extension' in import_v2
+
+          guard = Path('dock-extension/apple-parity-guard.js').read_text()
+          assert 'dockSafariLastDeleteAll' in guard
+          assert 'savedTabs: []' in guard and 'savedTabsLite: []' in guard
+          assert 'deleteRemoteMemoriesByUrls' in guard
+          assert 'dock-share' not in guard
+          assert 'SHARE_ORIGIN' not in guard
+
+          apple_entry = Path('dock-extension/apple-entry.js').read_text()
+          assert 'importScripts("apple-background.js")' in apple_entry
+          assert 'importScripts("apple-internal-url-guard.js")' in apple_entry
+          assert 'importScripts("apple-share-background.js")' in apple_entry
+
+          internal_guard = Path('dock-extension/apple-internal-url-guard.js').read_text()
+          assert 'safari-web-extension://' in internal_guard
+          assert 'isInternalUrl =' in internal_guard
+          assert 'shouldExcludeMemoryUrl =' in internal_guard
+
+          share_bg = Path('dock-extension/apple-share-background.js').read_text()
+          assert 'DOCK_OPEN_SHARED_DOCK' in share_bg
+          assert 'runtime.getURL("import.html")' in share_bg
+
+          callback = Path('dock-extension/safari-auth-callback.js').read_text()
+          assert 'DOCK_SAFARI_AUTH_CALLBACK' in callback
+          assert 'access_token' in callback
+          assert 'DOCK_OPEN_SHARED_DOCK' in callback
+          assert '/share/' in callback
+          assert 'chrome-extension://' in callback
+
+          logic = Path('dock-extension/core/logic.js').read_text()
+          assert 'safari-web-extension://' in logic
+
+          # Shared Safe Harbor behavior remains shared rather than Apple-cloned.
           shared_memories = Path('dock-extension/memories.js').read_text()
           assert 'openSelectedBtn?.addEventListener' in shared_memories
           assert 'openAllBtn?.addEventListener' in shared_memories
           assert 'closeOtherTabsBtn?.addEventListener' in shared_memories
           assert 'deleteSelectedBtn?.addEventListener' in shared_memories
-          assert 'reason' in shared_memories or 'Note' in shared_memories
 
-          callback = Path('dock-extension/safari-auth-callback.js').read_text()
-          assert 'DOCK_SAFARI_AUTH_CALLBACK' in callback
-          assert 'access_token' in callback
-          assert 'dock-share' in callback
-          assert 'dockSafariLastShareImport' in callback
-          assert 'dockGroups' in callback and 'dockGroupItems' in callback
+          drag = Path('dock-extension/drag-sort-fix.css').read_text()
+          assert '.card.cardDragGhost' in drag
+          assert 'position: fixed !important' in drag
+          managed_fit = Path('dock-extension/managed-background-fit.css').read_text()
+          assert 'background-size: contain !important' in managed_fit
 
           adapter = Path('dock-extension/adapters/safariAdapter.js').read_text()
           assert 'DOCK_GET_MANAGED_POLICY' in adapter
           assert 'sendNativeMessage' in adapter
-          assert 'storage' in adapter
 
           bootstrap = Path('dock-extension/apple-background.js').read_text()
           assert 'DOCK_GET_MANAGED_POLICY' in bootstrap
@@ -110,7 +154,6 @@ jobs:
           assert 'DOCK_SAFARI_AUTH_CALLBACK' in bootstrap
           assert 'saveAllOpenTabs' in bootstrap
 
-          # Do not allow Apple auth to silently drift from the Chrome/shared public config.
           auth = Path('dock-extension/core/auth.js').read_text()
           auth_key = re.search(r'DEFAULT_SUPABASE_ANON_KEY\s*=\s*"([^"]+)"', auth)
           apple_key = re.search(r'SUPABASE_ANON_KEY\s*=\s*"([^"]+)"', bootstrap)
@@ -124,8 +167,10 @@ jobs:
           generator = Path('apple/generate_xcode_project.command').read_text()
           assert 'safari-web-extension-packager' in generator
           assert 'safari-web-extension-converter' in generator
-          assert 'dock-extension' in generator
-          print('Apple parity static contract PASS')
+          assert 'DOCK_APPLE_VERSION:-0.3.9' in generator
+          assert 'DOCK_APPLE_BUILD_NUMBER:-39' in generator
+
+          print('Dock 0.3.9 Apple parity static contract PASS')
           PY
 
       - name: Verify old localhost helper is not in current runtime path
@@ -151,10 +196,10 @@ jobs:
           chmod +x artifact/START_DOCK_APPLE.command
           printf '%s\n' "${GITHUB_SHA}" > artifact/APPLE_CANDIDATE_COMMIT.txt
           cd artifact
-          zip -qry ../dock-apple-parity-0.3.7-source.zip .
+          zip -qry ../dock-apple-parity-0.3.9-source.zip .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dock-apple-parity-0.3.7-source
-          path: dock-apple-parity-0.3.7-source.zip
+          name: dock-apple-parity-0.3.9-source
+          path: dock-apple-parity-0.3.9-source.zip
           if-no-files-found: error
