@@ -1,5 +1,7 @@
-// Apple background entrypoint: preserve the proven managed-policy/OAuth bootstrap
-// and layer only the Apple browser-authority adapters beside the shared core.
+// Apple background entrypoint: preserve the shared Dock core and layer only
+// Apple browser-authority adapters around it.
+importScripts("apple-critical-store.js");
+importScripts("apple-storage-bootstrap.js");
 importScripts("apple-background.js");
 importScripts("apple-internal-url-guard.js");
 importScripts("apple-tab-anchor.js");
