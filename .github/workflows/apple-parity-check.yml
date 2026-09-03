@@ -60,10 +60,16 @@ jobs:
           assert 'src="popup.js"' not in popup_html
 
           apple_popup = Path('dock-extension/apple-popup.js').read_text()
-          assert 'DOCK_SAFARI_BEGIN_AUTH' in apple_popup
+          assert 'DOCK_SAFARI_STAGE_AUTH' in apple_popup
+          assert 'DOCK_SAFARI_ATTACH_AUTH_TAB' in apple_popup
           assert 'SAVE_ALL_OPEN_TABS' in apple_popup
           assert 'await import("./popup.js")' in apple_popup
           assert 'stopImmediatePropagation' in apple_popup
+          assert 'await api.runtime.sendMessage({' in apple_popup
+          assert 'type: "DOCK_SAFARI_STAGE_AUTH"' in apple_popup
+          assert 'authTab = await api.tabs.create' in apple_popup
+          assert apple_popup.index('type: "DOCK_SAFARI_STAGE_AUTH"') < apple_popup.index('authTab = await api.tabs.create')
+          assert 'const persistPromise = api.storage.local.set' not in apple_popup
 
           memories_html = Path('dock-extension/memories.html').read_text()
           assert 'managed-background-fit.css' in memories_html
@@ -133,6 +139,7 @@ jobs:
           callback = Path('dock-extension/safari-auth-callback.js').read_text()
           assert 'DOCK_SAFARI_AUTH_CALLBACK' in callback
           assert 'access_token' in callback
+          assert 'NO_PENDING_SAFARI_AUTH' in callback
           assert 'DOCK_OPEN_SHARED_DOCK' in callback
           assert '/share/' in callback
           assert 'chrome-extension://' in callback
@@ -160,8 +167,17 @@ jobs:
           assert 'DOCK_GET_MANAGED_POLICY' in bootstrap
           assert 'importScripts("background.js")' in bootstrap
           assert 'dockSafariPendingAuthAction' in bootstrap
+          assert 'DOCK_SAFARI_STAGE_AUTH' in bootstrap
+          assert 'DOCK_SAFARI_ATTACH_AUTH_TAB' in bootstrap
+          assert 'DOCK_SAFARI_CANCEL_AUTH' in bootstrap
+          assert 'DOCK_SAFARI_BEGIN_AUTH' in bootstrap
           assert 'DOCK_SAFARI_AUTH_CALLBACK' in bootstrap
           assert 'saveAllOpenTabs' in bootstrap
+          assert 'const verified = await readPending()' in bootstrap
+          assert 'verified.launchId !== launchId' in bootstrap
+          assert 'SAFARI_AUTH_STAGE_NOT_DURABLE' in bootstrap
+          assert 'const effectiveAuthTabId = pending.authTabId ?? senderTabId' in bootstrap
+          assert 'Session persistence is complete before the transport tab is destroyed' in bootstrap
 
           auth = Path('dock-extension/core/auth.js').read_text()
           auth_key = re.search(r'DEFAULT_SUPABASE_ANON_KEY\s*=\s*"([^"]+)"', auth)
@@ -179,7 +195,7 @@ jobs:
           assert 'DOCK_APPLE_VERSION:-0.3.9' in generator
           assert 'DOCK_APPLE_BUILD_NUMBER:-39' in generator
 
-          print('Dock 0.3.9 Apple runtime-repair static contract PASS')
+          print('Dock 0.3.9 Apple acknowledged-auth transaction static contract PASS')
           PY
 
       - name: Verify old localhost helper is not in current runtime path
