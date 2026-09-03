@@ -40,7 +40,7 @@ export default async function DockSharePage({ params }: SharePageProps) {
         <h1 style={{ margin: '12px 0 8px', fontSize: 32 }}>{available ? 'A Dock was shared with you' : 'This Dock share is unavailable'}</h1>
         <p style={{ margin: '0 0 20px', lineHeight: 1.55, color: '#5a6775' }}>
           {available
-            ? 'Open it in Dock to review the shared workspace and choose whether to import it.'
+            ? 'Add a copy to your Dock library. Shared websites will not open automatically.'
             : 'The link may be invalid, expired, or from an older unsupported share.'}
         </p>
         {available ? (
@@ -48,11 +48,11 @@ export default async function DockSharePage({ params }: SharePageProps) {
             href={openUrl}
             style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', minHeight: 46, padding: '0 20px', borderRadius: 999, background: '#2b8c8f', color: '#fff', fontWeight: 800, textDecoration: 'none' }}
           >
-            Open in Dock
+            Add to Dock
           </a>
         ) : null}
         <p style={{ margin: '18px 0 0', fontSize: 13, lineHeight: 1.5, color: '#7b8793' }}>
-          Shared Dock contents are retrieved only after Dock verifies the signed-in recipient.
+          Dock verifies the signed-in recipient before retrieving the shared workspace. Personal Notes and screenshots are not included.
         </p>
       </section>
     </main>
