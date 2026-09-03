@@ -8,6 +8,7 @@ export function isInternalUrl(url) {
     url.startsWith("edge://") ||
     url.startsWith("about:") ||
     url.startsWith("safari-extension://") ||
+    url.startsWith("safari-web-extension://") ||
     url.includes("chromewebstore.google.com")
   );
 }
