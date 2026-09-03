@@ -1,0 +1,28 @@
+name: Package Dock Theme Test
+
+on:
+  push:
+    branches:
+      - build-dock-0-3-9-theme-store-artifact
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package extension
+        run: |
+          cd dock-extension
+          zip -qr ../Dock-0.3.9-Theme-Store-Test.zip .
+          cd ..
+          sha256sum Dock-0.3.9-Theme-Store-Test.zip > Dock-0.3.9-Theme-Store-Test.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.9-Theme-Store-Test
+          path: |
+            Dock-0.3.9-Theme-Store-Test.zip
+            Dock-0.3.9-Theme-Store-Test.sha256
+          if-no-files-found: error
