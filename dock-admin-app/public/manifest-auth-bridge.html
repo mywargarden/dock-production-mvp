@@ -18,6 +18,7 @@
   (() => {
     'use strict';
     const CALLBACK = 'https://imaldanohaklbcekdhnpmmcfgmbpbaem.chromiumapp.org/supabase-auth';
+    const ALLOWED = new Set(['provider_token','expires_in','error','error_code','error_description','error_uri']);
     const source = new URL(window.location.href);
     const state = source.searchParams.get('state') || '';
     const status = document.getElementById('status');
@@ -25,9 +26,13 @@
       status.innerHTML = '<strong>Manifest authorization stopped.</strong>The security state was missing or invalid. Return to Manifest and try Connect Google again.';
       return;
     }
-    const out = new URLSearchParams(source.hash.replace(/^#/, ''));
+    const incoming = new URLSearchParams(source.hash.replace(/^#/, ''));
     for (const [key, value] of source.searchParams.entries()) {
-      if (key !== 'state' && !out.has(key)) out.set(key, value);
+      if (key !== 'state' && ALLOWED.has(key) && !incoming.has(key)) incoming.set(key, value);
+    }
+    const out = new URLSearchParams();
+    for (const [key, value] of incoming.entries()) {
+      if (ALLOWED.has(key)) out.set(key, value);
     }
     out.set('manifest_state', state);
     window.location.replace(`${CALLBACK}#${out.toString()}`);
