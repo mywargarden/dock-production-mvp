@@ -7,8 +7,8 @@ OUT_DIR="${DOCK_APPLE_OUT_DIR:-$ROOT_DIR/DockAppleHost}"
 APP_NAME="Dock"
 BUNDLE_ID="${DOCK_APP_BUNDLE_ID:-com.anchor.dock.macos}"
 DEVELOPMENT_TEAM="${DOCK_DEVELOPMENT_TEAM:-A4JT7VU8Q4}"
-DOCK_VERSION="${DOCK_APPLE_VERSION:-0.3.7}"
-DOCK_BUILD_NUMBER="${DOCK_APPLE_BUILD_NUMBER:-37}"
+DOCK_VERSION="${DOCK_APPLE_VERSION:-0.3.9}"
+DOCK_BUILD_NUMBER="${DOCK_APPLE_BUILD_NUMBER:-39}"
 
 command -v xcrun >/dev/null 2>&1 || { echo "Xcode command line tools are required."; exit 1; }
 
@@ -16,7 +16,6 @@ PACKAGER=""
 if xcrun --find safari-web-extension-packager >/dev/null 2>&1; then
   PACKAGER="safari-web-extension-packager"
 elif xcrun --find safari-web-extension-converter >/dev/null 2>&1; then
-  # Xcode versions before the current rename expose the same tool as converter.
   PACKAGER="safari-web-extension-converter"
 else
   echo "Safari Web Extension packager is unavailable in this Xcode install."
@@ -44,11 +43,6 @@ fi
 
 cp "$ROOT_DIR/apple/SafariWebExtensionHandler.swift" "$HANDLER_FILE"
 
-# Preserve the Apple Developer team recovered from the earlier Dock Safari build.
-# Also force every generated Apple target to advertise the exact Dock candidate
-# version. Safari Settings reports the native extension target's marketing
-# version, not the WebExtension manifest version, so leaving the packager's
-# default here can make a current 0.3.7 runtime appear to be an old 0.2.1 build.
 python3 - "$PROJECT_FILE" "$DEVELOPMENT_TEAM" "$DOCK_VERSION" "$DOCK_BUILD_NUMBER" <<'PY'
 from pathlib import Path
 import re, sys
@@ -64,7 +58,6 @@ if team:
     else:
         text = text.replace('CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tDEVELOPMENT_TEAM = {team};')
 
-# Patch all generated app/extension targets, not just one scheme.
 if 'MARKETING_VERSION =' in text:
     text = re.sub(r'MARKETING_VERSION = [^;]+;', f'MARKETING_VERSION = {version};', text)
 else:
@@ -75,7 +68,6 @@ if 'CURRENT_PROJECT_VERSION =' in text:
 else:
     text = text.replace('CODE_SIGN_STYLE = Automatic;', f'CODE_SIGN_STYLE = Automatic;\n\t\t\t\tCURRENT_PROJECT_VERSION = {build};')
 
-# Some generated projects use Info.plist build settings directly.
 text = re.sub(r'INFOPLIST_KEY_CFBundleShortVersionString = [^;]+;', f'INFOPLIST_KEY_CFBundleShortVersionString = {version};', text)
 text = re.sub(r'INFOPLIST_KEY_CFBundleVersion = [^;]+;', f'INFOPLIST_KEY_CFBundleVersion = {build};', text)
 
