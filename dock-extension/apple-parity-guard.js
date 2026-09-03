@@ -1,8 +1,8 @@
 // Apple-only parity guard installed before shared Safe Harbor logic.
-// It owns only live Safari failures that have been established by user testing:
+// It owns only live Safari failures established by user testing:
 // - Delete All quota-safe atomic deletion
 // - Cross-platform Share URL generation
-// - Safari drag-preview cursor anchoring
+// Drag sorting now inherits Dock's browser-agnostic drag-sort-fix.css.
 
 import { api } from "./adapters/index.js";
 import { getSavedTabs } from "./core/storage.js";
@@ -165,8 +165,8 @@ async function quotaSafeDeleteAll() {
     dockSafariLastDeleteAll: { ok: true, count: all.length, at: now }
   });
 
-  // Remote deletion is independent evidence/state cleanup. Local success must
-  // not be rolled back if the network is temporarily unavailable.
+  // Remote deletion is independent cleanup. Local success must not be rolled
+  // back merely because remote sync is temporarily unavailable.
   deleteRemoteMemoriesByUrls(all, { userInitiated: true }).catch(() => {});
   window.location.reload();
 }
@@ -183,18 +183,4 @@ document.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
   shareDock(button).catch((error) => alert(error?.message || "Share failed."));
-}, true);
-
-// Safari live testing showed the visual drag clone could be hundreds of pixels
-// below the pointer. Shared Dock sorting itself works. Re-anchor only the visual
-// ghost after the shared pointer handler runs; ordering logic remains unchanged.
-window.addEventListener("pointermove", (event) => {
-  const x = event.clientX;
-  const y = event.clientY;
-  requestAnimationFrame(() => {
-    const ghost = document.querySelector(".cardDragGhost");
-    if (!ghost) return;
-    ghost.style.setProperty("left", `${Math.round(x + 14)}px`, "important");
-    ghost.style.setProperty("top", `${Math.round(y + 14)}px`, "important");
-  });
 }, true);
