@@ -35,16 +35,23 @@ function buildPayload(group, items){
   };
 }
 async function copyTextSafe(text){
-  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
   try {
     const ta = document.createElement('textarea');
     ta.value = text;
     ta.setAttribute('readonly', 'readonly');
     ta.style.position = 'fixed';
-    ta.style.opacity = '0';
+    ta.style.left = '-10000px';
+    ta.style.top = '0';
     document.body.appendChild(ta);
     ta.focus();
     ta.select();
+    ta.setSelectionRange(0, ta.value.length);
     const ok = document.execCommand('copy');
     ta.remove();
     return ok;
@@ -80,13 +87,27 @@ function showShareToast(message, tone = 'success'){
 async function resolveGroupId(button){
   const directWrap = button?.closest?.('.groupPillWrap');
   if (directWrap?.dataset?.groupId) return directWrap.dataset.groupId;
-
   const menu = button?.closest?.('.groupPillMenu');
   const homeWrap = menu?.__dockHome;
   if (homeWrap?.dataset?.groupId) return homeWrap.dataset.groupId;
-
   const state = await api.storage.local.get(['dockActiveGroup']);
   return norm(state?.dockActiveGroup);
+}
+async function deliverShareUrl(url, name) {
+  // Best UX on Safari/iPad: hand the short Dock URL to the operating system's
+  // Share Sheet. If Web Share is unavailable or loses transient activation after
+  // the network request, fall back to an automatic clipboard copy.
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: norm(name) || 'Dock', text: 'A Dock was shared with you.', url });
+      return 'shared';
+    }
+  } catch (error) {
+    // AbortError means the user intentionally closed the sheet; still copy the
+    // URL so the Share action remains useful without requiring a second click.
+  }
+  if (await copyTextSafe(url)) return 'copied';
+  return 'manual';
 }
 async function createShortShare(groupId){
   if (sharing) return;
@@ -116,9 +137,6 @@ async function createShortShare(groupId){
     if (user?.id) headers['X-Dock-User-Id'] = norm(user.id);
     if (user?.email) headers['X-Dock-User-Email'] = norm(user.email).toLowerCase();
 
-    // The 0.3.9 server accepts an authenticated Dock share without a claimed
-    // browser extension id. That keeps Safari from impersonating Chrome while
-    // preserving one opaque HTTPS share-link contract across browsers.
     const response = await fetch(SHARE_API, {
       method: 'POST', cache: 'no-store', headers,
       body: JSON.stringify({ payload }),
@@ -127,10 +145,16 @@ async function createShortShare(groupId){
     try { result = await response.json(); } catch {}
     if (!response.ok || !result?.url) throw new Error(result?.error || `Share failed (HTTP ${response.status}).`);
 
+    const shortUrl = norm(result.url);
+    if (!/^https:\/\/dock-production-mvp\.vercel\.app\/share\/[A-Za-z0-9_-]{8,64}\/?$/.test(shortUrl)) {
+      throw new Error('Dock received an invalid share link from the server.');
+    }
+
     document.querySelectorAll('.groupPillMenu').forEach((menuEl) => menuEl.classList.add('hidden'));
-    const copied = await copyTextSafe(result.url);
-    if (copied) showShareToast('Dock link copied — paste it anywhere. Expires in 30 days.');
-    else prompt('Copy and share this Dock link:', result.url);
+    const delivery = await deliverShareUrl(shortUrl, group.name);
+    if (delivery === 'shared') showShareToast('Dock shared. The link is also ready through your Share Sheet.');
+    else if (delivery === 'copied') showShareToast('Dock link copied — just paste it where you want it. Expires in 30 days.');
+    else prompt('Copy and share this Dock link:', shortUrl);
   } catch (error) {
     showShareToast(error?.message || 'Dock could not create a share link.', 'error');
   } finally {
@@ -138,15 +162,21 @@ async function createShortShare(groupId){
   }
 }
 
-document.addEventListener('click', async (event) => {
+async function interceptShare(event) {
   const button = event.target?.closest?.('button');
   if (!button) return;
+  const text = norm(button.textContent).toLowerCase();
   const isTopShare = button.id === 'createShareLinkBtn';
-  const isDockMenuShare = button.classList.contains('groupPillMenuItem') && norm(button.textContent).toLowerCase() === 'share';
+  const isDockMenuShare = button.classList.contains('groupPillMenuItem') && text === 'share';
   if (!isTopShare && !isDockMenuShare) return;
 
+  // Window capture is deliberately earlier than the shared memories.js target
+  // handler. Runtime testing proved the legacy #dock-share path could still win
+  // on Safari when interception lived only at document level.
   event.preventDefault();
   event.stopImmediatePropagation();
   const groupId = await resolveGroupId(button);
   await createShortShare(groupId);
-}, true);
+}
+
+window.addEventListener('click', (event) => { interceptShare(event).catch(() => {}); }, true);
