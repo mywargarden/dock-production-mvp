@@ -1,4 +1,5 @@
 // Apple background entrypoint: preserve the proven managed-policy/OAuth bootstrap
-// and layer only the browser-neutral 0.3.9 public-share handoff beside it.
+// and layer only the Apple browser-authority adapters beside the shared core.
 importScripts("apple-background.js");
+importScripts("apple-internal-url-guard.js");
 importScripts("apple-share-background.js");
