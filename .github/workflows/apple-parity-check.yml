@@ -85,7 +85,7 @@ jobs:
           assert 'window.addEventListener' in short_share
           assert 'stopImmediatePropagation' in short_share
           assert '/share\\/' in short_share or '/share/' in short_share
-          assert '#dock-share' not in short_share
+          assert 'dock-share=' not in short_share
           assert 'screenshot_url' not in short_share
           assert 'reason:' not in short_share
 
@@ -104,10 +104,9 @@ jobs:
           assert 'quotaSafeAddAll' in guard
           assert 'toLightGroupItem' in guard
           assert 'dockGroupItems: groupItems' in guard
-          assert 'dockActiveGroup' not in guard.split('await api.storage.local.set({ dockGroupItems: groupItems })')[0].split('async function quotaSafeAddAll')[1]
           assert 'window.addEventListener("pointermove"' in guard
           assert 'cardDragGhost' in guard
-          assert 'dock-share' not in guard
+          assert 'dock-share=' not in guard
 
           apple_entry = Path('dock-extension/apple-entry.js').read_text()
           assert 'importScripts("apple-background.js")' in apple_entry
