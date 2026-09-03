@@ -11,6 +11,4 @@
 - Adds no teacher directory, messaging inbox, third-party URL shortener, or new browser permission.
 - Includes the 0.3.8 managed-background fit and drag-ghost positioning fixes.
 
-Apple parity note: Safari uses the same authenticated first-party share API and opaque HTTPS links. The public Add to Dock handoff is translated locally into the installed Safari extension without exposing Admin/Owner surfaces or embedding private Notes/screenshots in the URL.
-
-Candidate status: requires real Safari macOS cross-browser validation, then independent iPad validation.
+Candidate status: requires real Chrome validation of short-link creation, public landing handoff, authenticated retrieval, import, and the still-open 0.3.8 drag interaction.

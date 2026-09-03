@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
       - uses: actions/setup-node@v4
         with: { node-version: '20' }
       - name: Parse manifest and JS
@@ -44,6 +46,38 @@ jobs:
           g=Path('apple/generate_xcode_project.command').read_text()
           assert 'DOCK_APPLE_VERSION:-0.3.10' in g and 'DOCK_APPLE_BUILD_NUMBER:-310' in g
           print('Dock Apple 0.3.10 parity contract PASS')
+          PY
+      - name: Enforce Chrome 0.3.10 shared-core parity fence
+        run: |
+          git fetch --no-tags --depth=1 origin build-dock-0-3-10-shared-screenshot-artifact
+          rm -rf /tmp/chrome-contract && mkdir -p /tmp/chrome-contract
+          git archive FETCH_HEAD:dock-extension | tar -x -C /tmp/chrome-contract
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+          chrome=Path('/tmp/chrome-contract')
+          apple=Path('dock-extension')
+          def files(root):
+              return {str(p.relative_to(root)): p for p in root.rglob('*') if p.is_file()}
+          def digest(p): return hashlib.sha256(p.read_bytes()).hexdigest()
+          cf, af = files(chrome), files(apple)
+          only_chrome=sorted(set(cf)-set(af))
+          assert not only_chrome, f'Apple lost Chrome product files: {only_chrome}'
+          allowed_apple_only={
+              'apple-background.js','apple-critical-store.js','apple-entry.js','apple-internal-url-guard.js',
+              'apple-memories.js','apple-parity-guard.js','apple-popup.css','apple-popup.js',
+              'apple-share-background.js','apple-storage-bootstrap.js','apple-tab-anchor.js','safari-auth-callback.js',
+          }
+          only_apple=set(af)-set(cf)
+          assert only_apple == allowed_apple_only, f'Unexpected Apple-only drift: {sorted(only_apple ^ allowed_apple_only)}'
+          allowed_shared_differences={
+              'adapters/safariAdapter.js','core/logic.js','import-v2.js','manifest.json',
+              'memories.html','popup.html','short-share.js',
+          }
+          changed={k for k in set(cf)&set(af) if digest(cf[k]) != digest(af[k])}
+          assert changed == allowed_shared_differences, f'Unexplained shared drift: changed={sorted(changed)}'
+          identical=len((set(cf)&set(af))-changed)
+          print(f'Chrome/Safari parity fence PASS: {identical} shared files byte-identical; 7 explicit Apple adapters; 12 Apple-only adapter files.')
           PY
       - name: Verify no old localhost helper
         run: '! grep -R -nE "127\\.0\\.0\\.1:47831|DockHelper" dock-extension apple/SafariWebExtensionHandler.swift apple/generate_xcode_project.command'
