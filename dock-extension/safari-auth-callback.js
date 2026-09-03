@@ -10,6 +10,7 @@
   const hash = window.location.hash || "";
   const search = window.location.search || "";
   const authTransport = /(?:^|[#?&])access_token=/.test(hash + search) || /(?:^|[#?&])error(?:_description)?=/.test(hash + search);
+  // Public cross-browser share route contract: /share/<opaque-id>
   const shareMatch = window.location.pathname.match(/^\/share\/([A-Za-z0-9_-]{8,64})\/?$/);
   const shortShareId = shareMatch?.[1] || "";
 
@@ -29,10 +30,6 @@
     } catch {}
   }
 
-  // Current 0.3.9 short shares use a browser-neutral HTTPS page as the consent
-  // surface. Chrome's page currently contains a chrome-extension:// handoff.
-  // On Safari, rewrite only that local handoff and preserve the exact same public
-  // page, copy, share id, authentication, expiry, and server payload semantics.
   if (shortShareId) {
     const rewriteShareAction = () => {
       try {
@@ -69,8 +66,6 @@
     }, true);
   }
 
-  // Backward compatibility for the temporary Safari payload-in-hash shares that
-  // existed before 0.3.9. New shares never use this format.
   function decodeShareData(encoded) {
     const base64 = String(encoded || "").replace(/-/g, "+").replace(/_/g, "/");
     const pad = base64.length % 4 ? "=".repeat(4 - (base64.length % 4)) : "";
