@@ -1,9 +1,8 @@
 // Apple-only popup authority shim.
-// The shared popup UI and its normal signed-in behavior remain in popup.js.
-// Safari differs only when an action must survive opening an OAuth tab, because
-// Safari may tear down the action popup as soon as focus leaves it.
+// Chrome remains Dock's behavior contract. Safari differs only where browser
+// authority must survive the action popup disappearing during OAuth.
 
-import { getAuthSummary, signOut } from "./core/auth.js";
+import { signOut } from "./core/auth.js";
 import { getSavedTabs } from "./core/storage.js";
 import { api } from "./adapters/index.js";
 
@@ -12,6 +11,26 @@ const saveAllBtn = document.getElementById("saveAllBtn");
 const reasonInput = document.getElementById("reason");
 const workspaceSelect = document.getElementById("workspaceSelect");
 const progressEl = document.getElementById("progress");
+
+const SUPABASE_URL = "https://mcqohghghfxtchxpaddj.supabase.co";
+const CALLBACK_URL = "https://dock-production-mvp.vercel.app/";
+const PENDING_KEY = "dockSafariPendingAuthAction";
+const LAST_RESULT_KEY = "dockSafariLastAuthAction";
+
+// Snapshot the browser tab behind the popup as soon as the popup loads. The
+// signed-out click path must not await anything before opening OAuth; Safari can
+// lose the user activation after an async hop.
+let originSnapshot = { tabId: null, windowId: null };
+try {
+  api.tabs.query({ active: true, currentWindow: true })
+    .then(([tab]) => {
+      originSnapshot = {
+        tabId: tab?.id ?? null,
+        windowId: tab?.windowId ?? null
+      };
+    })
+    .catch(() => {});
+} catch {}
 
 function showProgress(text) {
   if (!progressEl) return;
@@ -82,90 +101,191 @@ async function allEligibleTabsAlreadyDocked(groupId) {
   };
 }
 
-async function beginDurableAuth(action, extra = {}) {
-  const result = await api.runtime.sendMessage({
-    type: "DOCK_SAFARI_BEGIN_AUTH",
-    action,
-    ...extra
-  });
-  if (!result?.ok) throw new Error(result?.error || "Safari sign-in could not start.");
-  return result;
+function buildAuthUrl() {
+  const url = new URL(`${SUPABASE_URL}/auth/v1/authorize`);
+  url.searchParams.set("provider", "google");
+  url.searchParams.set("redirect_to", CALLBACK_URL);
+  url.searchParams.set("scopes", "openid email profile");
+  url.searchParams.set("flow_type", "implicit");
+  return url.toString();
 }
 
-// Capture before popup.js sees the event. For Safari, Dock'em All must either
-// run from the background immediately (already signed in) or hand its intent to
-// the background before OAuth can destroy this popup.
-saveAllBtn?.addEventListener("click", async (event) => {
-  event.preventDefault();
-  event.stopImmediatePropagation();
+function setAuthLaunching(active, message = "") {
+  document.body.dataset.safariAuthLaunching = active ? "true" : "false";
+  for (const button of [authBtn, saveAllBtn]) {
+    if (!button) continue;
+    button.disabled = !!active;
+    button.setAttribute("aria-busy", active ? "true" : "false");
+  }
+  if (message) showProgress(message);
+}
 
+function isVisiblySignedIn() {
+  return String(authBtn?.textContent || "").trim().toLowerCase() === "signed in";
+}
+
+async function recordLaunchResult(result) {
   try {
-    const auth = await getAuthSummary();
-    const reason = reasonInput?.value?.trim?.() || "";
-    const groupId = targetGroupId();
-
-    if (auth?.signedIn) {
-      // Safari live 7 found that a second Dock'em All could spend ~30 seconds
-      // recapturing tabs that shared background.js would later reject as URL
-      // duplicates. Prove the no-op case before any capture work begins.
-      const duplicateCheck = await allEligibleTabsAlreadyDocked(groupId);
-      if (duplicateCheck.allDuplicates) {
-        showProgress(`Done — ${duplicateCheck.eligibleCount} already Docked`);
-        try {
-          await api.storage.local.set({
-            dockSafariLastBulkFastPath: {
-              ok: true,
-              skippedDuplicates: duplicateCheck.eligibleCount,
-              at: Date.now()
-            }
-          });
-        } catch {}
-        return;
+    await api.storage.local.set({
+      [LAST_RESULT_KEY]: {
+        ...result,
+        at: Date.now()
       }
+    });
+  } catch {}
+}
 
-      showProgress("Starting Dock'em All…");
-      const result = await api.runtime.sendMessage({
-        type: "SAVE_ALL_OPEN_TABS",
-        reason,
-        openMemories: true,
-        targetGroupId: groupId
+// IMPORTANT: this function deliberately performs no await before tabs.create.
+// Both the durable storage write and OAuth tab creation are issued directly in
+// the click's user-activation turn. The popup may die immediately afterward;
+// the pending record is what lets the background resume the exact action.
+function beginDurableAuth(action, extra = {}) {
+  const launchId = `auth_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+  const pending = {
+    launchId,
+    source: "popup-direct",
+    action: action === "save-all" ? "save-all" : "sign-in",
+    reason: String(extra.reason || "").slice(0, 500),
+    openMemories: extra.openMemories !== false,
+    targetGroupId: String(extra.targetGroupId || ""),
+    originWindowId: originSnapshot.windowId,
+    originTabId: originSnapshot.tabId,
+    authTabId: null,
+    startedAt: Date.now()
+  };
+
+  // Start persistence first, but do not await it before opening the OAuth tab.
+  const persistPromise = api.storage.local.set({ [PENDING_KEY]: pending });
+  const openPromise = api.tabs.create({ url: buildAuthUrl(), active: true });
+
+  Promise.resolve(persistPromise).catch((error) => {
+    void recordLaunchResult({
+      ok: false,
+      phase: "auth-pending-write",
+      launchId,
+      error: String(error?.message || error || "SAFARI_AUTH_PENDING_WRITE_FAILED")
+    });
+  });
+
+  Promise.resolve(openPromise)
+    .then(async (authTab) => {
+      const authTabId = authTab?.id ?? null;
+      if (authTabId == null) throw new Error("Safari Dock could not open the Google sign-in tab.");
+      try {
+        const stored = await api.storage.local.get([PENDING_KEY]);
+        const current = stored?.[PENDING_KEY];
+        if (current?.launchId === launchId) {
+          await api.storage.local.set({
+            [PENDING_KEY]: { ...current, authTabId }
+          });
+        }
+      } catch {}
+      await recordLaunchResult({
+        ok: true,
+        phase: "auth-tab-opened",
+        source: "popup-direct",
+        action: pending.action,
+        launchId,
+        authTabId
       });
-      if (!result?.ok) throw new Error(result?.error || "Bulk save failed.");
-      showProgress(`Done — saved ${result.saved || 0}`);
+    })
+    .catch(async (error) => {
+      try {
+        const stored = await api.storage.local.get([PENDING_KEY]);
+        if (stored?.[PENDING_KEY]?.launchId === launchId) {
+          await api.storage.local.remove([PENDING_KEY]);
+        }
+      } catch {}
+      await recordLaunchResult({
+        ok: false,
+        phase: "auth-tab-open",
+        source: "popup-direct",
+        action: pending.action,
+        launchId,
+        error: String(error?.message || error || "SAFARI_AUTH_TAB_OPEN_FAILED")
+      });
+      setAuthLaunching(false);
+      try { alert(error?.message || "Google sign-in could not open."); } catch {}
+    });
+
+  return { ok: true, started: true, action: pending.action, launchId };
+}
+
+async function runSignedInBulk(reason, groupId) {
+  try {
+    const duplicateCheck = await allEligibleTabsAlreadyDocked(groupId);
+    if (duplicateCheck.allDuplicates) {
+      showProgress(`Done — ${duplicateCheck.eligibleCount} already Docked`);
+      try {
+        await api.storage.local.set({
+          dockSafariLastBulkFastPath: {
+            ok: true,
+            skippedDuplicates: duplicateCheck.eligibleCount,
+            at: Date.now()
+          }
+        });
+      } catch {}
       return;
     }
 
-    showProgress("Sign in with Google, then Dock'em All will continue automatically…");
-    await beginDurableAuth("save-all", {
+    showProgress("Starting Dock'em All…");
+    const result = await api.runtime.sendMessage({
+      type: "SAVE_ALL_OPEN_TABS",
       reason,
       openMemories: true,
       targetGroupId: groupId
     });
+    if (!result?.ok) throw new Error(result?.error || "Bulk save failed.");
+    showProgress(`Done — saved ${result.saved || 0}`);
   } catch (error) {
-    alert(error?.message || "Dock'em All failed to start.");
+    try { alert(error?.message || "Dock'em All failed to start."); } catch {}
   }
-}, true);
+}
 
-// Make the explicit Sign in button durable for the same reason. Sign-out stays
-// local and uses the shared auth module.
-authBtn?.addEventListener("click", async (event) => {
+// Capture before popup.js sees the event. Signed-out Safari must launch OAuth
+// directly from this user gesture. Once signed in, the unchanged shared
+// background remains the authority for the actual Dock'em All operation.
+saveAllBtn?.addEventListener("click", (event) => {
   event.preventDefault();
   event.stopImmediatePropagation();
 
-  try {
-    const auth = await getAuthSummary();
-    if (auth?.signedIn) {
+  const reason = reasonInput?.value?.trim?.() || "";
+  const groupId = targetGroupId();
+
+  if (!isVisiblySignedIn()) {
+    setAuthLaunching(true, "Opening Google sign-in… Dock'em All will continue automatically.");
+    beginDurableAuth("save-all", {
+      reason,
+      openMemories: true,
+      targetGroupId: groupId
+    });
+    return;
+  }
+
+  void runSignedInBulk(reason, groupId);
+}, true);
+
+// Sign-out can be asynchronous. Signed-out sign-in must preserve the original
+// click's user activation, so it launches before any await occurs.
+authBtn?.addEventListener("click", (event) => {
+  event.preventDefault();
+  event.stopImmediatePropagation();
+
+  if (!isVisiblySignedIn()) {
+    setAuthLaunching(true, "Opening Google sign-in…");
+    beginDurableAuth("sign-in");
+    return;
+  }
+
+  void (async () => {
+    try {
       await signOut();
       authBtn.textContent = "Sign in";
       authBtn.title = "Sign in with Google";
-      return;
+    } catch (error) {
+      try { alert(error?.message || "Dock sign-out failed."); } catch {}
     }
-
-    showProgress("Opening Google sign-in…");
-    await beginDurableAuth("sign-in");
-  } catch (error) {
-    alert(error?.message || "Google sign-in failed.");
-  }
+  })();
 }, true);
 
 // Load the unchanged shared popup after Safari's authority hooks are installed.
