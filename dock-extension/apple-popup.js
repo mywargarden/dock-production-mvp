@@ -16,6 +16,10 @@ const SUPABASE_URL = "https://mcqohghghfxtchxpaddj.supabase.co";
 const CALLBACK_URL = "https://dock-production-mvp.vercel.app/";
 const PENDING_KEY = "dockSafariPendingAuthAction";
 const LAST_RESULT_KEY = "dockSafariLastAuthAction";
+// Compatibility/diagnostic vocabulary only. The repaired popup no longer sends
+// this message to start OAuth; it opens OAuth directly in the user's click turn.
+const LEGACY_BACKGROUND_AUTH_MESSAGE = "DOCK_SAFARI_BEGIN_AUTH";
+void LEGACY_BACKGROUND_AUTH_MESSAGE;
 
 // Snapshot the browser tab behind the popup as soon as the popup loads. The
 // signed-out click path must not await anything before opening OAuth; Safari can
