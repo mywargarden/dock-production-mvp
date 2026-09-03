@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+  <title>Manifest authorization</title>
+  <style>
+    body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f7f3eb;color:#10213b;font:16px/1.5 system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+    main{max-width:560px;padding:36px;text-align:center}
+    strong{display:block;font-size:20px;margin-bottom:8px}
+  </style>
+</head>
+<body>
+  <main id="status"><strong>Returning to Manifest…</strong>Please keep this window open.</main>
+  <script>
+  (() => {
+    'use strict';
+    const CALLBACK = 'https://imaldanohaklbcekdhnpmmcfgmbpbaem.chromiumapp.org/supabase-auth';
+    const source = new URL(window.location.href);
+    const state = source.searchParams.get('state') || '';
+    const status = document.getElementById('status');
+    if (!/^[0-9a-f]{48}$/.test(state)) {
+      status.innerHTML = '<strong>Manifest authorization stopped.</strong>The security state was missing or invalid. Return to Manifest and try Connect Google again.';
+      return;
+    }
+    const out = new URLSearchParams(source.hash.replace(/^#/, ''));
+    for (const [key, value] of source.searchParams.entries()) {
+      if (key !== 'state' && !out.has(key)) out.set(key, value);
+    }
+    out.set('manifest_state', state);
+    window.location.replace(`${CALLBACK}#${out.toString()}`);
+  })();
+  </script>
+</body>
+</html>
