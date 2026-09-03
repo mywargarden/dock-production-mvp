@@ -80,8 +80,8 @@ importScripts("background.js");
 
 // Safari does not provide WebExtensions identity.launchWebAuthFlow. More
 // importantly, an action popup can disappear as soon as Safari activates the
-// OAuth tab. Keep the auth transaction and any continuation in the persistent
-// background so the user intent survives popup teardown on macOS and iPadOS.
+// OAuth tab. Therefore auth continuation state is owned by the background and
+// must be durably acknowledged before OAuth is permitted to open.
 (() => {
   const api = globalThis.browser;
   if (!api?.runtime?.onMessage || !api?.tabs) return;
@@ -150,12 +150,26 @@ importScripts("background.js");
     } catch {}
   }
 
-  async function beginAuthTransaction(message = {}) {
-    const [originTab] = await api.tabs.query({ active: true, currentWindow: true }).catch(() => []);
-    const originWindowId = originTab?.windowId ?? null;
-    const originTabId = originTab?.id ?? null;
+  async function readPending() {
+    const stored = await api.storage.local.get([PENDING_KEY]);
+    const pending = stored?.[PENDING_KEY];
+    return pending && typeof pending === "object" ? pending : null;
+  }
 
+  async function stageAuthTransaction(message = {}) {
+    let originWindowId = message.originWindowId ?? null;
+    let originTabId = message.originTabId ?? null;
+
+    if (originWindowId == null || originTabId == null) {
+      const [originTab] = await api.tabs.query({ active: true, currentWindow: true }).catch(() => []);
+      originWindowId = originWindowId ?? originTab?.windowId ?? null;
+      originTabId = originTabId ?? originTab?.id ?? null;
+    }
+
+    const launchId = `auth_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     const pending = {
+      launchId,
+      source: "background-staged",
       action: message.action === "save-all" ? "save-all" : "sign-in",
       reason: String(message.reason || "").slice(0, 500),
       openMemories: message.openMemories !== false,
@@ -163,16 +177,82 @@ importScripts("background.js");
       originWindowId,
       originTabId,
       authTabId: null,
-      startedAt: Date.now()
+      startedAt: Date.now(),
+      stagedAt: Date.now()
     };
 
     await api.storage.local.set({ [PENDING_KEY]: pending });
 
-    const authTab = await api.tabs.create({ url: buildAuthUrl(), active: true });
-    pending.authTabId = authTab?.id ?? null;
-    await api.storage.local.set({ [PENDING_KEY]: pending });
-    await recordResult({ ok: true, phase: "auth-started", action: pending.action, authTabId: pending.authTabId });
-    return { ok: true, started: true, action: pending.action };
+    // A successful set() is not enough for this boundary. Read it back and
+    // verify identity before allowing the popup to open OAuth.
+    const verified = await readPending();
+    if (!verified || verified.launchId !== launchId) {
+      await recordResult({
+        ok: false,
+        phase: "auth-stage-verify",
+        launchId,
+        error: "SAFARI_AUTH_STAGE_NOT_DURABLE"
+      });
+      return { ok: false, error: "SAFARI_AUTH_STAGE_NOT_DURABLE" };
+    }
+
+    await recordResult({
+      ok: true,
+      phase: "auth-staged",
+      action: pending.action,
+      launchId,
+      originWindowId,
+      originTabId
+    });
+
+    return {
+      ok: true,
+      staged: true,
+      launchId,
+      authUrl: buildAuthUrl(),
+      action: pending.action
+    };
+  }
+
+  async function attachAuthTab(message = {}) {
+    const launchId = String(message.launchId || "");
+    const authTabId = message.authTabId ?? null;
+    const pending = await readPending();
+    if (!pending || pending.launchId !== launchId) {
+      return { ok: false, error: "SAFARI_AUTH_STAGE_MISMATCH" };
+    }
+    const next = { ...pending, authTabId, authTabAttachedAt: Date.now() };
+    await api.storage.local.set({ [PENDING_KEY]: next });
+    return { ok: true, attached: true, launchId, authTabId };
+  }
+
+  async function cancelAuthTransaction(message = {}) {
+    const launchId = String(message.launchId || "");
+    const pending = await readPending();
+    if (!pending) return { ok: true, cancelled: false };
+    if (launchId && pending.launchId !== launchId) {
+      return { ok: false, error: "SAFARI_AUTH_STAGE_MISMATCH" };
+    }
+    await api.storage.local.remove([PENDING_KEY]);
+    await recordResult({ ok: false, phase: "auth-cancelled", launchId: pending.launchId });
+    return { ok: true, cancelled: true };
+  }
+
+  // Compatibility route for any older Apple popup still installed. It now uses
+  // the same transactional stage before opening OAuth rather than the old race.
+  async function beginAuthTransaction(message = {}) {
+    const staged = await stageAuthTransaction(message);
+    if (!staged?.ok) return staged;
+    try {
+      const authTab = await api.tabs.create({ url: staged.authUrl, active: true });
+      const authTabId = authTab?.id ?? null;
+      if (authTabId == null) throw new Error("Safari Dock could not open the OAuth tab.");
+      await attachAuthTab({ launchId: staged.launchId, authTabId });
+      return { ok: true, started: true, action: staged.action, launchId: staged.launchId, authTabId };
+    } catch (error) {
+      await cancelAuthTransaction({ launchId: staged.launchId });
+      throw error;
+    }
   }
 
   async function restoreOrigin(pending) {
@@ -186,15 +266,24 @@ importScripts("background.js");
   }
 
   async function completeAuthTransaction(callbackUrl, sender) {
-    const stored = await api.storage.local.get([PENDING_KEY]);
-    const pending = stored?.[PENDING_KEY];
-    if (!pending || typeof pending !== "object") return { ok: false, error: "NO_PENDING_SAFARI_AUTH" };
+    const pending = await readPending();
+    if (!pending) {
+      await recordResult({ ok: false, phase: "auth-callback", error: "NO_PENDING_SAFARI_AUTH" });
+      return { ok: false, error: "NO_PENDING_SAFARI_AUTH" };
+    }
+
     if ((Date.now() - Number(pending.startedAt || 0)) > MAX_PENDING_AGE_MS) {
       await api.storage.local.remove([PENDING_KEY]);
+      await recordResult({ ok: false, phase: "auth-callback", launchId: pending.launchId, error: "SAFARI_AUTH_EXPIRED" });
       return { ok: false, error: "SAFARI_AUTH_EXPIRED" };
     }
 
-    if (pending.authTabId != null && sender?.tab?.id != null && sender.tab.id !== pending.authTabId) {
+    // authTabId attachment is deliberately non-load-bearing. If the popup died
+    // before attaching it, the callback sender becomes the authoritative auth
+    // tab for this transaction.
+    const senderTabId = sender?.tab?.id ?? null;
+    const effectiveAuthTabId = pending.authTabId ?? senderTabId;
+    if (pending.authTabId != null && senderTabId != null && senderTabId !== pending.authTabId) {
       return { ok: false, error: "SAFARI_AUTH_WRONG_TAB" };
     }
 
@@ -202,7 +291,7 @@ importScripts("background.js");
     if (!parsed) return { ok: false, error: "SAFARI_AUTH_BAD_CALLBACK" };
     if (parsed.error) {
       await api.storage.local.remove([PENDING_KEY]);
-      await recordResult({ ok: false, phase: "auth-callback", error: parsed.error });
+      await recordResult({ ok: false, phase: "auth-callback", launchId: pending.launchId, error: parsed.error });
       return { ok: false, error: parsed.error };
     }
     if (!parsed.accessToken) return { ok: false, error: "SAFARI_AUTH_TOKEN_MISSING" };
@@ -225,15 +314,16 @@ importScripts("background.js");
       }
     });
 
-    if (pending.authTabId != null) {
-      try { await api.tabs.remove(pending.authTabId); } catch {}
+    // Session persistence is complete before the transport tab is destroyed.
+    if (effectiveAuthTabId != null) {
+      try { await api.tabs.remove(effectiveAuthTabId); } catch {}
     }
     await restoreOrigin(pending);
 
     let continuation = { ok: true, signedIn: true };
     if (pending.action === "save-all") {
       if (typeof saveAllOpenTabs !== "function") {
-        continuation = { ok: false, error: "SAFARI_BULK_HANDLER_UNAVAILABLE" };
+        continuation = { ok: false, signedIn: true, action: "save-all", error: "SAFARI_BULK_HANDLER_UNAVAILABLE" };
       } else {
         try {
           const result = await saveAllOpenTabs({
@@ -244,37 +334,66 @@ importScripts("background.js");
           });
           continuation = { ok: true, signedIn: true, action: "save-all", ...result };
         } catch (error) {
-          continuation = { ok: false, signedIn: true, action: "save-all", error: String(error?.message || error || "bulk-save-failed") };
+          continuation = {
+            ok: false,
+            signedIn: true,
+            action: "save-all",
+            error: String(error?.message || error || "bulk-save-failed")
+          };
         }
       }
     }
 
     await api.storage.local.remove([PENDING_KEY]);
-    await recordResult({ ...continuation, phase: "complete", userEmail: String(user?.email || "") });
+    await recordResult({
+      ...continuation,
+      phase: "complete",
+      launchId: pending.launchId,
+      userEmail: String(user?.email || "")
+    });
     return continuation;
   }
 
-  api.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // Promise-returning listeners are the Safari-native path. The shared Chrome
+  // background keeps its own sendResponse listeners unchanged.
+  api.runtime.onMessage.addListener((message, sender) => {
+    if (message?.type === "DOCK_SAFARI_STAGE_AUTH") {
+      return stageAuthTransaction(message).catch(async (error) => {
+        const result = { ok: false, error: String(error?.message || error || "safari-auth-stage-failed") };
+        await recordResult({ ...result, phase: "auth-stage" });
+        return result;
+      });
+    }
+
+    if (message?.type === "DOCK_SAFARI_ATTACH_AUTH_TAB") {
+      return attachAuthTab(message).catch(async (error) => {
+        const result = { ok: false, error: String(error?.message || error || "safari-auth-attach-failed") };
+        await recordResult({ ...result, phase: "auth-attach" });
+        return result;
+      });
+    }
+
+    if (message?.type === "DOCK_SAFARI_CANCEL_AUTH") {
+      return cancelAuthTransaction(message).catch(async (error) => ({
+        ok: false,
+        error: String(error?.message || error || "safari-auth-cancel-failed")
+      }));
+    }
+
     if (message?.type === "DOCK_SAFARI_BEGIN_AUTH") {
-      beginAuthTransaction(message)
-        .then(sendResponse)
-        .catch(async (error) => {
-          const result = { ok: false, error: String(error?.message || error || "safari-auth-start-failed") };
-          await recordResult({ ...result, phase: "auth-start" });
-          sendResponse(result);
-        });
-      return true;
+      return beginAuthTransaction(message).catch(async (error) => {
+        const result = { ok: false, error: String(error?.message || error || "safari-auth-start-failed") };
+        await recordResult({ ...result, phase: "auth-start" });
+        return result;
+      });
     }
 
     if (message?.type === "DOCK_SAFARI_AUTH_CALLBACK") {
-      completeAuthTransaction(message.url, sender)
-        .then(sendResponse)
-        .catch(async (error) => {
-          const result = { ok: false, error: String(error?.message || error || "safari-auth-callback-failed") };
-          await recordResult({ ...result, phase: "auth-callback" });
-          sendResponse(result);
-        });
-      return true;
+      return completeAuthTransaction(message.url, sender).catch(async (error) => {
+        const result = { ok: false, error: String(error?.message || error || "safari-auth-callback-failed") };
+        await recordResult({ ...result, phase: "auth-callback" });
+        return result;
+      });
     }
 
     return undefined;
