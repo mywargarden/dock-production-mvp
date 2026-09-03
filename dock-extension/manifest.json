@@ -9,7 +9,8 @@
     "tabs",
     "activeTab",
     "alarms",
-    "nativeMessaging"
+    "nativeMessaging",
+    "clipboardWrite"
   ],
   "host_permissions": [
     "<all_urls>",
