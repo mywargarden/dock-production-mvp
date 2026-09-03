@@ -2,18 +2,21 @@ import { NextRequest, NextResponse } from 'next/server'
 import {
   getShareAdminClient,
   requireDockShareUser,
-  sanitizeChromeExtensionId,
   sanitizeDockSharePayload,
   sanitizeShareId,
   validateShareRequestText,
 } from '@/lib/shareServer'
 
 const SHARE_TTL_DAYS = 30
+const CANONICAL_CHROME_EXTENSION_ID = 'ljbeicldjiaglnflgnlmafnalpmapdne'
 
 function failure(error: any) {
   const status = Number(error?.status) || 400
   const code = String(error?.code || (status >= 500 ? 'SHARE_SERVER_ERROR' : 'INVALID_SHARE_REQUEST'))
-  return NextResponse.json({ error: String(error?.message || 'Share request failed.'), code }, { status })
+  return NextResponse.json(
+    { error: String(error?.message || 'Share request failed.'), code },
+    { status, headers: { 'Cache-Control': 'no-store' } },
+  )
 }
 
 function newShareId() {
@@ -30,7 +33,14 @@ export async function POST(request: NextRequest) {
     try { body = JSON.parse(rawBody) } catch { throw new Error('Invalid Dock share payload.') }
 
     const payload = sanitizeDockSharePayload(body?.payload ?? body)
-    const extensionId = sanitizeChromeExtensionId(body?.extensionId || request.headers.get('x-dock-extension-id'))
+    const claimedExtensionId = String(body?.extensionId || request.headers.get('x-dock-extension-id') || '').trim().toLowerCase()
+    if (claimedExtensionId && claimedExtensionId !== CANONICAL_CHROME_EXTENSION_ID) {
+      throw Object.assign(new Error('This Dock client does not match the supported Chrome extension.'), {
+        status: 400,
+        code: 'EXTENSION_ID_MISMATCH',
+      })
+    }
+
     const id = newShareId()
     const expiresAt = new Date(Date.now() + SHARE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString()
     const service = getShareAdminClient()
@@ -38,7 +48,7 @@ export async function POST(request: NextRequest) {
     const { error } = await service.from('dock_shares').insert({
       id,
       created_by: user.id,
-      extension_id: extensionId || null,
+      extension_id: CANONICAL_CHROME_EXTENSION_ID,
       payload,
       expires_at: expiresAt,
     })
