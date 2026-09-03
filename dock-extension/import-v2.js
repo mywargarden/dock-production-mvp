@@ -3,9 +3,9 @@ import { ensureSignedInInteractive, getSession } from './core/auth.js';
 const DEBUG = false;
 const api = (typeof browser !== 'undefined' && browser?.runtime?.getURL) ? browser : chrome;
 const SHARE_API = 'https://dock-production-mvp.vercel.app/api/share';
-const IMPORT_PREVIEW_MAX_WIDTH = 480;
-const IMPORT_PREVIEW_MAX_HEIGHT = 300;
-const IMPORT_PREVIEW_TARGET_CHARS = 70000;
+const IMPORT_PREVIEW_MAX_WIDTH = 420;
+const IMPORT_PREVIEW_MAX_HEIGHT = 260;
+const IMPORT_PREVIEW_TARGET_CHARS = 45000;
 
 const statusEl = document.getElementById('status');
 const detailsEl = document.getElementById('details');
@@ -85,12 +85,13 @@ async function materializeSharedPreview(rawPreview){
     if (!ctx) return '';
     ctx.drawImage(img, 0, 0, width, height);
 
-    let quality = 0.72;
+    let quality = 0.68;
     let dataUrl = canvas.toDataURL('image/webp', quality);
-    while (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS && quality > 0.34) {
+    while (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS && quality > 0.28) {
       quality -= 0.08;
       dataUrl = canvas.toDataURL('image/webp', quality);
     }
+    if (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS) return '';
     return /^data:image\/webp;base64,/i.test(dataUrl) ? dataUrl : '';
   } catch (error) {
     DEBUG && console.warn('Dock could not copy shared preview locally', error);
@@ -112,11 +113,7 @@ async function materializeImportedTabs(rawTabs){
       reason: norm(tab?.reason),
       faviconUrl: norm(tab?.faviconUrl) || null,
       savedAt: tab?.savedAt || Date.now(),
-      screenshot_url: localPreview || null,
-      screenshotUrl: localPreview || null,
       screenshotThumb: localPreview || null,
-      screenshot: localPreview || null,
-      screenshot_data_url: localPreview || null,
       screenshotBlocked: localPreview ? false : Boolean(tab?.screenshotBlocked),
       importedPreviewCopied: Boolean(localPreview),
     });
