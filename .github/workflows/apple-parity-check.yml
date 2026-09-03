@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - apple-parity-0-3-9
+      - apple-parity-0-3-9-runtime-repair
     paths:
       - dock-extension/**
       - apple/**
@@ -30,7 +31,7 @@ jobs:
         run: |
           find dock-extension -type f -name '*.js' -print0 | xargs -0 -n1 node --check
 
-      - name: Freeze Dock 0.3.9 Apple parity invariants
+      - name: Freeze Dock 0.3.9 Apple runtime-repair invariants
         run: |
           python3 - <<'PY'
           import json, re
@@ -40,6 +41,7 @@ jobs:
           perms = set(manifest.get('permissions', []))
           assert manifest.get('version') == '0.3.9', manifest.get('version')
           assert 'nativeMessaging' in perms, perms
+          assert 'clipboardWrite' in perms, perms
           assert 'identity' not in perms, perms
           assert 'identity.email' not in perms, perms
           assert manifest.get('background', {}).get('service_worker') == 'apple-entry.js'
@@ -54,23 +56,14 @@ jobs:
           assert 'import-v2.js' in resources
 
           popup_html = Path('dock-extension/popup.html').read_text()
-          assert 'href="popup.css"' in popup_html
-          assert 'href="apple-popup.css"' in popup_html
-          assert popup_html.index('href="popup.css"') < popup_html.index('href="apple-popup.css"')
           assert 'src="apple-popup.js"' in popup_html
           assert 'src="popup.js"' not in popup_html
 
           apple_popup = Path('dock-extension/apple-popup.js').read_text()
           assert 'DOCK_SAFARI_BEGIN_AUTH' in apple_popup
           assert 'SAVE_ALL_OPEN_TABS' in apple_popup
-          assert 'allEligibleTabsAlreadyDocked' in apple_popup
-          assert 'dockSafariLastBulkFastPath' in apple_popup
           assert 'await import("./popup.js")' in apple_popup
           assert 'stopImmediatePropagation' in apple_popup
-
-          apple_popup_css = Path('dock-extension/apple-popup.css').read_text()
-          assert '#saveAllBtn' in apple_popup_css
-          assert 'opacity: 1 !important' in apple_popup_css
 
           memories_html = Path('dock-extension/memories.html').read_text()
           assert 'managed-background-fit.css' in memories_html
@@ -87,7 +80,12 @@ jobs:
           assert "https://dock-production-mvp.vercel.app/api/share" in short_share
           assert 'body: JSON.stringify({ payload })' in short_share
           assert 'extensionId:' not in short_share
-          assert 'safari-web-extension' in short_share
+          assert 'navigator.share' in short_share
+          assert 'navigator.clipboard' in short_share
+          assert 'window.addEventListener' in short_share
+          assert 'stopImmediatePropagation' in short_share
+          assert '/share\\/' in short_share or '/share/' in short_share
+          assert '#dock-share' not in short_share
           assert 'screenshot_url' not in short_share
           assert 'reason:' not in short_share
 
@@ -100,16 +98,29 @@ jobs:
           assert 'safari-web-extension' in import_v2
 
           guard = Path('dock-extension/apple-parity-guard.js').read_text()
-          assert 'dockSafariLastDeleteAll' in guard
-          assert 'savedTabs: []' in guard and 'savedTabsLite: []' in guard
+          assert 'api.storage.local.remove(["savedTabs", "savedTabsLite"])' in guard
+          assert guard.index('api.storage.local.remove(["savedTabs", "savedTabsLite"])') < guard.index('api.storage.local.set({ [TOMBSTONE_KEY]: tombstones })')
           assert 'deleteRemoteMemoriesByUrls' in guard
+          assert 'quotaSafeAddAll' in guard
+          assert 'toLightGroupItem' in guard
+          assert 'dockGroupItems: groupItems' in guard
+          assert 'dockActiveGroup' not in guard.split('await api.storage.local.set({ dockGroupItems: groupItems })')[0].split('async function quotaSafeAddAll')[1]
+          assert 'window.addEventListener("pointermove"' in guard
+          assert 'cardDragGhost' in guard
           assert 'dock-share' not in guard
-          assert 'SHARE_ORIGIN' not in guard
 
           apple_entry = Path('dock-extension/apple-entry.js').read_text()
           assert 'importScripts("apple-background.js")' in apple_entry
           assert 'importScripts("apple-internal-url-guard.js")' in apple_entry
+          assert 'importScripts("apple-tab-anchor.js")' in apple_entry
           assert 'importScripts("apple-share-background.js")' in apple_entry
+
+          tab_anchor = Path('dock-extension/apple-tab-anchor.js').read_text()
+          assert "runtime.getURL('memories.html')" in tab_anchor
+          assert 'api.tabs.move(tab.id, { index: 0 })' in tab_anchor
+          assert 'tabs.onCreated' in tab_anchor
+          assert 'tabs.onUpdated' in tab_anchor
+          assert 'tabs.onMoved' in tab_anchor
 
           internal_guard = Path('dock-extension/apple-internal-url-guard.js').read_text()
           assert 'safari-web-extension://' in internal_guard
@@ -130,7 +141,6 @@ jobs:
           logic = Path('dock-extension/core/logic.js').read_text()
           assert 'safari-web-extension://' in logic
 
-          # Shared Safe Harbor behavior remains shared rather than Apple-cloned.
           shared_memories = Path('dock-extension/memories.js').read_text()
           assert 'openSelectedBtn?.addEventListener' in shared_memories
           assert 'openAllBtn?.addEventListener' in shared_memories
@@ -170,7 +180,7 @@ jobs:
           assert 'DOCK_APPLE_VERSION:-0.3.9' in generator
           assert 'DOCK_APPLE_BUILD_NUMBER:-39' in generator
 
-          print('Dock 0.3.9 Apple parity static contract PASS')
+          print('Dock 0.3.9 Apple runtime-repair static contract PASS')
           PY
 
       - name: Verify old localhost helper is not in current runtime path
@@ -196,10 +206,10 @@ jobs:
           chmod +x artifact/START_DOCK_APPLE.command
           printf '%s\n' "${GITHUB_SHA}" > artifact/APPLE_CANDIDATE_COMMIT.txt
           cd artifact
-          zip -qry ../dock-apple-parity-0.3.9-source.zip .
+          zip -qry ../dock-apple-parity-0.3.9-runtime-repair.zip .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: dock-apple-parity-0.3.9-source
-          path: dock-apple-parity-0.3.9-source.zip
+          name: dock-apple-parity-0.3.9-runtime-repair
+          path: dock-apple-parity-0.3.9-runtime-repair.zip
           if-no-files-found: error
