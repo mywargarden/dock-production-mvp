@@ -1,0 +1,12 @@
+/* Dock memory drag ghost anchoring.
+   The dragged clone is also a .card. Later global/managed card rules can force
+   cards to position: relative, which makes viewport pointer coordinates place
+   the ghost far from the pointer. Restore the ghost's intended fixed authority
+   without changing sort or persistence logic. */
+.card.cardDragGhost,
+body[data-managed-dock="true"] .card.cardDragGhost {
+  position: fixed !important;
+  z-index: 2147482000 !important;
+  pointer-events: none !important;
+  margin: 0 !important;
+}
