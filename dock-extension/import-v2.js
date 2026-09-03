@@ -3,6 +3,9 @@ import { ensureSignedInInteractive, getSession } from './core/auth.js';
 const DEBUG = false;
 const api = (typeof browser !== 'undefined' && browser?.runtime?.getURL) ? browser : chrome;
 const SHARE_API = 'https://dock-production-mvp.vercel.app/api/share';
+const IMPORT_PREVIEW_MAX_WIDTH = 420;
+const IMPORT_PREVIEW_MAX_HEIGHT = 260;
+const IMPORT_PREVIEW_TARGET_CHARS = 45000;
 
 const statusEl = document.getElementById('status');
 const detailsEl = document.getElementById('details');
@@ -36,48 +39,6 @@ function sanitizeUrl(url){
 function pickSharedPreview(tab){
   return norm(tab?.screenshot_url || tab?.screenshotUrl || tab?.screenshotThumb || tab?.screenshot || tab?.screenshot_data_url);
 }
-function xmlEscape(value){
-  return String(value || '').replace(/[&<>"']/g, (char) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;'
-  }[char]));
-}
-function clampText(value, max = 48){
-  const text = norm(value).replace(/\s+/g, ' ');
-  if (text.length <= max) return text;
-  return `${text.slice(0, Math.max(1, max - 1)).trimEnd()}…`;
-}
-function sharedPreviewDomain(url){
-  try {
-    const parsed = new URL(url);
-    return parsed.hostname.replace(/^www\./i, '') || 'Shared website';
-  } catch { return 'Shared website'; }
-}
-function buildSafeSharedPreview(tab, workspaceColor){
-  const url = sanitizeUrl(tab?.url);
-  const domain = sharedPreviewDomain(url);
-  const title = clampText(norm(tab?.title) || domain, 54);
-  const accent = ensureColor(workspaceColor);
-  const initial = (domain.match(/[a-z0-9]/i)?.[0] || 'D').toUpperCase();
-  const svg = `
-    <svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#fbf7f2"/>
-          <stop offset="1" stop-color="#eef7f6"/>
-        </linearGradient>
-      </defs>
-      <rect width="640" height="360" rx="28" fill="url(#bg)"/>
-      <rect x="0" y="0" width="16" height="360" fill="${xmlEscape(accent)}"/>
-      <circle cx="110" cy="126" r="58" fill="${xmlEscape(accent)}" opacity="0.16"/>
-      <circle cx="110" cy="126" r="42" fill="${xmlEscape(accent)}"/>
-      <text x="110" y="143" text-anchor="middle" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="46" font-weight="800" fill="#ffffff">${xmlEscape(initial)}</text>
-      <text x="190" y="106" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="22" font-weight="800" fill="#2b8c8f">SHARED DOCK</text>
-      <text x="190" y="148" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="30" font-weight="800" fill="#1c2a3a">${xmlEscape(clampText(domain, 30))}</text>
-      <text x="62" y="252" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="26" font-weight="700" fill="#1c2a3a">${xmlEscape(title)}</text>
-      <text x="62" y="294" font-family="-apple-system,BlinkMacSystemFont,Segoe UI,sans-serif" font-size="20" font-weight="600" fill="#6d7b89">Preview generated locally — sender screenshot not shared</text>
-    </svg>`;
-  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-}
 function uniqueWorkspaceName(base, groups){
   const existing = new Set((groups || []).map(g => norm(g.name).toLowerCase()).filter(Boolean));
   const root = norm(base) || 'Imported Dock';
@@ -85,6 +46,91 @@ function uniqueWorkspaceName(base, groups){
   let i = 2;
   while (existing.has(`${root} (${i})`.toLowerCase())) i += 1;
   return `${root} (${i})`;
+}
+function loadImageFromBlob(blob){
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Shared preview image could not be decoded.'));
+    };
+    img.src = objectUrl;
+  });
+}
+async function materializeSharedPreview(rawPreview){
+  const source = sanitizeUrl(rawPreview);
+  if (!source) return '';
+
+  try {
+    const response = await fetch(source, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+    if (!response.ok) return '';
+    const blob = await response.blob();
+    if (!blob?.size || !String(blob.type || '').toLowerCase().startsWith('image/')) return '';
+
+    const img = await loadImageFromBlob(blob);
+    const naturalWidth = Math.max(1, Number(img.naturalWidth || img.width || 1));
+    const naturalHeight = Math.max(1, Number(img.naturalHeight || img.height || 1));
+    const scale = Math.min(1, IMPORT_PREVIEW_MAX_WIDTH / naturalWidth, IMPORT_PREVIEW_MAX_HEIGHT / naturalHeight);
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return '';
+    ctx.drawImage(img, 0, 0, width, height);
+
+    let quality = 0.68;
+    let codec = 'image/webp';
+    let dataUrl = canvas.toDataURL(codec, quality);
+
+    // Chrome 0.3.10 prefers WebP. Safari currently does not expose WebP as a
+    // canvas toDataURL output type, so it may silently return PNG instead. Keep
+    // the same dimensions/quality budget but switch only the codec to JPEG when
+    // WebP was not actually produced. JPEG canvas output is supported by Safari
+    // and the canvas is intentionally opaque (alpha: false).
+    if (!/^data:image\/webp;base64,/i.test(dataUrl)) {
+      codec = 'image/jpeg';
+      dataUrl = canvas.toDataURL(codec, quality);
+    }
+
+    while (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS && quality > 0.28) {
+      quality -= 0.08;
+      dataUrl = canvas.toDataURL(codec, quality);
+    }
+    if (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS) return '';
+    return /^data:image\/(?:webp|jpeg);base64,/i.test(dataUrl) ? dataUrl : '';
+  } catch (error) {
+    DEBUG && console.warn('Dock could not copy shared preview locally', error);
+    return '';
+  }
+}
+async function materializeImportedTabs(rawTabs){
+  const tabs = [];
+  for (const tab of (Array.isArray(rawTabs) ? rawTabs : [])) {
+    const url = sanitizeUrl(tab?.url);
+    if (!url) continue;
+    const remotePreview = pickSharedPreview(tab);
+    const localPreview = remotePreview.startsWith('data:image/')
+      ? remotePreview
+      : await materializeSharedPreview(remotePreview);
+    tabs.push({
+      title: norm(tab?.title) || url || 'Untitled',
+      url,
+      reason: norm(tab?.reason),
+      faviconUrl: norm(tab?.faviconUrl) || null,
+      savedAt: tab?.savedAt || Date.now(),
+      screenshotThumb: localPreview || null,
+      screenshotBlocked: localPreview ? false : Boolean(tab?.screenshotBlocked),
+      importedPreviewCopied: Boolean(localPreview),
+    });
+  }
+  return tabs;
 }
 function displayPayload(payload){
   const workspace = payload?.workspace;
@@ -104,24 +150,7 @@ async function importWorkspace(){
   const workspace = sharePayload.workspace;
   const name = uniqueWorkspaceName(workspace.name, groups);
   const id = 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(2, 6);
-  const tabs = Array.isArray(workspace.tabs) ? workspace.tabs.map((tab) => {
-    const realPreview = pickSharedPreview(tab);
-    const localPreview = realPreview || buildSafeSharedPreview(tab, workspace.color);
-    return {
-      title: norm(tab.title) || norm(tab.url) || 'Untitled',
-      url: sanitizeUrl(tab.url),
-      reason: norm(tab.reason),
-      faviconUrl: norm(tab.faviconUrl) || null,
-      savedAt: tab.savedAt || Date.now(),
-      screenshot_url: localPreview || null,
-      screenshotUrl: localPreview || null,
-      screenshotThumb: localPreview || null,
-      screenshot: null,
-      screenshot_data_url: null,
-      screenshotBlocked: false,
-      sharedPreviewGenerated: !realPreview,
-    };
-  }).filter(t => t.url) : [];
+  const tabs = await materializeImportedTabs(workspace.tabs);
 
   groups.push({ id, name, color: ensureColor(workspace.color), createdAt: Date.now(), importedAt: Date.now() });
   groupItems[id] = tabs;
@@ -162,6 +191,7 @@ async function loadShortShare(id, interactive = false){
   }
 
   displayPayload(result.payload);
+  statusEl.textContent = 'Copying shared previews into Dock…';
   const importedName = await importWorkspace();
   statusEl.textContent = `Added “${importedName}” to Dock.`;
   window.location.replace(api.runtime.getURL('memories.html'));
@@ -183,7 +213,7 @@ function loadLegacyData(encoded){
 function loadFromHash(){
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const shareId = norm(hash.get('share'));
-  const encoded = hash.get('data');
+ const encoded = hash.get('data');
   if (shareId) {
     loadShortShare(shareId, false).catch((err) => {
       DEBUG && console.error(err);

@@ -7,8 +7,8 @@ OUT_DIR="${DOCK_APPLE_OUT_DIR:-$ROOT_DIR/DockAppleHost}"
 APP_NAME="Dock"
 BUNDLE_ID="${DOCK_APP_BUNDLE_ID:-com.anchor.dock.macos}"
 DEVELOPMENT_TEAM="${DOCK_DEVELOPMENT_TEAM:-A4JT7VU8Q4}"
-DOCK_VERSION="${DOCK_APPLE_VERSION:-0.3.9}"
-DOCK_BUILD_NUMBER="${DOCK_APPLE_BUILD_NUMBER:-39}"
+DOCK_VERSION="${DOCK_APPLE_VERSION:-0.3.10}"
+DOCK_BUILD_NUMBER="${DOCK_APPLE_BUILD_NUMBER:-310}"
 
 command -v xcrun >/dev/null 2>&1 || { echo "Xcode command line tools are required."; exit 1; }
 

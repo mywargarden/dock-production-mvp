@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Dock",
   "description": "Save tabs with context and screenshots. Dock them safely so you can return anytime.",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAydwKyjxiYKFAP38/WbQAijXb/syWxDE68nG9J7d8oUFftriRkpYjBmYIrsVTVRKqFNWpZ7y5lWcV6/R9YdP4ArNdad6j2qUaIRrFETikmmG6KoI4WN7srPLXJ+6/sz+pGxOykL2cNxIOzZVfkj8n8EATnxvRaGCCx+4LvT5NSETmmlDsWmXAEM/tPQZO+asK4vXsGi4EvI/hIZM8ao1tuxE+v95rhIM9F+N0SKX2plt9aeoS9mlk6K4F5r1a+Hqnd6lKnAmnm8hRUj4l0YCoQKA1yIRaMVG2pJioY8/KEYAJMEKdTSUMy3O7jwDJte8w7UaZuAJdxVAefeceiE2SOwIDAQAB",
   "permissions": [
     "storage",
@@ -32,8 +32,12 @@
   },
   "content_scripts": [
     {
-      "matches": ["https://dock-production-mvp.vercel.app/*"],
-      "js": ["safari-auth-callback.js"],
+      "matches": [
+        "https://dock-production-mvp.vercel.app/*"
+      ],
+      "js": [
+        "safari-auth-callback.js"
+      ],
       "run_at": "document_start"
     }
   ],
@@ -46,6 +50,7 @@
     {
       "resources": [
         "import.html",
+        "import.js",
         "import-v2.js",
         "import.css",
         "assets/dock_logo.png",
