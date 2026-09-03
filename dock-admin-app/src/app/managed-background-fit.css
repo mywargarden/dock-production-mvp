@@ -1,0 +1,7 @@
+/* Dock 0.3.8 — make District Admin Staff Preview predict the extension framing.
+   The gradient remains a readable wash; the administrator image itself is contained, never cropped. */
+.previewShell {
+  background-size: auto, contain !important;
+  background-position: center center, center center !important;
+  background-repeat: no-repeat, no-repeat !important;
+}
