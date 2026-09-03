@@ -43,6 +43,12 @@ fi
 
 cp "$ROOT_DIR/apple/SafariWebExtensionHandler.swift" "$HANDLER_FILE"
 
+# The Safari packager's native macOS host window is only an extension-enablement
+# shell. Make it behave like a normal Mac window every time the Xcode project is
+# regenerated: working close/minimize controls, while closing the shell does not
+# terminate Dock's extension host process.
+python3 "$ROOT_DIR/apple/patch_mac_host_window.py" "$OUT_DIR"
+
 python3 - "$PROJECT_FILE" "$DEVELOPMENT_TEAM" "$DOCK_VERSION" "$DOCK_BUILD_NUMBER" <<'PY'
 from pathlib import Path
 import re, sys
@@ -76,6 +82,7 @@ PY
 
 printf '\nGenerated Apple candidate at:\n  %s\n' "$OUT_DIR"
 printf 'Bundle base: %s\nDeveloper team: %s\nDock version: %s (%s)\n' "$BUNDLE_ID" "$DEVELOPMENT_TEAM" "$DOCK_VERSION" "$DOCK_BUILD_NUMBER"
+printf 'macOS host window: close/minimize controls enabled; closing window keeps Dock host alive.\n'
 printf '\nOpen the generated .xcodeproj and run the Dock app target on macOS first.\nThen select an iPad simulator/device target and run the same project.\n'
 
 open "$(find "$OUT_DIR" -name '*.xcodeproj' -print -quit)"
