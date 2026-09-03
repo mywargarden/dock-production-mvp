@@ -6,6 +6,31 @@
     return String(value || "").trim();
   }
 
+  const href = window.location.href;
+  const hash = window.location.hash || "";
+  const search = window.location.search || "";
+  const authTransport = /(?:^|[#?&])access_token=/.test(hash + search) || /(?:^|[#?&])error(?:_description)?=/.test(hash + search);
+  const shareTransport = new URLSearchParams(hash.replace(/^#/, "")).has("dock-share");
+
+  // The Dock web root is a product/admin surface, not an OAuth transport UI.
+  // Safari executes this at document_start. Hide transport pages before the
+  // underlying web app can paint, preventing any Admin/Owner flash while the
+  // background receives the callback and closes the auth tab.
+  if (authTransport) {
+    try {
+      const root = document.documentElement;
+      root.style.setProperty("visibility", "hidden", "important");
+      root.style.setProperty("background", "#fbf7f2", "important");
+      setTimeout(() => {
+        // If the callback cannot complete for an unexpected reason, fail into a
+        // neutral page instead of exposing the underlying HQ/Admin surface.
+        if (!document.documentElement) return;
+        document.documentElement.style.setProperty("visibility", "visible", "important");
+        document.documentElement.innerHTML = '<head><title>Dock sign-in</title></head><body style="margin:0;background:#fbf7f2;color:#1c2a3a;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh"><div style="max-width:520px;padding:28px;text-align:center"><h1>Finishing Dock sign-in…</h1><p>You can close this tab and return to Dock if it does not close automatically.</p></div></body>';
+      }, 5000);
+    } catch {}
+  }
+
   function decodeShareData(encoded) {
     const base64 = String(encoded || "").replace(/-/g, "+").replace(/_/g, "/");
     const pad = base64.length % 4 ? "=".repeat(4 - (base64.length % 4)) : "";
@@ -19,7 +44,9 @@
     if (!raw) return "";
     try {
       const url = new URL(raw);
-      return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+      if (!["http:", "https:"].includes(url.protocol)) return "";
+      if (url.hostname === "dock-production-mvp.vercel.app") return "";
+      return url.toString();
     } catch {
       return "";
     }
@@ -52,7 +79,9 @@
   async function importPortableShare(encoded) {
     const payload = decodeShareData(encoded);
     const workspace = payload?.workspace;
-    if (!workspace || !Array.isArray(workspace.tabs)) throw new Error("Invalid Dock share payload.");
+    if (payload?.type !== "dock-workspace-share" || !workspace || !Array.isArray(workspace.tabs)) {
+      throw new Error("Invalid Dock share payload.");
+    }
 
     const res = await api.storage.local.get(["dockGroups", "dockGroupItems"]);
     const groups = Array.isArray(res?.dockGroups) ? [...res.dockGroups] : [];
@@ -67,14 +96,14 @@
       return {
         title: norm(tab?.title) || url,
         url,
-        reason: norm(tab?.reason),
+        reason: norm(tab?.reason).slice(0, 500),
         faviconUrl: norm(tab?.faviconUrl) || null,
         savedAt: Number(tab?.savedAt || 0) || Date.now(),
         screenshot_url: preview || null,
         screenshotUrl: preview || null,
         screenshotThumb: preview || null,
-        screenshot: preview || null,
-        screenshot_data_url: preview.startsWith("data:image/") ? preview : null,
+        screenshot: null,
+        screenshot_data_url: null,
         screenshotBlocked: preview ? false : !!tab?.screenshotBlocked
       };
     }).filter(Boolean);
@@ -103,18 +132,10 @@
       }
     });
 
-    try {
-      window.location.replace(api.runtime.getURL("memories.html"));
-    } catch {
-      document.documentElement.innerHTML = `<head><title>Dock imported</title></head><body style="font-family:-apple-system,BlinkMacSystemFont,sans-serif;padding:40px"><h1>Dock imported</h1><p>“${name.replace(/[<>]/g, "")}” is now in Safe Harbor. Open Dock to continue.</p></body>`;
-    }
+    window.location.replace(api.runtime.getURL("memories.html"));
   }
 
   try {
-    const href = window.location.href;
-    const hash = window.location.hash || "";
-    const search = window.location.search || "";
-
     const shareParams = new URLSearchParams(hash.replace(/^#/, ""));
     const portableShare = shareParams.get("dock-share");
     if (portableShare) {
@@ -128,12 +149,12 @@
             }
           });
         } catch {}
-        alert(error?.message || "Dock share could not be imported.");
+        document.documentElement.innerHTML = `<head><title>Dock share</title></head><body style="margin:0;background:#fbf7f2;color:#1c2a3a;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh"><div style="max-width:520px;padding:28px;text-align:center"><h1>Dock share could not be imported.</h1><p>${String(error?.message || "Please open Dock and try again.").replace(/[<>]/g, "")}</p></div></body>`;
       });
       return;
     }
 
-    if (!/(?:^|[#?&])access_token=/.test(hash + search) && !/(?:^|[#?&])error(?:_description)?=/.test(hash + search)) return;
+    if (!authTransport) return;
     api.runtime.sendMessage({
       type: "DOCK_SAFARI_AUTH_CALLBACK",
       url: href
