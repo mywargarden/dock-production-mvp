@@ -8,7 +8,7 @@ import {
 } from '@/lib/shareServer'
 
 const SHARE_TTL_DAYS = 30
-const CANONICAL_CHROME_EXTENSION_ID = 'ljbeicldjiaglnflgnlmafnalpmapdne'
+const CANONICAL_CHROME_EXTENSION_ID = 'ljbeicldjiaglnflgnlmafhalpmdpdne'
 
 function failure(error: any) {
   const status = Number(error?.status) || 400
