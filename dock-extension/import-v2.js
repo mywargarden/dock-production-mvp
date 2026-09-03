@@ -3,6 +3,9 @@ import { ensureSignedInInteractive, getSession } from './core/auth.js';
 const DEBUG = false;
 const api = (typeof browser !== 'undefined' && browser?.runtime?.getURL) ? browser : chrome;
 const SHARE_API = 'https://dock-production-mvp.vercel.app/api/share';
+const IMPORT_PREVIEW_MAX_WIDTH = 480;
+const IMPORT_PREVIEW_MAX_HEIGHT = 300;
+const IMPORT_PREVIEW_TARGET_CHARS = 70000;
 
 const statusEl = document.getElementById('status');
 const detailsEl = document.getElementById('details');
@@ -44,6 +47,82 @@ function uniqueWorkspaceName(base, groups){
   while (existing.has(`${root} (${i})`.toLowerCase())) i += 1;
   return `${root} (${i})`;
 }
+function loadImageFromBlob(blob){
+  return new Promise((resolve, reject) => {
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Shared preview image could not be decoded.'));
+    };
+    img.src = objectUrl;
+  });
+}
+async function materializeSharedPreview(rawPreview){
+  const source = sanitizeUrl(rawPreview);
+  if (!source) return '';
+
+  try {
+    const response = await fetch(source, { method: 'GET', cache: 'no-store', credentials: 'omit' });
+    if (!response.ok) return '';
+    const blob = await response.blob();
+    if (!blob?.size || !String(blob.type || '').toLowerCase().startsWith('image/')) return '';
+
+    const img = await loadImageFromBlob(blob);
+    const naturalWidth = Math.max(1, Number(img.naturalWidth || img.width || 1));
+    const naturalHeight = Math.max(1, Number(img.naturalHeight || img.height || 1));
+    const scale = Math.min(1, IMPORT_PREVIEW_MAX_WIDTH / naturalWidth, IMPORT_PREVIEW_MAX_HEIGHT / naturalHeight);
+    const width = Math.max(1, Math.round(naturalWidth * scale));
+    const height = Math.max(1, Math.round(naturalHeight * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return '';
+    ctx.drawImage(img, 0, 0, width, height);
+
+    let quality = 0.72;
+    let dataUrl = canvas.toDataURL('image/webp', quality);
+    while (dataUrl.length > IMPORT_PREVIEW_TARGET_CHARS && quality > 0.34) {
+      quality -= 0.08;
+      dataUrl = canvas.toDataURL('image/webp', quality);
+    }
+    return /^data:image\/webp;base64,/i.test(dataUrl) ? dataUrl : '';
+  } catch (error) {
+    DEBUG && console.warn('Dock could not copy shared preview locally', error);
+    return '';
+  }
+}
+async function materializeImportedTabs(rawTabs){
+  const tabs = [];
+  for (const tab of (Array.isArray(rawTabs) ? rawTabs : [])) {
+    const url = sanitizeUrl(tab?.url);
+    if (!url) continue;
+    const remotePreview = pickSharedPreview(tab);
+    const localPreview = remotePreview.startsWith('data:image/')
+      ? remotePreview
+      : await materializeSharedPreview(remotePreview);
+    tabs.push({
+      title: norm(tab?.title) || url || 'Untitled',
+      url,
+      reason: norm(tab?.reason),
+      faviconUrl: norm(tab?.faviconUrl) || null,
+      savedAt: tab?.savedAt || Date.now(),
+      screenshot_url: localPreview || null,
+      screenshotUrl: localPreview || null,
+      screenshotThumb: localPreview || null,
+      screenshot: localPreview || null,
+      screenshot_data_url: localPreview || null,
+      screenshotBlocked: localPreview ? false : Boolean(tab?.screenshotBlocked),
+      importedPreviewCopied: Boolean(localPreview),
+    });
+  }
+  return tabs;
+}
 function displayPayload(payload){
   const workspace = payload?.workspace;
   if (!workspace || !Array.isArray(workspace.tabs)) throw new Error('Invalid workspace payload');
@@ -62,22 +141,7 @@ async function importWorkspace(){
   const workspace = sharePayload.workspace;
   const name = uniqueWorkspaceName(workspace.name, groups);
   const id = 'g_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(2, 6);
-  const tabs = Array.isArray(workspace.tabs) ? workspace.tabs.map((tab) => {
-    const preview = pickSharedPreview(tab);
-    return {
-      title: norm(tab.title) || norm(tab.url) || 'Untitled',
-      url: sanitizeUrl(tab.url),
-      reason: norm(tab.reason),
-      faviconUrl: norm(tab.faviconUrl) || null,
-      savedAt: tab.savedAt || Date.now(),
-      screenshot_url: norm(tab.screenshot_url) || null,
-      screenshotUrl: norm(tab.screenshotUrl) || null,
-      screenshotThumb: preview || null,
-      screenshot: preview || null,
-      screenshot_data_url: norm(tab.screenshot_data_url) || (preview.startsWith('data:image/') ? preview : null),
-      screenshotBlocked: preview ? false : Boolean(tab.screenshotBlocked),
-    };
-  }).filter(t => t.url) : [];
+  const tabs = await materializeImportedTabs(workspace.tabs);
 
   groups.push({ id, name, color: ensureColor(workspace.color), createdAt: Date.now(), importedAt: Date.now() });
   groupItems[id] = tabs;
@@ -118,6 +182,7 @@ async function loadShortShare(id, interactive = false){
   }
 
   displayPayload(result.payload);
+  statusEl.textContent = 'Copying shared previews into Dock…';
   const importedName = await importWorkspace();
   statusEl.textContent = `Added “${importedName}” to Dock.`;
   window.location.replace(api.runtime.getURL('memories.html'));
