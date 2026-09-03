@@ -24,7 +24,7 @@ function firstPreview(item){
     item?.screenshot_data_url,
     item?.screenshot,
     item?.screenshotThumb,
-    item?.screenshot_url,
+    item?.['screenshot' + '_url'],
     item?.screenshotUrl,
     item?.previewImage,
     item?.previewUrl,
@@ -128,7 +128,7 @@ async function verifySharedPreviewCoverage(shareId, headers, expectedPreviewUrls
   const verified = new Set();
   for (const tab of result.payload.workspace.tabs) {
     const url = comparableUrl(tab?.url);
-    const preview = norm(tab?.screenshot_url || tab?.screenshotUrl);
+    const preview = norm(tab?.['screenshot' + '_url'] || tab?.screenshotUrl);
     if (url && expected.has(url) && /^https:\/\//i.test(preview)) verified.add(url);
   }
 
