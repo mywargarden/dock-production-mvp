@@ -2,6 +2,8 @@
 // Chrome remains Dock's behavior contract. Safari receives only the missing
 // browser authority required to run that same shared core on macOS/iPadOS.
 
+import "../apple-critical-store.js";
+
 const DOCK_AUTH_CALLBACK = "https://dock-production-mvp.vercel.app/";
 const AUTH_TIMEOUT_MS = 3 * 60 * 1000;
 const NATIVE_HOST_ID = "dock.apple.host";
@@ -80,7 +82,7 @@ function createIdentityShim(nativeApi) {
 
     async getProfileUserInfo() {
       try {
-        const stored = await nativeApi.storage.local.get(["dockAuthUser"]);
+        const stored = await getSafariStorage(nativeApi).local.get(["dockAuthUser"]);
         const user = stored?.dockAuthUser || {};
         return {
           id: String(user?.id || ""),
@@ -142,8 +144,6 @@ async function readNativeManagedPolicy(nativeApi, { force = false } = {}) {
     managedPolicyCachedAt = now;
     return managedPolicyCache;
   } catch {
-    // Unmanaged personal Safari installs are valid. An unavailable native policy
-    // channel must behave exactly like Chrome storage.managed with no policy set.
     managedPolicyCache = {};
     managedPolicyCachedAt = now;
     return managedPolicyCache;
@@ -173,17 +173,26 @@ function createManagedStorageShim(nativeApi) {
   };
 }
 
-function createStorageShim(nativeApi) {
+let safariStorageCache = null;
+function getSafariStorage(nativeApi) {
+  if (safariStorageCache) return safariStorageCache;
   const nativeStorage = nativeApi.storage || {};
-  if (nativeStorage.managed?.get) return nativeStorage;
-  const managed = createManagedStorageShim(nativeApi);
+  const criticalStore = globalThis.DockAppleCriticalStore;
+  const local = criticalStore?.createLocalShim
+    ? criticalStore.createLocalShim(nativeStorage.local)
+    : nativeStorage.local;
+  const managed = nativeStorage.managed?.get
+    ? nativeStorage.managed
+    : createManagedStorageShim(nativeApi);
 
-  return new Proxy(nativeStorage, {
+  safariStorageCache = new Proxy(nativeStorage, {
     get(target, property, receiver) {
+      if (property === "local") return local;
       if (property === "managed") return managed;
       return Reflect.get(target, property, receiver);
     }
   });
+  return safariStorageCache;
 }
 
 export function getSafariApi() {
@@ -193,7 +202,7 @@ export function getSafariApi() {
   const identity = nativeApi.identity?.launchWebAuthFlow && nativeApi.identity?.getRedirectURL
     ? nativeApi.identity
     : createIdentityShim(nativeApi);
-  const storage = createStorageShim(nativeApi);
+  const storage = getSafariStorage(nativeApi);
 
   return new Proxy(nativeApi, {
     get(target, property, receiver) {
