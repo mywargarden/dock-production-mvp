@@ -137,6 +137,40 @@
     window.location.replace(api.runtime.getURL("memories.html"));
   }
 
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  async function deliverAuthCallback() {
+    // popup-direct launches storage persistence and tabs.create in the same user
+    // gesture. In a very fast OAuth return, Safari can deliver this content script
+    // while the pending storage write is still settling. Retry only the transient
+    // no-pending/wakeup cases; never retry a real token or callback error.
+    const transientErrors = new Set([
+      "NO_PENDING_SAFARI_AUTH",
+      "SAFARI_AUTH_WAKEUP_MISSED"
+    ]);
+    let lastError = "";
+
+    for (let attempt = 0; attempt < 12; attempt += 1) {
+      try {
+        const result = await api.runtime.sendMessage({
+          type: "DOCK_SAFARI_AUTH_CALLBACK",
+          url: href
+        });
+        if (result?.ok) return result;
+        lastError = String(result?.error || "SAFARI_AUTH_CALLBACK_NO_RESPONSE");
+        if (!transientErrors.has(lastError)) throw new Error(lastError);
+      } catch (error) {
+        lastError = String(error?.message || error || "SAFARI_AUTH_CALLBACK_SEND_FAILED");
+        // A sleeping Safari service worker can reject the first send. Give it a
+        // bounded wake-up window, but do not turn auth into an unbounded loop.
+        if (attempt >= 11) throw error;
+      }
+      await sleep(120 + (attempt * 80));
+    }
+
+    throw new Error(lastError || "SAFARI_AUTH_CALLBACK_FAILED");
+  }
+
   try {
     const shareParams = new URLSearchParams(hash.replace(/^#/, ""));
     const legacyShare = shareParams.get("dock-share");
@@ -148,6 +182,11 @@
     }
 
     if (!authTransport) return;
-    api.runtime.sendMessage({ type: "DOCK_SAFARI_AUTH_CALLBACK", url: href }).catch(() => {});
+    deliverAuthCallback().catch((error) => {
+      try {
+        document.documentElement.style.setProperty("visibility", "visible", "important");
+        document.documentElement.innerHTML = `<head><title>Dock sign-in</title></head><body style="margin:0;background:#fbf7f2;color:#1c2a3a;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh"><div style="max-width:560px;padding:28px;text-align:center"><h1>Dock sign-in needs one more try.</h1><p>${String(error?.message || "Return to Dock and tap Sign in again.").replace(/[<>]/g, "")}</p></div></body>`;
+      } catch {}
+    });
   } catch {}
 })();
