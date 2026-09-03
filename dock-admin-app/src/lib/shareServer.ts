@@ -1,10 +1,9 @@
 import { createClient, type User } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 
-const MAX_SHARE_REQUEST_CHARS = 3_000_000
-const MAX_SHARE_PAYLOAD_CHARS = 2_500_000
+const MAX_SHARE_REQUEST_CHARS = 500_000
+const MAX_SHARE_PAYLOAD_CHARS = 400_000
 const MAX_SHARE_TABS = 100
-const MAX_PREVIEW_CHARS = 100_000
 
 function norm(value: unknown) {
   return String(value ?? '').trim()
@@ -67,15 +66,6 @@ function sanitizeHttpUrl(value: unknown, maxLength = 2000) {
   }
 }
 
-function sanitizePreview(value: unknown) {
-  const raw = norm(value)
-  if (!raw) return ''
-  if (/^data:image\/(?:png|jpeg|jpg|webp);base64,/i.test(raw)) {
-    return raw.length <= MAX_PREVIEW_CHARS ? raw : ''
-  }
-  return sanitizeHttpUrl(raw)
-}
-
 function safeColor(value: unknown) {
   const raw = norm(value)
   return /^#[0-9a-f]{6}$/i.test(raw) ? raw : '#6f4cff'
@@ -89,17 +79,10 @@ export function sanitizeDockSharePayload(input: unknown) {
   const tabs = workspace.tabs.slice(0, MAX_SHARE_TABS).flatMap((tab: any) => {
     const url = sanitizeHttpUrl(tab?.url)
     if (!url) return []
-    const preview = sanitizePreview(
-      tab?.screenshot_url || tab?.screenshotUrl || tab?.screenshotThumb || tab?.screenshot || tab?.screenshot_data_url
-    )
     return [{
       title: norm(tab?.title).slice(0, 200) || url,
       url,
-      reason: norm(tab?.reason).slice(0, 500),
-      faviconUrl: sanitizeHttpUrl(tab?.faviconUrl || tab?.icon_url, 2000) || null,
-      savedAt: Number.isFinite(Number(tab?.savedAt)) ? Number(tab.savedAt) : Date.now(),
-      screenshot_url: preview || null,
-      screenshotBlocked: preview ? false : Boolean(tab?.screenshotBlocked),
+      faviconUrl: sanitizeHttpUrl(tab?.faviconUrl || tab?.icon_url, 1000) || null,
     }]
   })
 
@@ -115,14 +98,9 @@ export function sanitizeDockSharePayload(input: unknown) {
     },
   }
 
-  let serialized = JSON.stringify(payload)
-  if (serialized.length > MAX_SHARE_PAYLOAD_CHARS) {
-    for (const tab of payload.workspace.tabs) {
-      if (norm(tab.screenshot_url).startsWith('data:image/')) tab.screenshot_url = null
-    }
-    serialized = JSON.stringify(payload)
+  if (JSON.stringify(payload).length > MAX_SHARE_PAYLOAD_CHARS) {
+    throw new Error('This Dock is too large to share in one link.')
   }
-  if (serialized.length > MAX_SHARE_PAYLOAD_CHARS) throw new Error('This Dock is too large to share in one link.')
 
   return payload
 }
