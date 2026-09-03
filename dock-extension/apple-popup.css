@@ -11,6 +11,7 @@
     var(--primary-2, #7b96e8) 100%
   ) !important;
   color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
   border: 1px solid rgba(255,255,255,0.18) !important;
   box-shadow: 0 8px 18px rgba(20,28,40,0.14), inset 0 1px 0 rgba(255,255,255,0.22) !important;
   opacity: 1 !important;
@@ -18,7 +19,31 @@
   appearance: none !important;
 }
 
+/* Safari can repaint a disabled native button as a pale/white control even
+   after custom theme rules have run. Auth-pending is application state, not a
+   visual reset: keep the themed Dock button unmistakably present. */
 #saveAllBtn:disabled,
-#saveAllBtn.secondary:disabled {
-  opacity: 0.62 !important;
+#saveAllBtn.secondary:disabled,
+body[data-safari-auth-launching="true"] #saveAllBtn,
+body[data-safari-auth-launching="true"] #saveAllBtn.secondary {
+  background: linear-gradient(
+    135deg,
+    var(--primary, #4fb3c5) 0%,
+    var(--primary-2, #7b96e8) 100%
+  ) !important;
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  border-color: rgba(255,255,255,0.22) !important;
+  opacity: 0.82 !important;
+  filter: saturate(0.92) !important;
+  cursor: progress !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+}
+
+body[data-safari-auth-launching="true"] #authBtn:disabled {
+  color: #ffffff !important;
+  -webkit-text-fill-color: #ffffff !important;
+  opacity: 0.82 !important;
+  cursor: progress !important;
 }
