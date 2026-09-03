@@ -1,0 +1,32 @@
+name: Package Dock 0.3.10 Shared Screenshot Test
+
+on:
+  push:
+    branches:
+      - build-dock-0-3-10-shared-screenshot-artifact
+    paths:
+      - .github/workflows/package-dock-0-3-10-shared-screenshot.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Package exact extension tree
+        run: |
+          cd dock-extension
+          zip -qr ../Dock-0.3.10-Shared-Screenshot-Test.zip .
+          cd ..
+          sha256sum Dock-0.3.10-Shared-Screenshot-Test.zip > Dock-0.3.10-Shared-Screenshot-Test.sha256
+      - name: Upload test artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.10-Shared-Screenshot-Test
+          path: |
+            Dock-0.3.10-Shared-Screenshot-Test.zip
+            Dock-0.3.10-Shared-Screenshot-Test.sha256
+          if-no-files-found: error
