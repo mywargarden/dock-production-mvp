@@ -10,20 +10,18 @@
   const hash = window.location.hash || "";
   const search = window.location.search || "";
   const authTransport = /(?:^|[#?&])access_token=/.test(hash + search) || /(?:^|[#?&])error(?:_description)?=/.test(hash + search);
-  const shareTransport = new URLSearchParams(hash.replace(/^#/, "")).has("dock-share");
+  const shareMatch = window.location.pathname.match(/^\/share\/([A-Za-z0-9_-]{8,64})\/?$/);
+  const shortShareId = shareMatch?.[1] || "";
 
-  // The Dock web root is a product/admin surface, not an OAuth transport UI.
-  // Safari executes this at document_start. Hide transport pages before the
-  // underlying web app can paint, preventing any Admin/Owner flash while the
-  // background receives the callback and closes the auth tab.
+  // The Dock web root is a product/admin surface, not OAuth transport UI.
+  // Hide OAuth callbacks at document_start so no HQ/Admin frame can flash before
+  // Safari finishes the callback and closes the transport tab.
   if (authTransport) {
     try {
       const root = document.documentElement;
       root.style.setProperty("visibility", "hidden", "important");
       root.style.setProperty("background", "#fbf7f2", "important");
       setTimeout(() => {
-        // If the callback cannot complete for an unexpected reason, fail into a
-        // neutral page instead of exposing the underlying HQ/Admin surface.
         if (!document.documentElement) return;
         document.documentElement.style.setProperty("visibility", "visible", "important");
         document.documentElement.innerHTML = '<head><title>Dock sign-in</title></head><body style="margin:0;background:#fbf7f2;color:#1c2a3a;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh"><div style="max-width:520px;padding:28px;text-align:center"><h1>Finishing Dock sign-in…</h1><p>You can close this tab and return to Dock if it does not close automatically.</p></div></body>';
@@ -31,6 +29,48 @@
     } catch {}
   }
 
+  // Current 0.3.9 short shares use a browser-neutral HTTPS page as the consent
+  // surface. Chrome's page currently contains a chrome-extension:// handoff.
+  // On Safari, rewrite only that local handoff and preserve the exact same public
+  // page, copy, share id, authentication, expiry, and server payload semantics.
+  if (shortShareId) {
+    const rewriteShareAction = () => {
+      try {
+        for (const link of document.querySelectorAll('a[href^="chrome-extension://"]')) {
+          link.setAttribute("href", "#add-to-dock");
+          link.setAttribute("data-dock-apple-share", shortShareId);
+        }
+      } catch {}
+    };
+
+    document.addEventListener("DOMContentLoaded", rewriteShareAction, { once: true });
+    try {
+      new MutationObserver(rewriteShareAction).observe(document.documentElement, { childList: true, subtree: true });
+    } catch {}
+
+    document.addEventListener("click", (event) => {
+      const target = event.target?.closest?.('a[data-dock-apple-share], a[href^="chrome-extension://"]');
+      if (!target) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      api.runtime.sendMessage({ type: "DOCK_OPEN_SHARED_DOCK", shareId: shortShareId })
+        .then((result) => {
+          if (result?.ok) return;
+          throw new Error(result?.error || "Dock could not open this share.");
+        })
+        .catch((error) => {
+          try {
+            const note = document.createElement("p");
+            note.textContent = String(error?.message || "Dock could not open this share.");
+            note.style.cssText = "margin-top:16px;color:#9f3128;font-weight:700";
+            target.parentElement?.appendChild(note);
+          } catch {}
+        });
+    }, true);
+  }
+
+  // Backward compatibility for the temporary Safari payload-in-hash shares that
+  // existed before 0.3.9. New shares never use this format.
   function decodeShareData(encoded) {
     const base64 = String(encoded || "").replace(/-/g, "+").replace(/_/g, "/");
     const pad = base64.length % 4 ? "=".repeat(4 - (base64.length % 4)) : "";
@@ -56,17 +96,6 @@
     return /^#[0-9a-f]{6}$/i.test(norm(value)) ? norm(value) : "#8fd8c6";
   }
 
-  function pickPreview(tab) {
-    return norm(
-      tab?.screenshot_url ||
-      tab?.screenshotUrl ||
-      tab?.screenshotThumb ||
-      tab?.screenshot ||
-      tab?.screenshot_data_url ||
-      ""
-    );
-  }
-
   function uniqueName(base, groups) {
     const existing = new Set((groups || []).map((g) => norm(g?.name).toLowerCase()).filter(Boolean));
     const root = norm(base) || "Imported Dock";
@@ -76,7 +105,7 @@
     return `${root} (${i})`;
   }
 
-  async function importPortableShare(encoded) {
+  async function importLegacyPortableShare(encoded) {
     const payload = decodeShareData(encoded);
     const workspace = payload?.workspace;
     if (payload?.type !== "dock-workspace-share" || !workspace || !Array.isArray(workspace.tabs)) {
@@ -86,78 +115,44 @@
     const res = await api.storage.local.get(["dockGroups", "dockGroupItems"]);
     const groups = Array.isArray(res?.dockGroups) ? [...res.dockGroups] : [];
     const groupItems = res?.dockGroupItems && typeof res.dockGroupItems === "object" ? { ...res.dockGroupItems } : {};
-
     const name = uniqueName(workspace.name, groups);
     const id = `g_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36).slice(2, 6)}`;
     const tabs = workspace.tabs.map((tab) => {
       const url = sanitizeUrl(tab?.url);
       if (!url) return null;
-      const preview = pickPreview(tab);
       return {
         title: norm(tab?.title) || url,
         url,
         reason: norm(tab?.reason).slice(0, 500),
         faviconUrl: norm(tab?.faviconUrl) || null,
         savedAt: Number(tab?.savedAt || 0) || Date.now(),
-        screenshot_url: preview || null,
-        screenshotUrl: preview || null,
-        screenshotThumb: preview || null,
+        screenshot_url: null,
+        screenshotUrl: null,
+        screenshotThumb: null,
         screenshot: null,
         screenshot_data_url: null,
-        screenshotBlocked: preview ? false : !!tab?.screenshotBlocked
+        screenshotBlocked: true
       };
     }).filter(Boolean);
 
     if (!tabs.length) throw new Error("This Dock share contains no regular website tabs.");
-
-    groups.push({
-      id,
-      name,
-      color: ensureColor(workspace.color),
-      createdAt: Date.now(),
-      importedAt: Date.now()
-    });
+    groups.push({ id, name, color: ensureColor(workspace.color), createdAt: Date.now(), importedAt: Date.now() });
     groupItems[id] = tabs;
-
-    await api.storage.local.set({
-      dockGroups: groups,
-      dockGroupItems: groupItems,
-      dockActiveGroup: id,
-      dockSafariLastShareImport: {
-        ok: true,
-        groupId: id,
-        name,
-        count: tabs.length,
-        at: Date.now()
-      }
-    });
-
+    await api.storage.local.set({ dockGroups: groups, dockGroupItems: groupItems, dockActiveGroup: id });
     window.location.replace(api.runtime.getURL("memories.html"));
   }
 
   try {
     const shareParams = new URLSearchParams(hash.replace(/^#/, ""));
-    const portableShare = shareParams.get("dock-share");
-    if (portableShare) {
-      importPortableShare(portableShare).catch(async (error) => {
-        try {
-          await api.storage.local.set({
-            dockSafariLastShareImport: {
-              ok: false,
-              error: String(error?.message || error || "share-import-failed"),
-              at: Date.now()
-            }
-          });
-        } catch {}
+    const legacyShare = shareParams.get("dock-share");
+    if (legacyShare) {
+      importLegacyPortableShare(legacyShare).catch((error) => {
         document.documentElement.innerHTML = `<head><title>Dock share</title></head><body style="margin:0;background:#fbf7f2;color:#1c2a3a;font-family:-apple-system,BlinkMacSystemFont,sans-serif;display:grid;place-items:center;min-height:100vh"><div style="max-width:520px;padding:28px;text-align:center"><h1>Dock share could not be imported.</h1><p>${String(error?.message || "Please open Dock and try again.").replace(/[<>]/g, "")}</p></div></body>`;
       });
       return;
     }
 
     if (!authTransport) return;
-    api.runtime.sendMessage({
-      type: "DOCK_SAFARI_AUTH_CALLBACK",
-      url: href
-    }).catch(() => {});
+    api.runtime.sendMessage({ type: "DOCK_SAFARI_AUTH_CALLBACK", url: href }).catch(() => {});
   } catch {}
 })();
