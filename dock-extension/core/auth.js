@@ -10,7 +10,7 @@ const AUTH_STATE_KEY = "dockAuthState";
 
 const DEFAULT_API_BASE_URL = "https://dock-production-mvp.vercel.app";
 const DEFAULT_SUPABASE_URL = "https://mcqohghghfxtchxpaddj.supabase.co";
-const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJIUzI1NiIsInJlZiI6Im1jcW9oZ2hnaGZ4dGNoeHBhZGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NTkzNjcsImV4cCI6MjA4OTMzNTM2N30.-C_0R5-8iroOq_UoI1UBseDiuz-Auv6od1dLdAO6okQ";
+const DEFAULT_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jcW9oZ2hnaGZ4dGNoeHBhZGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM3NTkzNjcsImV4cCI6MjA4OTMzNTM2N30.-C_0R5-8iroOq_UoI1UBseDiuz-Auv6od1dLdAO6okQ";
 const WRITE_DEBOUNCE_MS = 350;
 const DUPLICATE_WINDOW_MS = 1500;
 const DELETE_REPEAT_COOLDOWN_MS = 30000;
