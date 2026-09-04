@@ -70,6 +70,18 @@ export default function PrivacyPage() {
         interest-based advertising.
       </p>
 
+      <h2>Chrome Web Store Limited Use</h2>
+      <p>
+        Dock's use of information received from Google APIs adheres to the Chrome Web Store User Data Policy,
+        including the Limited Use requirements. Dock limits use of user data to providing or improving Dock's
+        disclosed single purpose and related user-facing features. Dock does not sell user data or use it for
+        personalized advertising, and it only transfers user data when necessary to provide Dock's features,
+        comply with applicable law, protect against fraud or abuse, or as otherwise permitted by the policy.
+        Humans are not permitted to read personal or sensitive user data except where specifically allowed by the
+        policy, such as with the user's explicit consent for support, for security purposes, to comply with law,
+        or for properly aggregated and anonymized internal operations.
+      </p>
+
       <h2>Permissions</h2>
       <p>
         Dock requests browser permissions needed for its existing features. These include storage for local Dock
