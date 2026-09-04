@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="themes-skipper.css" />
     <link rel="stylesheet" href="managed-background-fit.css" />
     <link rel="stylesheet" href="drag-sort-fix.css" />
+    <link rel="stylesheet" href="launcher.css" />
   </head>
   <body>
     <header class="header">
@@ -97,9 +98,23 @@
       <div id="grid" class="grid"></div>
     </main>
 
+    <button id="dockLauncher" class="dockLauncher" type="button" title="Open Dock" aria-label="Open Dock popup. Drag to move.">
+      <img src="icons/icon128.png" alt="" />
+    </button>
+
+    <aside id="dockLauncherHint" class="dockLauncherHint hidden" aria-live="polite">
+      <strong>Keep Dock one click away</strong>
+      <p>Pin Dock in Chrome’s toolbar for instant capture while you browse. This floating Dock button always opens it from Safe Harbor.</p>
+      <div class="dockLauncherHintActions">
+        <button id="dockHintDismiss" class="dockHintDismiss" type="button">Dismiss</button>
+        <button id="dockHintOk" class="dockHintPrimary" type="button">Got it</button>
+      </div>
+    </aside>
+
     <div id="calmToast" class="calmToast hidden" aria-live="polite" aria-atomic="true"></div>
     <script type="module" src="short-share.js"></script>
     <script type="module" src="memories.js"></script>
     <script type="module" src="continuity.js"></script>
+    <script type="module" src="launcher.js"></script>
   </body>
 </html>
