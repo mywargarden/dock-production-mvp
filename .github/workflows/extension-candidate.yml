@@ -1,0 +1,62 @@
+name: Dock 0.3.12 Candidate Artifact
+
+on:
+  pull_request:
+    paths:
+      - dock-extension/**
+      - scripts/static_check.sh
+      - scripts/find_junk.sh
+      - .github/workflows/extension-candidate.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  candidate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Static gate
+        run: bash scripts/static_check.sh
+      - name: Build exact candidate tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf candidate-out
+          mkdir -p candidate-out/Dock-0.3.12
+          rsync -a dock-extension/ candidate-out/Dock-0.3.12/ \
+            --exclude='*.md' \
+            --exclude='background.js' \
+            --exclude='import.js'
+
+          test -f candidate-out/Dock-0.3.12/manifest.json
+          test -f candidate-out/Dock-0.3.12/background-v2.js
+          test -f candidate-out/Dock-0.3.12/import-v2.js
+          test ! -e candidate-out/Dock-0.3.12/background.js
+          test ! -e candidate-out/Dock-0.3.12/import.js
+
+          printf 'commit=%s\nversion=0.3.12\n' "$GITHUB_SHA" > candidate-out/ARTIFACT_ID.txt
+          (
+            cd candidate-out/Dock-0.3.12
+            find . -type f -print | LC_ALL=C sort
+          ) > candidate-out/FILE_MANIFEST.txt
+          (
+            cd candidate-out
+            zip -X -q -r Dock-0.3.12.zip Dock-0.3.12
+            sha256sum Dock-0.3.12.zip > Dock-0.3.12.zip.sha256
+          )
+      - name: Upload candidate with lineage
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.12-${{ github.sha }}
+          path: |
+            candidate-out/Dock-0.3.12.zip
+            candidate-out/Dock-0.3.12.zip.sha256
+            candidate-out/ARTIFACT_ID.txt
+            candidate-out/FILE_MANIFEST.txt
+          if-no-files-found: error
+          retention-days: 14
