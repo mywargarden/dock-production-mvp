@@ -82,17 +82,12 @@ async function ensureSharePreviewsMaterialized(items){
   const source = (Array.isArray(items) ? items : []).filter((item) => sanitizeUrl(item?.url));
   if (!source.length) return { ok: true, expectedPreviewUrls: [] };
 
-  const expectedPreviewUrls = source
-    .filter((item) => !!firstPreview(item))
-    .map((item) => sanitizeUrl(item?.url))
-    .filter(Boolean);
-
   const prepared = [];
   for (const item of source) prepared.push(await materializePreviewForSync(item));
 
-  // Only a bounded image data URL can create the server-owned screenshot_path
-  // that the share-preview endpoint requires. Existing already-materialized
-  // memories do not need another upload and are verified after share creation.
+  // Coverage is only required for screenshots Safari actually succeeded in
+  // materializing into bounded data URLs. A visible local/remote preview alone
+  // does not prove the server already owns a shareable screenshot_path.
   const uploadable = prepared.filter((item) => isDataImage(firstPreview(item)));
   if (uploadable.length) {
     const syncResult = await syncSavedTabsDiff([], uploadable);
@@ -100,6 +95,10 @@ async function ensureSharePreviewsMaterialized(items){
       throw new Error('Dock could not prepare the screenshots for sharing. Please try Share again.');
     }
   }
+
+  const expectedPreviewUrls = uploadable
+    .map((item) => sanitizeUrl(item?.url))
+    .filter(Boolean);
 
   return { ok: true, expectedPreviewUrls: [...new Set(expectedPreviewUrls)] };
 }
