@@ -1,12 +1,12 @@
 import { api } from "./adapters/index.js";
-import { ensureManagedBootstrap, syncManagedWorkspace } from "./core/storage.js";
+import { ensureManagedBootstrap, getManagedSyncState, syncManagedWorkspace } from "./core/storage.js";
 
-const POLL_MS = 5 * 60 * 1000;
+const POLL_BASE_MS = 5 * 60 * 1000;
+const POLL_JITTER_MS = 30 * 1000;
 const MIN_SYNC_GAP_MS = 45 * 1000;
 const TRANSITION_HOLD_MS = 180;
 const PREPAINT_MAX_MS = 1600;
 
-let lastSyncAttemptAt = 0;
 let syncPromise = null;
 let transitionTimer = null;
 let pollTimer = null;
@@ -67,7 +67,6 @@ function waitForRenderedState() {
   }
 
   const grid = document.getElementById("grid");
-  const empty = document.getElementById("emptyState");
   const target = grid?.parentElement || document.body;
   if (target && typeof MutationObserver !== "undefined") {
     readyObserver = new MutationObserver(() => {
@@ -104,16 +103,19 @@ function isMaterialSavedTabsChange(change) {
   return (before > 0 && after === 0) || Math.abs(after - before) > 1;
 }
 
-async function refreshManagedWorkspace(reason = "foreground", { force = true } = {}) {
+async function refreshManagedWorkspace(reason = "foreground") {
   if (syncPromise) return syncPromise;
-  const now = Date.now();
-  if (now - lastSyncAttemptAt < MIN_SYNC_GAP_MS) return { ok: true, skipped: true, reason: "THROTTLED" };
-  lastSyncAttemptAt = now;
 
   syncPromise = (async () => {
     try { await ensureManagedBootstrap(); } catch {}
+
     try {
-      return await syncManagedWorkspace({ force });
+      const state = await getManagedSyncState({ ttlMs: MIN_SYNC_GAP_MS });
+      if (!state?.hasConfig) return { ok: true, skipped: true, reason: "NO_MANAGED_CONFIG" };
+      if (state?.syncedAt && (Date.now() - state.syncedAt) < MIN_SYNC_GAP_MS) {
+        return { ok: true, skipped: true, reason: "RECENT_SYNC" };
+      }
+      return await syncManagedWorkspace({ force: true, reason });
     } catch (error) {
       return { ok: false, reason: "CONTINUITY_SYNC_FAILED", error: String(error?.message || error || "") };
     }
@@ -126,12 +128,20 @@ async function refreshManagedWorkspace(reason = "foreground", { force = true } =
   }
 }
 
+function nextPollDelay() {
+  const jitter = Math.round((Math.random() * 2 - 1) * POLL_JITTER_MS);
+  return Math.max(MIN_SYNC_GAP_MS, POLL_BASE_MS + jitter);
+}
+
 function scheduleForegroundPoll() {
-  if (pollTimer) clearInterval(pollTimer);
-  pollTimer = setInterval(() => {
-    if (document.visibilityState !== "visible") return;
-    refreshManagedWorkspace("poll", { force: true }).catch(() => {});
-  }, POLL_MS);
+  if (pollTimer) clearTimeout(pollTimer);
+  pollTimer = setTimeout(async () => {
+    pollTimer = null;
+    if (document.visibilityState === "visible") {
+      await refreshManagedWorkspace("poll").catch(() => {});
+    }
+    scheduleForegroundPoll();
+  }, nextPollDelay());
 }
 
 if (api.storage?.onChanged?.addListener) {
@@ -161,12 +171,12 @@ if (api.runtime?.onMessage?.addListener) {
 }
 
 window.addEventListener("focus", () => {
-  refreshManagedWorkspace("focus", { force: true }).catch(() => {});
+  refreshManagedWorkspace("focus").catch(() => {});
 });
 
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible") {
-    refreshManagedWorkspace("visible", { force: true }).catch(() => {});
+    refreshManagedWorkspace("visible").catch(() => {});
   }
 });
 
@@ -176,5 +186,5 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 window.addEventListener("load", () => {
-  refreshManagedWorkspace("load", { force: true }).catch(() => {});
+  refreshManagedWorkspace("load").catch(() => {});
 });
