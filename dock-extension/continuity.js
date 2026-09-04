@@ -4,11 +4,14 @@ import { ensureManagedBootstrap, syncManagedWorkspace } from "./core/storage.js"
 const POLL_MS = 5 * 60 * 1000;
 const MIN_SYNC_GAP_MS = 45 * 1000;
 const TRANSITION_HOLD_MS = 180;
+const PREPAINT_MAX_MS = 1600;
 
 let lastSyncAttemptAt = 0;
 let syncPromise = null;
 let transitionTimer = null;
 let pollTimer = null;
+let readyObserver = null;
+let readyTimer = null;
 
 function captureVisualState() {
   try {
@@ -32,6 +35,50 @@ function captureVisualState() {
   } catch {}
 }
 
+function clearPrepaint() {
+  if (readyObserver) {
+    try { readyObserver.disconnect(); } catch {}
+    readyObserver = null;
+  }
+  if (readyTimer) {
+    clearTimeout(readyTimer);
+    readyTimer = null;
+  }
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      captureVisualState();
+      document.documentElement.classList.remove("dock-prepaint-loading");
+    });
+  });
+}
+
+function hasRenderedState() {
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("emptyState");
+  if (grid?.children?.length) return true;
+  if (empty && !empty.classList.contains("hidden")) return true;
+  return false;
+}
+
+function waitForRenderedState() {
+  if (hasRenderedState()) {
+    clearPrepaint();
+    return;
+  }
+
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("emptyState");
+  const target = grid?.parentElement || document.body;
+  if (target && typeof MutationObserver !== "undefined") {
+    readyObserver = new MutationObserver(() => {
+      if (hasRenderedState()) clearPrepaint();
+    });
+    readyObserver.observe(target, { childList: true, subtree: true, attributes: true, attributeFilter: ["class"] });
+  }
+
+  readyTimer = setTimeout(clearPrepaint, PREPAINT_MAX_MS);
+}
+
 function finishTransition(delay = TRANSITION_HOLD_MS) {
   if (transitionTimer) clearTimeout(transitionTimer);
   transitionTimer = setTimeout(() => {
@@ -40,7 +87,6 @@ function finishTransition(delay = TRANSITION_HOLD_MS) {
       requestAnimationFrame(() => {
         captureVisualState();
         document.documentElement.classList.remove("dock-continuity-transition");
-        document.documentElement.classList.remove("dock-prepaint-loading");
       });
     });
   }, delay);
@@ -126,15 +172,9 @@ document.addEventListener("visibilitychange", () => {
 
 document.addEventListener("DOMContentLoaded", () => {
   scheduleForegroundPoll();
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => {
-      captureVisualState();
-      document.documentElement.classList.remove("dock-prepaint-loading");
-    });
-  });
+  waitForRenderedState();
 });
 
 window.addEventListener("load", () => {
-  finishTransition(80);
   refreshManagedWorkspace("load", { force: true }).catch(() => {});
 });
