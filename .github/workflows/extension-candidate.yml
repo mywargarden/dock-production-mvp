@@ -12,14 +12,26 @@ on:
 permissions:
   contents: read
 
+env:
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
 jobs:
   candidate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
+      - name: Verify exact candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$CANDIDATE_SHA"
+          echo "Candidate head: $actual"
       - name: Static gate
         run: bash scripts/static_check.sh
       - name: Build exact candidate tree
@@ -39,7 +51,7 @@ jobs:
           test ! -e candidate-out/Dock-0.3.12/background.js
           test ! -e candidate-out/Dock-0.3.12/import.js
 
-          printf 'commit=%s\nversion=0.3.12\n' "$GITHUB_SHA" > candidate-out/ARTIFACT_ID.txt
+          printf 'commit=%s\nversion=0.3.12\n' "$CANDIDATE_SHA" > candidate-out/ARTIFACT_ID.txt
           (
             cd candidate-out/Dock-0.3.12
             find . -type f -print | LC_ALL=C sort
@@ -52,7 +64,7 @@ jobs:
       - name: Upload candidate with lineage
         uses: actions/upload-artifact@v4
         with:
-          name: Dock-0.3.12-${{ github.sha }}
+          name: Dock-0.3.12-${{ env.CANDIDATE_SHA }}
           path: |
             candidate-out/Dock-0.3.12.zip
             candidate-out/Dock-0.3.12.zip.sha256
