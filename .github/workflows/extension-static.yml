@@ -9,6 +9,12 @@ on:
       - scripts/static_check.sh
       - scripts/find_junk.sh
       - .github/workflows/extension-static.yml
+  pull_request:
+    paths:
+      - dock-extension/**
+      - scripts/static_check.sh
+      - scripts/find_junk.sh
+      - .github/workflows/extension-static.yml
   workflow_dispatch:
 
 permissions:
