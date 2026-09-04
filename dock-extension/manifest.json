@@ -7,7 +7,7 @@
   "permissions": ["storage","unlimitedStorage","tabs","activeTab","alarms","identity","identity.email"],
   "host_permissions": ["<all_urls>","https://dock-production-mvp.vercel.app/*","https://mcqohghghfxtchxpaddj.supabase.co/*","https://*.supabase.co/*","https://accounts.google.com/*"],
   "action": {"default_popup":"popup.html","default_icon":{"16":"icons/icon16.png","48":"icons/icon48.png","128":"icons/icon128.png"}},
-  "background": {"service_worker":"background.js"},
+  "background": {"service_worker":"background-v2.js","type":"module"},
   "icons": {"16":"icons/icon16.png","48":"icons/icon48.png","128":"icons/icon128.png"},
   "web_accessible_resources": [{"resources":["import.html"],"matches":["<all_urls>"]}],
   "storage": {"managed_schema":"managed_storage_schema.json"}
