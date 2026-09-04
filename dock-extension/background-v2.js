@@ -124,6 +124,20 @@ async function waitForCaptureBudget() {
   lastVisibleCaptureAt = Date.now();
 }
 
+async function setLauncherCaptureHidden(tabId, hidden) {
+  if (tabId == null) return false;
+  try {
+    await api.tabs.sendMessage?.(tabId, {
+      type: "SET_DOCK_LAUNCHER_CAPTURE_HIDDEN",
+      hidden: !!hidden
+    });
+    if (hidden) await sleep(34);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function captureVisible(windowId) {
   await waitForCaptureBudget();
   try {
@@ -134,14 +148,19 @@ async function captureVisible(windowId) {
   }
 }
 
-async function captureVisibleWithRetries(windowId, strong = false) {
+async function captureVisibleWithRetries(windowId, strong = false, tabId = null) {
   const delays = strong ? [0, 575, 825] : [0, 575];
-  for (const delay of delays) {
-    if (delay) await sleep(delay);
-    const shot = await captureVisible(windowId);
-    if (shot) return shot;
+  await setLauncherCaptureHidden(tabId, true);
+  try {
+    for (const delay of delays) {
+      if (delay) await sleep(delay);
+      const shot = await captureVisible(windowId);
+      if (shot) return shot;
+    }
+    return null;
+  } finally {
+    await setLauncherCaptureHidden(tabId, false);
   }
-  return null;
 }
 
 function waitForActivation(tabId, timeoutMs = 240) {
@@ -212,8 +231,7 @@ async function closeAllOtherTabs() {
   const tabs = await api.tabs.query({});
   const toClose = (Array.isArray(tabs) ? tabs : []).filter((tab) => tab?.id != null && tab.id !== keepTab.id).map((tab) => tab.id);
   if (toClose.length) {
-    try { await api.tabs.remove(toClose); }
-    catch {
+    try { await api.tabs.remove(toClose); } catch {
       const failed = [];
       for (const id of toClose) {
         try { await api.tabs.remove(id); } catch { failed.push(id); }
@@ -256,7 +274,7 @@ async function saveAllOpenTabs({ reason = "", openMemories = false, targetGroupI
   let startingShot = null;
   let startingBlocked = false;
   if (activeTabId && !shouldExcludeMemoryUrl(activeTab)) {
-    startingShot = await captureVisibleWithRetries(windowId, true);
+    startingShot = await captureVisibleWithRetries(windowId, true, activeTabId);
     startingBlocked = !startingShot;
   }
 
@@ -272,13 +290,13 @@ async function saveAllOpenTabs({ reason = "", openMemories = false, targetGroupI
       shot = startingShot;
       blocked = startingBlocked;
       if (!shot) {
-        shot = await captureVisibleWithRetries(windowId, true);
+        shot = await captureVisibleWithRetries(windowId, true, tab.id);
         blocked = !shot;
       }
     } else {
       await activateTabReliable(tab.id);
-      shot = await captureVisibleWithRetries(windowId, false);
-      if (!shot) shot = await captureVisibleWithRetries(windowId, true);
+      shot = await captureVisibleWithRetries(windowId, false, tab.id);
+      if (!shot) shot = await captureVisibleWithRetries(windowId, true, tab.id);
       blocked = !shot;
     }
 
