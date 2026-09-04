@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>New Tab</title>
+  <link rel="stylesheet" href="newtab.css" />
+  <link rel="stylesheet" href="launcher.css" />
+</head>
+<body>
+  <main class="newTabShell" aria-label="Dock new tab">
+    <div class="newTabCenter">
+      <form id="searchForm" class="searchForm" autocomplete="off">
+        <input id="searchInput" type="text" inputmode="url" spellcheck="false" aria-label="Search or enter address" placeholder="Search or enter address" autofocus />
+      </form>
+      <p class="hint">Dock is ready when you are.</p>
+    </div>
+  </main>
+
+  <button id="dockLauncher" class="dockLauncher" type="button" title="Open Dock — drag to move" aria-label="Open Dock popup. Drag to move.">
+    <img src="assets/dock_logo_clean.png" alt="" />
+  </button>
+
+  <script type="module" src="newtab.js"></script>
+</body>
+</html>
