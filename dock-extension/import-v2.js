@@ -1,7 +1,8 @@
 import { ensureSignedInInteractive, getSession } from './core/auth.js';
+import { ensureDockMutationAllowed } from './core/license.js';
+import { api } from './adapters/index.js';
 
 const DEBUG = false;
-const api = (typeof browser !== 'undefined' && browser?.runtime?.getURL) ? browser : chrome;
 const SHARE_API = 'https://dock-production-mvp.vercel.app/api/share';
 const IMPORT_PREVIEW_MAX_WIDTH = 420;
 const IMPORT_PREVIEW_MAX_HEIGHT = 260;
@@ -131,6 +132,8 @@ function displayPayload(payload){
 }
 async function importWorkspace(){
   if (!sharePayload?.workspace) return;
+  await ensureDockMutationAllowed();
+
   const res = await api.storage.local.get(['dockGroups', 'dockGroupItems']);
   const groups = Array.isArray(res.dockGroups) ? [...res.dockGroups] : [];
   const groupItems = (res.dockGroupItems && typeof res.dockGroupItems === 'object') ? { ...res.dockGroupItems } : {};
@@ -198,14 +201,17 @@ function loadLegacyData(encoded){
     importBtn.disabled = true;
   }
 }
+function showImportError(err, fallback) {
+  DEBUG && console.error(err);
+  statusEl.textContent = err?.message || fallback;
+}
 function loadFromHash(){
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
   const shareId = norm(hash.get('share'));
   const encoded = hash.get('data');
   if (shareId) {
     loadShortShare(shareId, false).catch((err) => {
-      DEBUG && console.error(err);
-      statusEl.textContent = err?.message || 'This Dock share could not be loaded.';
+      showImportError(err, 'This Dock share could not be loaded.');
       importBtn.disabled = true;
     });
     return;
@@ -221,8 +227,7 @@ function loadFromHash(){
 importBtn.addEventListener('click', () => {
   if (mode === 'signin') {
     loadShortShare(pendingShareId, true).catch((err) => {
-      DEBUG && console.error(err);
-      statusEl.textContent = err?.message || 'Sign in failed. Please try again.';
+      showImportError(err, 'Sign in failed. Please try again.');
       importBtn.textContent = 'Sign in with Google';
       importBtn.disabled = false;
       mode = 'signin';
@@ -235,8 +240,7 @@ importBtn.addEventListener('click', () => {
       importBtn.disabled = true;
       openLibraryBtn.classList.remove('hidden');
     }).catch((err) => {
-      DEBUG && console.error(err);
-      statusEl.textContent = 'Import failed. Please try again.';
+      showImportError(err, 'Import failed. Please try again.');
     });
   }
 });
