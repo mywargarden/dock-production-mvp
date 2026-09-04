@@ -19,6 +19,12 @@ const WARNING_STATUSES = new Set([
   "grace"
 ]);
 
+let lastAppliedLicenseState = null;
+let mutationGuardInstalled = false;
+let mutationGuardPage = "generic";
+let mutationFeedbackAt = 0;
+let licenseRefreshQueued = false;
+
 function clean(value) {
   return String(value == null ? "" : value).trim();
 }
@@ -224,7 +230,12 @@ function ensureBannerStyle() {
     body.dockLicenseBlocked input,
     body.dockLicenseBlocked select,
     body.dockLicenseBlocked textarea,
-    body.dockUpdateRequired [data-dock-mutation="true"] {
+    body.dockUpdateRequired [data-dock-mutation="true"],
+    body.dockUpdateRequired .deleteBtn,
+    body.dockUpdateRequired .cardDragHandle,
+    body.dockUpdateRequired .groupPillX,
+    body.dockUpdateRequired .groupPillMenuItem.dangerItem,
+    body.dockUpdateRequired .dockNoteInput {
       opacity: .55;
     }
   `;
@@ -243,8 +254,121 @@ function setDisabled(selectors, disabled) {
   });
 }
 
+function targetElement(event) {
+  const raw = event?.target;
+  if (!raw) return null;
+  if (raw.nodeType === 1) return raw;
+  return raw.parentElement || null;
+}
+
+function isMutatingGroupMenuItem(element) {
+  const item = element?.closest?.(".groupPillMenuItem");
+  if (!item) return false;
+  const label = clean(item.textContent).toLowerCase();
+  // Share is intentionally view/export behavior. The other current Dock-menu
+  // operations add, edit or delete persisted state.
+  return label !== "share";
+}
+
+function isMutationEventForPage(event, page) {
+  const element = targetElement(event);
+  if (!element) return false;
+
+  if (page === "popup") {
+    if (element.closest("#saveBtn, #saveAllBtn, #replaceBtn, .deleteBtn")) return true;
+    return false;
+  }
+
+  if (page !== "memories") return !!element.closest('[data-dock-mutation="true"]');
+
+  if (element.closest(
+    "#createGroupBtn, #addBtn, #editGroupBtn, #deleteSelectedBtn, #clearAllBtn, " +
+    ".deleteBtn, .groupPillX, .cardDragHandle, .dockNoteInput, [data-dock-mutation=\"true\"]"
+  )) return true;
+
+  if (isMutatingGroupMenuItem(element)) return true;
+
+  if (event.type === "dragstart") {
+    if (element.closest('.groupPillWrap[draggable="true"], .isSortable, .cardDragHandle')) return true;
+  }
+  if (event.type === "dragover" || event.type === "drop") {
+    if (element.closest("#groupPills, #grid, .groupPillWrap, .isSortable")) return true;
+  }
+
+  return false;
+}
+
+function stopMutationEvent(event) {
+  try { event.preventDefault(); } catch {}
+  try { event.stopImmediatePropagation(); } catch {}
+  try { event.stopPropagation(); } catch {}
+}
+
+function showMutationBlockedFeedback() {
+  const now = Date.now();
+  if (now - mutationFeedbackAt < 900) return;
+  mutationFeedbackAt = now;
+  const message = lastAppliedLicenseState?.message || "Dock changes are unavailable right now.";
+  try { window.alert(message); } catch {}
+}
+
+function mutationGuardListener(event) {
+  if (!lastAppliedLicenseState || lastAppliedLicenseState.mutationAllowed) return;
+  if (!isMutationEventForPage(event, mutationGuardPage)) return;
+  stopMutationEvent(event);
+
+  if (["click", "pointerdown", "dragstart", "beforeinput", "paste", "drop"].includes(event.type)) {
+    showMutationBlockedFeedback();
+  }
+}
+
+function queueLicenseGateRefresh() {
+  if (licenseRefreshQueued || typeof document === "undefined") return;
+  licenseRefreshQueued = true;
+  queueMicrotask(async () => {
+    licenseRefreshQueued = false;
+    try {
+      await applyDockLicenseGateToPage({ page: mutationGuardPage });
+    } catch {}
+  });
+}
+
+function installMutationGuard(page) {
+  mutationGuardPage = page || mutationGuardPage || "generic";
+  if (mutationGuardInstalled || typeof document === "undefined") return;
+  mutationGuardInstalled = true;
+
+  ["click", "pointerdown", "dragstart", "dragover", "drop", "beforeinput", "paste", "change"].forEach((type) => {
+    document.addEventListener(type, mutationGuardListener, true);
+  });
+
+  try {
+    api.storage?.onChanged?.addListener?.((changes, areaName) => {
+      if (areaName !== "local" && areaName !== "managed") return;
+      const relevant = [
+        PLAN_KEY,
+        SIM_PLAN_KEY,
+        "dockLicenseStatus",
+        "districtId",
+        "orgCode",
+        "licenseStatus",
+        "licenseExpiresAt",
+        "licenseGraceUntil",
+        "minimumExtensionVersion",
+        "minExtensionVersion"
+      ];
+      if (relevant.some((key) => Object.prototype.hasOwnProperty.call(changes || {}, key))) {
+        queueLicenseGateRefresh();
+      }
+    });
+  } catch {}
+}
+
 export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
+  mutationGuardPage = page || mutationGuardPage || "generic";
   const state = await getDockLicenseState();
+  lastAppliedLicenseState = state;
+  installMutationGuard(mutationGuardPage);
   ensureBannerStyle();
   document.body.classList.toggle("dockLicenseBlocked", state.mode === "blocked");
   document.body.classList.toggle("dockUpdateRequired", state.mode === "update-required");
@@ -266,7 +390,9 @@ export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
 
   const mutationDisabled = !state.mutationAllowed;
   if (page === "popup") {
-    setDisabled(["#saveBtn", "#saveAllBtn", "#reason", "#workspaceSelect"], mutationDisabled);
+    // Keep workspace navigation and note/reason fields usable for viewing. Only
+    // persisted mutation actions are disabled.
+    setDisabled(["#saveBtn", "#saveAllBtn", "#replaceBtn", ".deleteBtn"], mutationDisabled);
   } else if (page === "memories") {
     setDisabled([
       "#createGroupBtn",
@@ -278,7 +404,8 @@ export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
       ".card button.deleteBtn",
       ".cardDragHandle",
       ".groupPillX",
-      ".groupPillMenuItem.dangerItem"
+      ".groupPillMenuItem.dangerItem",
+      ".dockNoteInput"
     ], mutationDisabled);
   }
 
