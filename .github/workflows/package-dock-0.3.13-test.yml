@@ -1,0 +1,69 @@
+name: Package Dock 0.3.13 Tested SHA
+
+on:
+  push:
+    branches:
+      - package/dock-0.3.13-c01e2f4d
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_SHA: c01e2f4d2815c7c1ab241a864b1a9440c71235ed
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Verify exact tested checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          test "$actual" = "$CANDIDATE_SHA"
+          echo "Packaging tested head: $actual"
+      - name: Static gate
+        run: bash scripts/static_check.sh
+      - name: Build exact candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf candidate-out
+          mkdir -p candidate-out/Dock-0.3.13
+          rsync -a dock-extension/ candidate-out/Dock-0.3.13/ \
+            --exclude='*.md' \
+            --exclude='background.js' \
+            --exclude='import.js'
+          test -f candidate-out/Dock-0.3.13/manifest.json
+          test -f candidate-out/Dock-0.3.13/background-v2.js
+          test -f candidate-out/Dock-0.3.13/background-v3.js
+          test -f candidate-out/Dock-0.3.13/floating-dock.js
+          test -f candidate-out/Dock-0.3.13/import-v2.js
+          test ! -e candidate-out/Dock-0.3.13/background.js
+          test ! -e candidate-out/Dock-0.3.13/import.js
+          extension_tree="$(git rev-parse HEAD:dock-extension)"
+          printf 'commit=%s\nversion=0.3.13\nextension_tree=%s\n' "$CANDIDATE_SHA" "$extension_tree" > candidate-out/ARTIFACT_ID.txt
+          (
+            cd candidate-out/Dock-0.3.13
+            zip -X -q -r ../Dock-0.3.13.zip .
+          )
+          sha256sum candidate-out/Dock-0.3.13.zip > candidate-out/Dock-0.3.13.zip.sha256
+          unzip -Z1 candidate-out/Dock-0.3.13.zip | grep -qx 'manifest.json'
+          test "$(unzip -p candidate-out/Dock-0.3.13.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).version))')" = '0.3.13'
+          test "$(unzip -p candidate-out/Dock-0.3.13.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).background?.service_worker||""))')" = 'background-v3.js'
+      - name: Upload exact tested package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.13-c01e2f4d-tested
+          path: |
+            candidate-out/Dock-0.3.13.zip
+            candidate-out/Dock-0.3.13.zip.sha256
+            candidate-out/ARTIFACT_ID.txt
+          if-no-files-found: error
+          retention-days: 14
