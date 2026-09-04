@@ -3,6 +3,7 @@ set -euo pipefail
 
 node --check dock-extension/core/preview.js
 node --check dock-extension/adapters/storageCanonicalizer.js
+node --check dock-extension/adapters/chromeAdapter.js
 node --check dock-extension/core/personalScope.js
 node --check dock-extension/core/auth.js
 node --check dock-extension/core/license.js
@@ -86,8 +87,10 @@ if (!worker.includes('SET_DOCK_LAUNCHER_CAPTURE_HIDDEN') || !worker.includes('se
   throw new Error('bulk screenshot launcher exclusion missing');
 }
 
-const popup = fs.readFileSync('dock-extension/popup.js', 'utf8');
-if (!popup.includes('SET_DOCK_LAUNCHER_CAPTURE_HIDDEN')) throw new Error('single-save screenshot launcher exclusion missing');
+const chromeAdapter = fs.readFileSync('dock-extension/adapters/chromeAdapter.js', 'utf8');
+for (const required of ['isPopupDocument', 'captureVisibleTab', 'SET_DOCK_LAUNCHER_CAPTURE_HIDDEN', 'hidden: true', 'hidden: false']) {
+  if (!chromeAdapter.includes(required)) throw new Error(`single-save screenshot hygiene missing: ${required}`);
+}
 
 const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
 if (memoriesHtml.includes('legacy-loop-shield')) throw new Error('obsolete legacy loop shield is still wired into memories.html');
