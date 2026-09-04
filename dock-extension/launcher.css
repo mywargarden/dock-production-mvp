@@ -1,0 +1,138 @@
+.dockLauncher {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 60px;
+  height: 60px;
+  border-radius: 999px;
+  border: 1px solid rgba(92,76,58,.12);
+  background: rgba(238,231,219,.97);
+  box-shadow: 0 12px 30px rgba(55,45,35,.18), inset 0 1px 0 rgba(255,255,255,.72);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  cursor: grab;
+  z-index: 2147483000;
+  user-select: none;
+  touch-action: none;
+  transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+}
+
+.dockLauncher:hover {
+  transform: translateY(-2px) scale(1.025);
+  box-shadow: 0 16px 34px rgba(55,45,35,.22), inset 0 1px 0 rgba(255,255,255,.78);
+}
+
+.dockLauncher:focus-visible {
+  outline: 3px solid rgba(47,111,149,.72);
+  outline-offset: 3px;
+}
+
+.dockLauncher.isDragging {
+  cursor: grabbing;
+  transform: scale(1.035);
+  transition: none;
+}
+
+.dockLauncher.isOpening {
+  opacity: .68;
+  pointer-events: none;
+}
+
+.dockLauncher img {
+  width: 47px;
+  height: 47px;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.dockLauncherHint {
+  position: fixed;
+  right: 24px;
+  bottom: 96px;
+  width: min(320px, calc(100vw - 32px));
+  border: 1px solid rgba(92,76,58,.12);
+  border-radius: 16px;
+  background: rgba(247,242,234,.98);
+  color: #342f29;
+  box-shadow: 0 18px 42px rgba(55,45,35,.18);
+  padding: 14px 14px 13px;
+  z-index: 2147482999;
+  font: 500 13px/1.45 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.dockLauncherHint strong {
+  display: block;
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.dockLauncherHint p {
+  margin: 0;
+  color: rgba(52,47,41,.76);
+}
+
+.dockLauncherHintActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.dockLauncherHint button {
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 11px;
+  font: 700 12px/1 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+
+.dockLauncherHint .dockHintDismiss {
+  background: rgba(75,65,54,.08);
+  color: #51483f;
+}
+
+.dockLauncherHint .dockHintPrimary {
+  background: #315f74;
+  color: #fff;
+}
+
+.dockLauncherError {
+  position: fixed;
+  right: 24px;
+  bottom: 98px;
+  max-width: min(360px, calc(100vw - 32px));
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(46,42,37,.94);
+  color: #fff;
+  box-shadow: 0 14px 34px rgba(0,0,0,.22);
+  z-index: 2147483001;
+  font: 600 12px/1.4 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+@media (max-width: 680px) {
+  .dockLauncher {
+    right: 18px;
+    bottom: 18px;
+    width: 56px;
+    height: 56px;
+  }
+
+  .dockLauncher img {
+    width: 44px;
+    height: 44px;
+  }
+
+  .dockLauncherHint,
+  .dockLauncherError {
+    right: 16px;
+    bottom: 82px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dockLauncher {
+    transition: none;
+  }
+}
