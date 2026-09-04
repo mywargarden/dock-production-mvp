@@ -34,7 +34,7 @@ jobs:
           echo "Candidate head: $actual"
       - name: Static gate
         run: bash scripts/static_check.sh
-      - name: Build exact candidate tree
+      - name: Build exact store-ready candidate
         shell: bash
         run: |
           set -euo pipefail
@@ -51,16 +51,33 @@ jobs:
           test ! -e candidate-out/Dock-0.3.12/background.js
           test ! -e candidate-out/Dock-0.3.12/import.js
 
-          printf 'commit=%s\nversion=0.3.12\n' "$CANDIDATE_SHA" > candidate-out/ARTIFACT_ID.txt
+          extension_tree="$(git rev-parse HEAD:dock-extension)"
+          printf 'commit=%s\nversion=0.3.12\nextension_tree=%s\n' "$CANDIDATE_SHA" "$extension_tree" > candidate-out/ARTIFACT_ID.txt
+          printf '%s\n' "$extension_tree" > candidate-out/SOURCE_EXTENSION_TREE.txt
           (
             cd candidate-out/Dock-0.3.12
             find . -type f -print | LC_ALL=C sort
           ) > candidate-out/FILE_MANIFEST.txt
           (
-            cd candidate-out
-            zip -X -q -r Dock-0.3.12.zip Dock-0.3.12
-            sha256sum Dock-0.3.12.zip > Dock-0.3.12.zip.sha256
+            cd candidate-out/Dock-0.3.12
+            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum
+          ) > candidate-out/FILE_SHA256_MANIFEST.txt
+
+          # Chrome Web Store packages require manifest.json at the ZIP root.
+          (
+            cd candidate-out/Dock-0.3.12
+            zip -X -q -r ../Dock-0.3.12.zip .
           )
+          sha256sum candidate-out/Dock-0.3.12.zip > candidate-out/Dock-0.3.12.zip.sha256
+
+          # Fail closed if packaging regresses to a wrapper-directory ZIP.
+          unzip -Z1 candidate-out/Dock-0.3.12.zip | grep -qx 'manifest.json'
+          if unzip -Z1 candidate-out/Dock-0.3.12.zip | grep -q '^Dock-0.3.12/'; then
+            echo 'Store package must not contain a Dock-0.3.12 wrapper directory.' >&2
+            exit 1
+          fi
+          test "$(unzip -p candidate-out/Dock-0.3.12.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).version))')" = '0.3.12'
+          test -n "$(unzip -p candidate-out/Dock-0.3.12.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).background?.service_worker||""))')"
       - name: Upload candidate with lineage
         uses: actions/upload-artifact@v4
         with:
@@ -69,6 +86,8 @@ jobs:
             candidate-out/Dock-0.3.12.zip
             candidate-out/Dock-0.3.12.zip.sha256
             candidate-out/ARTIFACT_ID.txt
+            candidate-out/SOURCE_EXTENSION_TREE.txt
             candidate-out/FILE_MANIFEST.txt
+            candidate-out/FILE_SHA256_MANIFEST.txt
           if-no-files-found: error
           retention-days: 14
