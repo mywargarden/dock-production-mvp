@@ -15,10 +15,12 @@
 
 - Adds the `unlimitedStorage` permission because Dock intentionally stores screenshot-rich local memories and must not fail at the default local-storage quota.
 - Canonicalizes personal-memory preview storage so heavy screenshot aliases are not multiplied across the local cache while preserving legitimate custom imagery.
+- Keeps inline screenshot previews authoritative across save/reorder cycles; custom icons and generic image fields are no longer allowed to displace a valid screenshot during preview preservation.
 - Reduces web-accessible resources to the external import handoff page; its packaged scripts, styles, icons, and schema remain internal extension resources.
 
 ## Still under 7
 
-- Real Chrome testing has already independently demonstrated runtime installation, degraded managed-sync preservation, cached managed rendering, and atomic version-1 to version-2 storage replacement. The cross-context repaint defect exposed by that test was fixed in the canonical storage layer and must now survive the full exact-head Chrome 7 before merge.
-- This candidate remains unmerged until the exact-head browser gate also proves visual continuity, live managed replacement, hard revocation, update-required view-without-mutation behavior, preview persistence, and absence of the retired Safe Harbor repair loops/scanner.
+- Real Chrome testing independently exposed and then verified the cross-context managed-cache repaint defect: degraded state preservation, cached rendering, atomic version replacement, live repaint, hard revocation, and update-required view-without-mutation behavior have survived the browser attack after the fix.
+- The expanded real Chrome attack then exposed a preview-reorder regression caused by two competing preview-scoring doctrines. The preservation layer now matches the canonical preview rule and must survive the full exact-head browser pass, including save/reorder/reload/import rendering and retired-loop instrumentation.
+- This candidate remains unmerged until that exact-head static, artifact-lineage, and expanded Chrome 7 triad passes together.
 - Personal Dock group membership/layout remains local-device state for 1.0; cross-device group-layout sync is parked rather than added to RC1 scope.
