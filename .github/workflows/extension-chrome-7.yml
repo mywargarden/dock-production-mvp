@@ -1,0 +1,34 @@
+name: Dock RC1 Chrome 7
+
+on:
+  pull_request:
+    paths:
+      - dock-extension/**
+      - scripts/chrome_extension_7.mjs
+      - .github/workflows/extension-chrome-7.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  chrome-7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact candidate checkout
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - name: Install current Puppeteer and Chrome for Testing
+        run: npm install --no-save puppeteer@25.10.0
+      - name: Report Chrome for Testing
+        run: node -e 'import("puppeteer").then(async ({default:p}) => { console.log(await p.executablePath()); })'
+      - name: Run frozen RC1 browser attacks
+        run: xvfb-run -a node scripts/chrome_extension_7.mjs

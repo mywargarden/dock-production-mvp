@@ -1,0 +1,47 @@
+html.dock-prepaint-loading,
+html.dock-continuity-transition {
+  background-color: var(--dock-continuity-bg-color, #183246);
+  background-image: var(--dock-continuity-bg-image, linear-gradient(180deg, #183246 0%, #274f62 100%));
+  background-size: var(--dock-continuity-bg-size, cover);
+  background-position: var(--dock-continuity-bg-position, center center);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+html.dock-prepaint-loading body {
+  visibility: hidden !important;
+}
+
+html.dock-prepaint-loading::before,
+html.dock-continuity-transition::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 2147483600;
+  pointer-events: none;
+  background-color: var(--dock-continuity-bg-color, #183246);
+  background-image: var(--dock-continuity-bg-image, linear-gradient(180deg, #183246 0%, #274f62 100%));
+  background-size: var(--dock-continuity-bg-size, cover);
+  background-position: var(--dock-continuity-bg-position, center center);
+  background-repeat: no-repeat;
+  background-attachment: fixed;
+}
+
+html.dock-prepaint-loading::after {
+  content: "Dock";
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2147483601;
+  pointer-events: none;
+  color: rgba(255,255,255,.88);
+  font: 800 22px/1 ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+  letter-spacing: .04em;
+  text-shadow: 0 2px 12px rgba(0,0,0,.18);
+}
+
+html.dock-continuity-transition::before {
+  opacity: 1;
+  transition: opacity 120ms ease-out;
+}

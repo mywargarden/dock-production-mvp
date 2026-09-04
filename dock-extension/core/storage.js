@@ -30,12 +30,117 @@ let managedWorkspaceCache = null;
 let managedMetaCache = null;
 let orgStateCache = null;
 
+// Each extension page/service worker has its own ES-module instance and therefore
+// its own in-memory caches. Keep those caches coherent with chrome.storage so a
+// managed publish or revocation performed in one context is immediately visible
+// to every other open Dock context.
+if (api.storage?.onChanged?.addListener) {
+  api.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+
+    if (changes?.[MANAGED_WS_KEY]) {
+      const next = changes[MANAGED_WS_KEY].newValue;
+      managedWorkspaceCache = next && typeof next === "object" ? next : null;
+      workspaceCache = Array.isArray(next?.tabs) ? next.tabs : null;
+      workspaceLastFetch = next ? Date.now() : 0;
+      workspacePromise = null;
+    }
+
+    if (changes?.[MANAGED_META_KEY]) {
+      const next = changes[MANAGED_META_KEY].newValue;
+      managedMetaCache = next && typeof next === "object" ? next : null;
+    }
+
+    if (changes?.[ORG_KEY]) {
+      const next = changes[ORG_KEY].newValue;
+      orgStateCache = next && typeof next === "object" ? next : null;
+    }
+  });
+}
+
 async function clearManagedWorkspaceState() {
   managedWorkspaceCache = null;
   managedMetaCache = null;
   workspaceCache = null;
   workspaceLastFetch = 0;
   await api.storage.local.remove([MANAGED_WS_KEY, MANAGED_META_KEY]);
+}
+
+const MANAGED_HARD_REVOCATION_CODES = new Set([
+  "ACCOUNT_DISABLED",
+  "TENANT_MISMATCH",
+  "ACCESS_DENIED",
+  "LICENSE_SUSPENDED",
+  "LICENSE_EXPIRED",
+  "LICENSE_PAST_DUE",
+  "DISTRICT_ARCHIVED"
+]);
+
+async function readManagedHttpFailure(response) {
+  let payload = null;
+  try { payload = await response.clone().json(); } catch {}
+  return {
+    status: Number(response?.status) || 0,
+    code: String(payload?.code || "").trim().toUpperCase(),
+    message: String(payload?.error || payload?.message || "").trim()
+  };
+}
+
+function isManagedHardRevocation(failure) {
+  return failure?.status === 403 && MANAGED_HARD_REVOCATION_CODES.has(String(failure?.code || "").toUpperCase());
+}
+
+function managedFailureLabel(failure) {
+  const status = Number(failure?.status) || 0;
+  const code = String(failure?.code || "").trim().toUpperCase();
+  return [status ? `HTTP ${status}` : "HTTP error", code].filter(Boolean).join(" ");
+}
+
+async function rememberManagedFailure(failure, org, { requestId = 0 } = {}) {
+  const revoked = isManagedHardRevocation(failure);
+  if (requestId) managedSyncCompletedId = Math.max(managedSyncCompletedId, requestId);
+
+  if (revoked) {
+    await clearManagedWorkspaceState();
+  }
+
+  await saveOrgState({
+    orgId: org?.orgId || "",
+    orgName: org?.orgName || "",
+    orgCode: org?.orgCode || "",
+    emailDomain: org?.emailDomain || "",
+    configUrl: org?.configUrl || "",
+    apiBaseUrl: org?.apiBaseUrl || "",
+    lastSyncedAt: Date.now(),
+    lastSyncStatus: revoked ? "revoked" : (failure?.status === 401 ? "auth-degraded" : "sync-degraded"),
+    lastError: managedFailureLabel(failure)
+  });
+
+  return { revoked, ...failure };
+}
+
+async function fetchManagedConfig(org) {
+  const session = await getSession();
+  const headers = {};
+  if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
+  if (org?.orgCode) headers['X-Dock-Org-Code'] = org.orgCode;
+  return await fetch(org.configUrl, { cache: "no-store", headers });
+}
+
+async function fetchManagedConfigWithRecovery(org) {
+  let response = await fetchManagedConfig(org);
+  let failure = response.ok ? null : await readManagedHttpFailure(response);
+
+  // A valid district user can briefly reach the workspace endpoint before
+  // bootstrap has materialized their profile. Give that condition one safe
+  // bootstrap/retry cycle before declaring the sync degraded.
+  if (failure?.status === 403 && failure?.code === "PROFILE_REQUIRED") {
+    try { await ensureManagedBootstrap(); } catch {}
+    response = await fetchManagedConfig(org);
+    failure = response.ok ? null : await readManagedHttpFailure(response);
+  }
+
+  return { response, failure };
 }
 
 async function getSavedTabsLocal() {
@@ -232,13 +337,12 @@ function dockPreviewScoreForSave20260721(value) {
   const isRemote = /^https?:\/\//i.test(s);
   const isFavicon = /google\.com\/s2\/favicons|favicon\.ico|apple-touch-icon|\/favicon/i.test(s);
 
-  if (isDataImage && s.length > 30000) return 100000000 + s.length;
-  if (isDataImage && s.length > 1000) return 50000000 + s.length;
+  // Match core/preview.js: any valid inline screenshot outranks remote
+  // screenshot candidates. Small inline previews must not be displaced by icons.
+  if (isDataImage) return 100000000 + s.length;
   if (isRemote && !isFavicon) return 20000000 + s.length;
-  if (isDataImage) return 1000000 + s.length;
-  if (isRemote && isFavicon) return 1000 + s.length;
-  if (isRemote) return 500000 + s.length;
-  return s.length;
+  if (isRemote) return 1000 + s.length;
+  return -1;
 }
 
 function dockBestPreviewForSave20260721(tab) {
@@ -255,16 +359,7 @@ function dockBestPreviewForSave20260721(tab) {
     "preview_url",
     "thumbnail",
     "thumbnailUrl",
-    "thumbnail_url",
-    "image",
-    "imageUrl",
-    "image_url",
-    "customIcon",
-    "icon_url",
-    "iconUrl",
-    "faviconUrl",
-    "favIconUrl",
-    "favicon"
+    "thumbnail_url"
   ];
 
   let best = "";
@@ -797,7 +892,6 @@ function validateManagedPayload(payload) {
   };
 }
 
-
 export async function getWorkspace({ force = false, forceRemote = false } = {}) {
   const managed = await getManagedWorkspace();
   const managedTabs = Array.isArray(managed?.tabs) ? managed.tabs : [];
@@ -825,23 +919,13 @@ export async function getWorkspace({ force = false, forceRemote = false } = {}) 
       const configUrl = sanitizeHttpUrl(org?.configUrl || "");
       if (!configUrl) return workspaceCache || managedTabs || [];
 
-      const session = await getSession();
-      const headers = {};
-      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
-
-      const res = await fetch(configUrl, {
-        headers,
-        cache: "no-store"
-      });
-
-      if (!res.ok) {
-        if ([401, 403].includes(res.status)) {
-          await clearManagedWorkspaceState();
-          return [];
-        }
-        throw new Error(`HTTP ${res.status}`);
+      const { response, failure } = await fetchManagedConfigWithRecovery({ ...org, configUrl });
+      if (!response.ok) {
+        const outcome = await rememberManagedFailure(failure || await readManagedHttpFailure(response), org);
+        return outcome.revoked ? [] : (workspaceCache || managedTabs || []);
       }
-      const data = await res.json();
+
+      const data = await response.json();
       const workspace = validateManagedPayload(data).workspace;
       workspaceCache = Array.isArray(workspace?.tabs) ? workspace.tabs : [];
       workspaceLastFetch = Date.now();
@@ -1054,23 +1138,19 @@ export async function syncManagedWorkspace({ force = false } = {}) {
       return { ok: true, skipped: true, reason: "LOCAL_FRESH", workspace: currentManaged, organization: await getOrgState(), plan: await getPlanState() };
     }
     try {
-      const session = await getSession();
-      const headers = {};
-      if (session?.access_token) headers.Authorization = `Bearer ${session.access_token}`;
-      if (org?.orgCode) headers['X-Dock-Org-Code'] = org.orgCode;
-      const response = await fetch(org.configUrl, { cache: "no-store", headers });
+      const { response, failure } = await fetchManagedConfigWithRecovery(org);
       if (!response.ok) {
-        if ([401, 403].includes(response.status)) {
-          managedSyncCompletedId = Math.max(managedSyncCompletedId, requestId);
-          await clearManagedWorkspaceState();
-          await saveOrgState({
-            lastSyncedAt: Date.now(),
-            lastSyncStatus: "access-denied",
-            lastError: `HTTP ${response.status}`
-          });
-          return { ok: false, reason: "ACCESS_DENIED", status: response.status };
+        const outcome = await rememberManagedFailure(failure || await readManagedHttpFailure(response), org, { requestId });
+        if (outcome.revoked) {
+          return { ok: false, reason: "ACCESS_REVOKED", status: outcome.status, code: outcome.code };
         }
-        throw new Error(`HTTP ${response.status}`);
+        return {
+          ok: false,
+          reason: "MANAGED_SYNC_DEGRADED",
+          preserved: !!currentManaged?.managed,
+          status: outcome.status,
+          code: outcome.code
+        };
       }
       const raw = await response.json();
       raw.sourceUrl = org.configUrl;
@@ -1147,8 +1227,18 @@ export async function syncManagedWorkspace({ force = false } = {}) {
       });
       return { ok: true, workspace, organization: validated.organization, plan: validated.license };
     } catch (err) {
-      await saveOrgState({ lastSyncedAt: Date.now(), lastSyncStatus: "error", lastError: sanitizeText(err?.message || String(err), 240) });
-      return { ok: false, reason: "FETCH_FAILED", error: err?.message || String(err) };
+      await saveOrgState({
+        orgId: org?.orgId || "",
+        orgName: org?.orgName || "",
+        orgCode: org?.orgCode || "",
+        emailDomain: org?.emailDomain || "",
+        configUrl: org?.configUrl || "",
+        apiBaseUrl: org?.apiBaseUrl || "",
+        lastSyncedAt: Date.now(),
+        lastSyncStatus: "error",
+        lastError: sanitizeText(err?.message || String(err), 240)
+      });
+      return { ok: false, reason: "FETCH_FAILED", preserved: !!currentManaged?.managed, error: err?.message || String(err) };
     }
   })();
 

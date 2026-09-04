@@ -1,0 +1,32 @@
+name: Dock Extension Static Gate
+
+on:
+  push:
+    branches:
+      - release-dock-0-3-12-continuity
+    paths:
+      - dock-extension/**
+      - scripts/static_check.sh
+      - scripts/find_junk.sh
+      - .github/workflows/extension-static.yml
+  pull_request:
+    paths:
+      - dock-extension/**
+      - scripts/static_check.sh
+      - scripts/find_junk.sh
+      - .github/workflows/extension-static.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Static extension gate
+        run: bash scripts/static_check.sh
