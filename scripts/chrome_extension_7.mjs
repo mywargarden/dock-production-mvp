@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import puppeteer from "puppeteer-core";
+import puppeteer from "puppeteer";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionPath = path.join(root, "dock-extension");
@@ -47,13 +47,10 @@ await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
 const { port } = server.address();
 const configUrl = `http://127.0.0.1:${port}/config`;
 
-const chromeBin = process.env.CHROME_BIN || "/usr/bin/google-chrome";
 const browser = await puppeteer.launch({
-  executablePath: chromeBin,
   headless: false,
+  enableExtensions: [extensionPath],
   args: [
-    `--disable-extensions-except=${extensionPath}`,
-    `--load-extension=${extensionPath}`,
     "--no-sandbox",
     "--disable-dev-shm-usage",
     "--no-first-run",
@@ -61,18 +58,15 @@ const browser = await puppeteer.launch({
   ]
 });
 
-// Use Chrome's actual loaded runtime identity rather than predicting an ID from
-// the manifest key. This also proves the MV3 worker really loaded before any
-// Dock behavior is credited to the browser test.
-const workerTarget = await browser.waitForTarget((target) => {
-  const url = target.url();
-  return target.type() === "service_worker" &&
-    url.startsWith("chrome-extension://") &&
-    url.endsWith("/background-v2.js");
-}, { timeout: 15000 });
-const extensionId = new URL(workerTarget.url()).host;
-assert.ok(extensionId, "Chrome loaded Dock worker without an extension identity");
-console.log(`Dock runtime loaded: ${extensionId}`);
+// Current Puppeteer installs the extension through Chrome's supported testing
+// path. Resolve the identity from Chrome's registered extension list instead of
+// predicting it or relying on the removed --load-extension switch.
+const extensions = await browser.extensions();
+const dockEntry = [...extensions.entries()].find(([, extension]) => extension?.name === "Dock");
+assert.ok(dockEntry, `Dock extension not registered in Chrome for Testing; loaded: ${[...extensions.values()].map((e) => e?.name || "unknown").join(", ")}`);
+const [extensionId, dockExtension] = dockEntry;
+assert.equal(dockExtension.version, "0.3.12", "Chrome loaded an unexpected Dock version");
+console.log(`Dock runtime loaded: ${extensionId} v${dockExtension.version}`);
 
 const extUrl = (file) => `chrome-extension://${extensionId}/${file}`;
 const control = await browser.newPage();
