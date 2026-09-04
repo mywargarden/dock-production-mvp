@@ -1,0 +1,39 @@
+name: Dock RC1 Chrome 7
+
+on:
+  pull_request:
+    paths:
+      - dock-extension/**
+      - scripts/chrome_extension_7.mjs
+      - .github/workflows/extension-chrome-7.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+
+jobs:
+  chrome-7:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact candidate checkout
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - name: Install browser harness only
+        run: npm install --no-save --ignore-scripts puppeteer-core@24.16.0
+      - name: Locate Chrome
+        run: |
+          set -euo pipefail
+          CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable)"
+          test -x "$CHROME_BIN"
+          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
+          "$CHROME_BIN" --version
+      - name: Run frozen RC1 browser attacks
+        run: xvfb-run -a node scripts/chrome_extension_7.mjs
