@@ -26,14 +26,9 @@ jobs:
           node-version: '22'
       - name: Verify exact candidate checkout
         run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
-      - name: Install browser harness only
-        run: npm install --no-save --ignore-scripts puppeteer-core@24.16.0
-      - name: Locate Chrome
-        run: |
-          set -euo pipefail
-          CHROME_BIN="$(command -v google-chrome || command -v google-chrome-stable)"
-          test -x "$CHROME_BIN"
-          echo "CHROME_BIN=$CHROME_BIN" >> "$GITHUB_ENV"
-          "$CHROME_BIN" --version
+      - name: Install current Puppeteer and Chrome for Testing
+        run: npm install --no-save puppeteer@25.10.0
+      - name: Report Chrome for Testing
+        run: node -e 'import("puppeteer").then(async ({default:p}) => { console.log(await p.executablePath()); })'
       - name: Run frozen RC1 browser attacks
         run: xvfb-run -a node scripts/chrome_extension_7.mjs
