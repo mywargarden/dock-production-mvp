@@ -30,6 +30,34 @@ let managedWorkspaceCache = null;
 let managedMetaCache = null;
 let orgStateCache = null;
 
+// Each extension page/service worker has its own ES-module instance and therefore
+// its own in-memory caches. Keep those caches coherent with chrome.storage so a
+// managed publish or revocation performed in one context is immediately visible
+// to every other open Dock context.
+if (api.storage?.onChanged?.addListener) {
+  api.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName !== "local") return;
+
+    if (changes?.[MANAGED_WS_KEY]) {
+      const next = changes[MANAGED_WS_KEY].newValue;
+      managedWorkspaceCache = next && typeof next === "object" ? next : null;
+      workspaceCache = Array.isArray(next?.tabs) ? next.tabs : null;
+      workspaceLastFetch = next ? Date.now() : 0;
+      workspacePromise = null;
+    }
+
+    if (changes?.[MANAGED_META_KEY]) {
+      const next = changes[MANAGED_META_KEY].newValue;
+      managedMetaCache = next && typeof next === "object" ? next : null;
+    }
+
+    if (changes?.[ORG_KEY]) {
+      const next = changes[ORG_KEY].newValue;
+      orgStateCache = next && typeof next === "object" ? next : null;
+    }
+  });
+}
+
 async function clearManagedWorkspaceState() {
   managedWorkspaceCache = null;
   managedMetaCache = null;
