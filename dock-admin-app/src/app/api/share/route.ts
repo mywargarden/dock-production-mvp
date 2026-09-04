@@ -53,7 +53,7 @@ function normalizePreviewLookupUrl(value: unknown) {
     }
 
     const kept: Array<[string, string]> = []
-    for (const [key, val] of parsed.searchParams.entries()) {
+    for (const [key, val] of Array.from(parsed.searchParams.entries())) {
       if (!JUNK_QUERY_PARAMS.has(String(key || '').toLowerCase())) kept.push([key, val])
     }
     kept.sort((a, b) => {
