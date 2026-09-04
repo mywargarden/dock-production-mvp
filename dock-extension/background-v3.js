@@ -3,9 +3,15 @@ import "./background-v2.js";
 const api = (typeof browser !== "undefined" && browser?.runtime?.getURL) ? browser : chrome;
 
 function isAllowedLauncherSender(sender) {
-  const senderUrl = String(sender?.tab?.url || sender?.url || "");
-  if (/^https?:\/\//i.test(senderUrl)) return true;
-  return senderUrl === api.runtime.getURL("memories.html") || senderUrl === api.runtime.getURL("newtab.html");
+  const tabUrl = String(sender?.tab?.url || "");
+  const documentUrl = String(sender?.url || "");
+  const memoriesUrl = api.runtime.getURL("memories.html");
+  const newTabUrl = api.runtime.getURL("newtab.html");
+
+  if (/^https?:\/\//i.test(tabUrl) || /^https?:\/\//i.test(documentUrl)) return true;
+  if (documentUrl === memoriesUrl || documentUrl === newTabUrl) return true;
+  if (tabUrl === memoriesUrl || tabUrl === newTabUrl) return true;
+  return false;
 }
 
 api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
