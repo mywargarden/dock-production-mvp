@@ -13,6 +13,7 @@ node --check dock-extension/import-v2.js
 node --check dock-extension/memories.js
 node --check dock-extension/continuity-prepaint.js
 node --check dock-extension/continuity.js
+node scripts/test_preview_storage.mjs
 
 node <<'NODE'
 const fs = require('fs');
