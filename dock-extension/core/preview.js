@@ -14,7 +14,9 @@ const PREVIEW_FIELDS = [
   "thumbnail_url"
 ];
 
-const LEGACY_ALIAS_FIELDS = PREVIEW_FIELDS.filter((field) => field !== "screenshotThumb");
+const LEGACY_ALIAS_FIELDS = PREVIEW_FIELDS.filter(
+  (field) => field !== "screenshotThumb" && field !== "screenshot_url"
+);
 
 function norm(value) {
   return String(value == null ? "" : value).trim();
@@ -62,25 +64,34 @@ export function getCanonicalPreview(tab) {
   return bestScore >= 0 ? best : "";
 }
 
+/**
+ * Backward-compatible reader, canonical writer:
+ *   - inline screenshot data -> screenshotThumb
+ *   - remote screenshot URL -> screenshot_url
+ * Exactly one preview payload survives. Icon/custom-image fields are untouched.
+ */
 export function canonicalizeMemoryPreview(tab) {
-  if (!tab || typeof tab !== "object") return tab;
+  if (!tab || typeof tab !== "object" || Array.isArray(tab)) return tab;
   const next = { ...tab };
   const preview = getCanonicalPreview(next);
 
   for (const field of LEGACY_ALIAS_FIELDS) delete next[field];
+  delete next.screenshotThumb;
+  delete next.screenshot_url;
+
+  if (isInlineImagePreview(preview)) next.screenshotThumb = preview;
+  else if (isRemoteImagePreview(preview)) next.screenshot_url = preview;
 
   if (preview) {
-    next.screenshotThumb = preview;
     next.screenshotBlocked = false;
     next.previewMissing = false;
     next.previewCheckedAt = Number(next.previewCheckedAt || 0) || Date.now();
-  } else {
-    delete next.screenshotThumb;
   }
 
   return next;
 }
 
+/** Lite storage never duplicates base64 screenshot bytes. */
 export function makeLiteMemoryPreview(tab) {
   const next = canonicalizeMemoryPreview(tab);
   if (!next || typeof next !== "object") return next;
