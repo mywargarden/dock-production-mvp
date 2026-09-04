@@ -232,6 +232,8 @@ function ensureBannerStyle() {
     body.dockLicenseBlocked textarea,
     body.dockUpdateRequired [data-dock-mutation="true"],
     body.dockUpdateRequired .deleteBtn,
+    body.dockUpdateRequired .card button.danger,
+    body.dockUpdateRequired #dockSubmit,
     body.dockUpdateRequired .cardDragHandle,
     body.dockUpdateRequired .groupPillX,
     body.dockUpdateRequired .groupPillMenuItem.dangerItem,
@@ -282,8 +284,8 @@ function isMutationEventForPage(event, page) {
   if (page !== "memories") return !!element.closest('[data-dock-mutation="true"]');
 
   if (element.closest(
-    "#createGroupBtn, #addBtn, #editGroupBtn, #deleteSelectedBtn, #clearAllBtn, " +
-    ".deleteBtn, .groupPillX, .cardDragHandle, .dockNoteInput, [data-dock-mutation=\"true\"]"
+    "#createGroupBtn, #addBtn, #editGroupBtn, #deleteSelectedBtn, #clearAllBtn, #dockSubmit, " +
+    ".deleteBtn, .card button.danger, .groupPillX, .cardDragHandle, .dockNoteInput, [data-dock-mutation=\"true\"]"
   )) return true;
 
   if (isMutatingGroupMenuItem(element)) return true;
@@ -400,8 +402,10 @@ export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
       "#editGroupBtn",
       "#deleteSelectedBtn",
       "#clearAllBtn",
+      "#dockSubmit",
       ".deleteBtn",
       ".card button.deleteBtn",
+      ".card button.danger",
       ".cardDragHandle",
       ".groupPillX",
       ".groupPillMenuItem.dangerItem",
