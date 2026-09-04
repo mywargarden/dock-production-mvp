@@ -1,5 +1,6 @@
 from pathlib import Path
 
+# One-shot, assertion-guarded production patch. Any source drift fails closed.
 path = Path("dock-extension/core/storage.js")
 text = path.read_text()
 
@@ -24,7 +25,7 @@ let orgStateCache = null;
 // to every other open Dock context.
 if (api.storage?.onChanged?.addListener) {
   api.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName != "local") return;
+    if (areaName !== "local") return;
 
     if (changes?.[MANAGED_WS_KEY]) {
       const next = changes[MANAGED_WS_KEY].newValue;
