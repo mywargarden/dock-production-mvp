@@ -21,6 +21,7 @@
 ## Still under 7
 
 - Real Chrome testing independently exposed and then verified the cross-context managed-cache repaint defect: degraded state preservation, cached rendering, atomic version replacement, live repaint, hard revocation, and update-required view-without-mutation behavior have survived the browser attack after the fix.
-- The expanded real Chrome attack then exposed a preview-reorder regression caused by two competing preview-scoring doctrines. The preservation layer now matches the canonical preview rule and must survive the full exact-head browser pass, including save/reorder/reload/import rendering and retired-loop instrumentation.
-- This candidate remains unmerged until that exact-head static, artifact-lineage, and expanded Chrome 7 triad passes together.
+- The expanded real Chrome attack then exposed a preview-reorder regression caused by two competing preview-scoring doctrines. The preservation layer now matches the canonical preview rule; save/reorder/reload has progressed through the real-browser attack without the prior loss.
+- The remaining import-harness mismatch was not a Dock failure: legacy import intentionally completes in place and exposes an Open Library control. The final browser harness now follows that actual contract, verifies canonical group storage immediately after Import, then opens Library and verifies the rendered preview.
+- This candidate remains unmerged until the exact-head static, artifact-lineage, and expanded Chrome 7 triad passes together.
 - Personal Dock group membership/layout remains local-device state for 1.0; cross-device group-layout sync is parked rather than added to RC1 scope.
