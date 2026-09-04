@@ -8,6 +8,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionPath = path.join(root, "dock-extension");
 let serverMode = "degraded";
 const now = Date.now();
+const INLINE_PREVIEW = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y9ZQmcAAAAASUVORK5CYII=";
 
 function managedPayload(version, title, minExtensionVersion = "") {
   return {
@@ -100,6 +101,7 @@ await control.evaluate(async ({ configUrl, oldWorkspace, now }) => {
   });
 }, { configUrl, oldWorkspace, now });
 
+// 7a: transient failure preserves the last valid managed workspace.
 serverMode = "degraded";
 const degraded = await control.evaluate(() => chrome.runtime.sendMessage({ type: "SYNC_MANAGED_WORKSPACE" }));
 assert.equal(degraded?.ok, false);
@@ -107,10 +109,33 @@ assert.equal(degraded?.preserved, true);
 let state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace"]));
 assert.equal(state.dockManagedWorkspace?.version, 1, "degraded sync erased or replaced the valid managed Dock");
 
+// Instrument Safe Harbor before any of its scripts execute.
 const page = await browser.newPage();
 page.on("dialog", (dialog) => dialog.dismiss().catch(() => {}));
 await page.evaluateOnNewDocument(() => {
   window.__dockVisibleBlankFrames = [];
+  window.__dockIntervalRegistrations = [];
+  window.__dockObserverRegistrations = [];
+
+  const nativeSetInterval = window.setInterval;
+  window.setInterval = function(handler, delay, ...args) {
+    window.__dockIntervalRegistrations.push(Number(delay));
+    return nativeSetInterval.call(this, handler, delay, ...args);
+  };
+
+  const nativeObserve = MutationObserver.prototype.observe;
+  MutationObserver.prototype.observe = function(target, options) {
+    const opts = options || {};
+    window.__dockObserverRegistrations.push({
+      body: target === document.body,
+      html: target === document.documentElement,
+      childList: !!opts.childList,
+      subtree: !!opts.subtree,
+      attributes: !!opts.attributes
+    });
+    return nativeObserve.call(this, target, options);
+  };
+
   const tick = () => {
     const html = document.documentElement;
     const body = document.body;
@@ -129,11 +154,13 @@ await page.evaluateOnNewDocument(() => {
   };
   requestAnimationFrame(tick);
 });
+
 await page.goto(extUrl("memories.html"), { waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => document.body.innerText.includes("Old District"), { timeout: 10000 });
 let blanks = await page.evaluate(() => window.__dockVisibleBlankFrames || []);
 assert.equal(blanks.length, 0, `visible blank frames during cached load: ${JSON.stringify(blanks.slice(0, 5))}`);
 
+// 7b: newer publish applies atomically and repaints the already-open Safe Harbor.
 await control.evaluate(() => {
   window.__managedWorkspaceTransitions = [];
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -158,13 +185,14 @@ await page.waitForFunction(() => document.body.innerText.includes("New District"
 blanks = await page.evaluate(() => window.__dockVisibleBlankFrames || []);
 assert.equal(blanks.length, 0, `visible blank frames during managed replacement: ${JSON.stringify(blanks.slice(0, 5))}`);
 
+// 7c: explicit hard revocation removes managed access.
 serverMode = "revoked";
 const revoked = await control.evaluate(() => chrome.runtime.sendMessage({ type: "SYNC_MANAGED_WORKSPACE" }));
 assert.equal(revoked?.reason, "ACCESS_REVOKED");
 state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace"]));
 assert.equal(state.dockManagedWorkspace, undefined, "hard revocation failed to remove managed workspace");
 
-// Update-required is a distinct active-license authority state, not revocation.
+// 7d: update-required is a distinct active-license state: view survives, mutation stops.
 serverMode = "update-required";
 await control.evaluate(async ({ oldWorkspace }) => {
   await chrome.storage.local.set({
@@ -199,6 +227,114 @@ await page.evaluate(() => {
 await new Promise((resolve) => setTimeout(resolve, 200));
 assert.equal(await page.$(".dockModalBackdrop"), null, "capture-phase mutation guard was bypassed after forced re-enable");
 assert.ok(await page.$("#grid .card"), "update-required hid the last valid Dock instead of preserving view");
+
+// 7e: no retired 250/350ms polling or whole-page watermark observer survives initialization.
+const runtimeInstrumentation = await page.evaluate(() => ({
+  intervals: window.__dockIntervalRegistrations || [],
+  observers: window.__dockObserverRegistrations || []
+}));
+assert.equal(runtimeInstrumentation.intervals.includes(250), false, `retired 250ms interval registered: ${JSON.stringify(runtimeInstrumentation.intervals)}`);
+assert.equal(runtimeInstrumentation.intervals.includes(350), false, `retired 350ms interval registered: ${JSON.stringify(runtimeInstrumentation.intervals)}`);
+const watermarkLikeObservers = runtimeInstrumentation.observers.filter((entry) => entry.body && entry.childList && entry.subtree && entry.attributes);
+assert.equal(watermarkLikeObservers.length, 0, `whole-page watermark-style observer registered: ${JSON.stringify(watermarkLikeObservers)}`);
+
+// 7f: real production save -> reorder -> reload preserves exactly one inline preview payload.
+serverMode = "degraded";
+await control.evaluate(async ({ preview }) => {
+  await chrome.storage.local.set({
+    dockPlanState: { plan: "district", label: "District", status: "active", source: "managed" },
+    dockActiveGroup: "__all__"
+  });
+  const storage = await import("./core/storage.js");
+  await storage.setSavedTabs([
+    {
+      title: "Preview Test",
+      url: "https://example.com/preview-test",
+      screenshot: preview,
+      screenshot_url: preview,
+      screenshotUrl: preview,
+      screenshotThumb: preview,
+      customIcon: "https://example.com/custom-icon.png",
+      savedAt: Date.now()
+    },
+    {
+      title: "Second Card",
+      url: "https://example.com/second-card",
+      savedAt: Date.now() + 1
+    }
+  ]);
+}, { preview: INLINE_PREVIEW });
+
+let previewStorage = await control.evaluate(() => chrome.storage.local.get(["savedTabs", "savedTabsLite"]));
+let previewTab = previewStorage.savedTabs.find((tab) => tab.title === "Preview Test");
+assert.equal(previewTab?.screenshotThumb, INLINE_PREVIEW, "canonical full cache lost inline preview on save");
+assert.equal(previewTab?.screenshot, undefined, "legacy screenshot alias survived canonical save");
+assert.equal(previewTab?.screenshot_url, undefined, "inline preview was duplicated into screenshot_url");
+assert.equal(previewTab?.screenshotUrl, undefined, "legacy screenshotUrl alias survived canonical save");
+assert.equal(previewTab?.customIcon, "https://example.com/custom-icon.png", "canonical preview write destroyed custom imagery");
+assert.equal(JSON.stringify(previewStorage.savedTabsLite || []).includes(INLINE_PREVIEW), false, "lite cache retained inline base64 preview");
+
+await control.evaluate(async () => {
+  const storage = await import("./core/storage.js");
+  const tabs = await storage.getSavedTabs({ localOnly: true });
+  await storage.setSavedTabs([...tabs].reverse());
+});
+previewStorage = await control.evaluate(() => chrome.storage.local.get(["savedTabs", "savedTabsLite"]));
+previewTab = previewStorage.savedTabs.find((tab) => tab.title === "Preview Test");
+assert.equal(previewTab?.screenshotThumb, INLINE_PREVIEW, "reorder lost canonical inline preview");
+assert.equal((JSON.stringify(previewStorage.savedTabs).match(/data:image\/png;base64/g) || []).length, 1, "reorder multiplied inline preview payload");
+assert.equal(JSON.stringify(previewStorage.savedTabsLite || []).includes(INLINE_PREVIEW), false, "reorder reintroduced base64 into lite cache");
+
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.waitForFunction(() => document.body.innerText.includes("Preview Test"), { timeout: 10000 });
+const renderedPreview = await page.evaluate(() => {
+  for (const card of document.querySelectorAll("#grid .card")) {
+    if (card.innerText.includes("Preview Test")) return card.querySelector(".preview img")?.src || "";
+  }
+  return "";
+});
+assert.equal(renderedPreview, INLINE_PREVIEW, "saved preview did not survive reload into the rendered card image");
+
+// 7g: the real legacy import surface preserves the shared preview through group storage and rendering.
+await control.evaluate(async () => {
+  await chrome.storage.local.set({
+    dockPlanState: { plan: "district", label: "District", status: "active", source: "managed" }
+  });
+});
+const legacyPayload = {
+  workspace: {
+    name: "Imported Preview Dock",
+    color: "#6f4cff",
+    tabs: [{
+      title: "Imported Preview Card",
+      url: "https://example.com/imported-preview",
+      screenshotThumb: INLINE_PREVIEW,
+      savedAt: Date.now()
+    }]
+  }
+};
+const encodedLegacy = Buffer.from(JSON.stringify(legacyPayload), "utf8").toString("base64url");
+const importPage = await browser.newPage();
+await importPage.goto(`${extUrl("import.html")}#data=${encodedLegacy}`, { waitUntil: "domcontentloaded" });
+await importPage.waitForFunction(() => document.body.innerText.includes("ready to import"), { timeout: 10000 });
+await Promise.all([
+  importPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }),
+  importPage.click("#importBtn")
+]);
+await importPage.waitForFunction(() => document.body.innerText.includes("Imported Preview Card"), { timeout: 10000 });
+const importedState = await importPage.evaluate(() => chrome.storage.local.get(["dockActiveGroup", "dockGroupItems"]));
+const importedItems = importedState.dockGroupItems?.[importedState.dockActiveGroup] || [];
+const importedTab = importedItems.find((tab) => tab.title === "Imported Preview Card");
+assert.equal(importedTab?.screenshotThumb, INLINE_PREVIEW, "legacy import lost canonical preview in group storage");
+assert.equal(importedTab?.screenshot, undefined, "legacy import persisted duplicate screenshot alias");
+assert.equal(importedTab?.screenshotUrl, undefined, "legacy import persisted duplicate screenshotUrl alias");
+const importedRenderedPreview = await importPage.evaluate(() => {
+  for (const card of document.querySelectorAll("#grid .card")) {
+    if (card.innerText.includes("Imported Preview Card")) return card.querySelector(".preview img")?.src || "";
+  }
+  return "";
+});
+assert.equal(importedRenderedPreview, INLINE_PREVIEW, "imported preview did not survive into the rendered card image");
 
 console.log("Chrome RC1 7: PASS");
 await browser.close();
