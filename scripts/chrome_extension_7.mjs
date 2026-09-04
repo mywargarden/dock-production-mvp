@@ -49,7 +49,7 @@ const configUrl = `http://127.0.0.1:${port}/config`;
 
 const browser = await puppeteer.launch({
   headless: false,
-  enableExtensions: [extensionPath],
+  enableExtensions: true,
   args: [
     "--no-sandbox",
     "--disable-dev-shm-usage",
@@ -58,13 +58,14 @@ const browser = await puppeteer.launch({
   ]
 });
 
-// Current Puppeteer installs the extension through Chrome's supported testing
-// path. Resolve the identity from Chrome's registered extension list instead of
-// predicting it or relying on the removed --load-extension switch.
+// Use Puppeteer's explicit runtime extension-install API. This is the current
+// supported testing path and returns the exact identity Chrome assigned.
+const extensionId = await browser.installExtension(extensionPath);
+assert.match(extensionId, /^[a-p]{32}$/, "Chrome did not return a valid unpacked extension id");
 const extensions = await browser.extensions();
-const dockEntry = [...extensions.entries()].find(([, extension]) => extension?.name === "Dock");
-assert.ok(dockEntry, `Dock extension not registered in Chrome for Testing; loaded: ${[...extensions.values()].map((e) => e?.name || "unknown").join(", ")}`);
-const [extensionId, dockExtension] = dockEntry;
+const dockExtension = extensions.get(extensionId);
+assert.ok(dockExtension, `Dock extension ${extensionId} was not registered after installExtension()`);
+assert.equal(dockExtension.name, "Dock", "Chrome registered an unexpected extension");
 assert.equal(dockExtension.version, "0.3.12", "Chrome loaded an unexpected Dock version");
 console.log(`Dock runtime loaded: ${extensionId} v${dockExtension.version}`);
 
