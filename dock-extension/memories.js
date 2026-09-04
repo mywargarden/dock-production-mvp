@@ -3211,8 +3211,20 @@ async function load({ reason = "manual", force = false } = {}) {
     if (!force && beforeSignature === lastRenderSignature && reason !== "manual") {
       return;
     }
+
     await runLocalLoad();
-    lastRenderSignature = await computeRenderSignature();
+
+    // A render may only claim the storage signature it started from. If managed
+    // state changes while runLocalLoad() is painting, recording the newer
+    // after-state as "already rendered" can leave old DOM on screen forever:
+    // the storage-change reload sees matching signatures and incorrectly skips.
+    // Preserve the starting signature and queue one more pass whenever storage
+    // moved during the render. The queued pass then paints the actual new state.
+    lastRenderSignature = beforeSignature;
+    const afterSignature = await computeRenderSignature();
+    if (afterSignature !== beforeSignature) {
+      pendingLocalLoad = true;
+    }
   })();
   try {
     return await localLoadPromise;
