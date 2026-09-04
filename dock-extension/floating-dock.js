@@ -96,6 +96,8 @@
   let dragState = null;
   let suppressClick = false;
   let toastTimer = null;
+  let captureHidden = false;
+  let focusHidden = !document.hasFocus();
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -133,9 +135,15 @@
     } catch {}
   }
 
-  function setCaptureHidden(hidden) {
+  function renderVisibility() {
+    const hidden = captureHidden || focusHidden;
     host.style.visibility = hidden ? "hidden" : "visible";
     host.style.pointerEvents = hidden ? "none" : "auto";
+  }
+
+  function setCaptureHidden(hidden) {
+    captureHidden = !!hidden;
+    renderVisibility();
   }
 
   function showError(message) {
@@ -179,11 +187,9 @@
     const dx = event.clientX - dragState.startX;
     const dy = event.clientY - dragState.startY;
     if (!dragState.moved && Math.hypot(dx, dy) < DRAG_THRESHOLD) return;
-
     dragState.moved = true;
     suppressClick = true;
     button.classList.add("dragging");
-
     const limit = bounds();
     host.style.left = `${clamp(dragState.startLeft + dx, EDGE_GAP, limit.maxLeft)}px`;
     host.style.top = `${clamp(dragState.startTop + dy, EDGE_GAP, limit.maxTop)}px`;
@@ -228,11 +234,20 @@
     sendResponse({ ok: true, hidden });
   });
 
+  window.addEventListener("blur", () => {
+    focusHidden = true;
+    renderVisibility();
+  });
+  window.addEventListener("focus", () => {
+    focusHidden = false;
+    renderVisibility();
+  });
   window.addEventListener("resize", () => {
     const rect = host.getBoundingClientRect();
     applyPosition({ left: rect.left, top: rect.top });
   });
 
   (document.documentElement || document.body).appendChild(host);
+  renderVisibility();
   loadPosition();
 })();
