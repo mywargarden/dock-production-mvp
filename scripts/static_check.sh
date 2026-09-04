@@ -11,6 +11,7 @@ node --check dock-extension/background-v2.js
 node --check dock-extension/background-v3.js
 node --check dock-extension/floating-dock.js
 node --check dock-extension/launcher.js
+node --check dock-extension/newtab.js
 node --check dock-extension/popup.js
 node --check dock-extension/import-v2.js
 node --check dock-extension/memories.js
@@ -22,9 +23,12 @@ node <<'NODE'
 const fs = require('fs');
 
 const manifest = JSON.parse(fs.readFileSync('dock-extension/manifest.json', 'utf8'));
-if (manifest.version !== '0.3.14') throw new Error(`unexpected manifest version ${manifest.version}`);
+if (manifest.version !== '0.3.15') throw new Error(`unexpected manifest version ${manifest.version}`);
 if (manifest.background?.service_worker !== 'background-v3.js' || manifest.background?.type !== 'module') {
-  throw new Error('Dock 0.3.14 popup bridge worker not active');
+  throw new Error('Dock 0.3.15 popup bridge worker not active');
+}
+if (manifest.chrome_url_overrides?.newtab !== 'newtab.html') {
+  throw new Error('Dock 0.3.15 does not own the Chrome New Tab surface');
 }
 
 const expectedPermissions = ['activeTab','alarms','identity','identity.email','storage','tabs','unlimitedStorage'].sort();
@@ -54,6 +58,7 @@ const bridge = fs.readFileSync('dock-extension/background-v3.js', 'utf8');
 if (!bridge.includes('import "./background-v2.js"')) throw new Error('background bridge no longer inherits canonical worker');
 if (!bridge.includes('OPEN_DOCK_POPUP') || !bridge.includes('action.openPopup')) throw new Error('floating launcher popup bridge missing');
 if (!bridge.includes('isAllowedLauncherSender')) throw new Error('floating launcher sender validation missing');
+if (!bridge.includes('newtab.html')) throw new Error('Dock New Tab is not an allowed popup sender');
 
 const floating = fs.readFileSync('dock-extension/floating-dock.js', 'utf8');
 for (const required of ['window.top !== window', 'attachShadow', 'dockLauncherPosition', 'OPEN_DOCK_POPUP', 'dock_logo_clean.png', 'SET_DOCK_LAUNCHER_CAPTURE_HIDDEN', 'renderVisibility']) {
@@ -63,11 +68,26 @@ if (floating.includes('setInterval(') || floating.includes('MutationObserver')) 
   throw new Error('floating launcher introduced polling or page-wide observation');
 }
 
+const newtabHtml = fs.readFileSync('dock-extension/newtab.html', 'utf8');
+const newtabJs = fs.readFileSync('dock-extension/newtab.js', 'utf8');
+for (const required of ['dockLauncher', 'searchInput', 'dock_logo_clean.png']) {
+  if (!newtabHtml.includes(required)) throw new Error(`Dock New Tab markup missing: ${required}`);
+}
+for (const required of ['dockLauncherPosition', 'OPEN_DOCK_POPUP', 'resolveNavigation']) {
+  if (!newtabJs.includes(required)) throw new Error(`Dock New Tab behavior missing: ${required}`);
+}
+if (newtabJs.includes('setInterval(') || newtabJs.includes('MutationObserver')) {
+  throw new Error('Dock New Tab introduced polling or page-wide observation');
+}
+
 const worker = fs.readFileSync('dock-extension/background-v2.js', 'utf8');
 if (!worker.includes('ensureDockMutationAllowed')) throw new Error('canonical background worker is missing mutation enforcement');
 if (!worker.includes('SET_DOCK_LAUNCHER_CAPTURE_HIDDEN') || !worker.includes('setLauncherCaptureHidden')) {
   throw new Error('bulk screenshot launcher exclusion missing');
 }
+
+const popup = fs.readFileSync('dock-extension/popup.js', 'utf8');
+if (!popup.includes('SET_DOCK_LAUNCHER_CAPTURE_HIDDEN')) throw new Error('single-save screenshot launcher exclusion missing');
 
 const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
 if (memoriesHtml.includes('legacy-loop-shield')) throw new Error('obsolete legacy loop shield is still wired into memories.html');
