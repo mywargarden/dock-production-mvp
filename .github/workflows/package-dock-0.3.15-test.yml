@@ -1,0 +1,68 @@
+name: Package Dock 0.3.15 New Tab Test
+
+on:
+  push:
+    branches:
+      - feature/dock-0.3.15-new-tab
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_SHA: ${{ github.sha }}
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact candidate checkout
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - name: Run static gates
+        run: ./scripts/static_check.sh
+      - name: Install Chrome test harness
+        run: npm install --no-save puppeteer@25.10.0
+      - name: Run real Chrome New Tab continuity attack
+        run: xvfb-run -a node scripts/chrome_newtab_7.mjs
+      - name: Build load-unpacked and store ZIPs
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf candidate-out
+          mkdir -p candidate-out/Dock-0.3.15
+          rsync -a dock-extension/ candidate-out/Dock-0.3.15/ \
+            --exclude='*.md' \
+            --exclude='background.js' \
+            --exclude='import.js'
+          test -f candidate-out/Dock-0.3.15/manifest.json
+          test -f candidate-out/Dock-0.3.15/newtab.html
+          test -f candidate-out/Dock-0.3.15/newtab.js
+          test -f candidate-out/Dock-0.3.15/floating-dock.js
+          test "$(node -e 'const m=require("./candidate-out/Dock-0.3.15/manifest.json"); process.stdout.write(m.version)')" = '0.3.15'
+          test "$(node -e 'const m=require("./candidate-out/Dock-0.3.15/manifest.json"); process.stdout.write(m.chrome_url_overrides?.newtab||"")')" = 'newtab.html'
+          (
+            cd candidate-out/Dock-0.3.15
+            zip -X -q -r ../Dock-0.3.15.zip .
+          )
+          (
+            cd candidate-out
+            zip -X -q -r Dock-0.3.15-LOAD-UNPACKED.zip Dock-0.3.15
+          )
+          sha256sum candidate-out/Dock-0.3.15.zip candidate-out/Dock-0.3.15-LOAD-UNPACKED.zip > candidate-out/SHA256SUMS.txt
+          printf 'commit=%s\nversion=0.3.15\n' "$CANDIDATE_SHA" > candidate-out/ARTIFACT_ID.txt
+      - name: Upload Dock 0.3.15 test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.15-new-tab-test
+          path: |
+            candidate-out/Dock-0.3.15.zip
+            candidate-out/Dock-0.3.15-LOAD-UNPACKED.zip
+            candidate-out/SHA256SUMS.txt
+            candidate-out/ARTIFACT_ID.txt
+          if-no-files-found: error
+          retention-days: 14
