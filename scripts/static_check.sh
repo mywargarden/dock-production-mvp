@@ -22,9 +22,9 @@ node <<'NODE'
 const fs = require('fs');
 
 const manifest = JSON.parse(fs.readFileSync('dock-extension/manifest.json', 'utf8'));
-if (manifest.version !== '0.3.13') throw new Error(`unexpected manifest version ${manifest.version}`);
+if (manifest.version !== '0.3.14') throw new Error(`unexpected manifest version ${manifest.version}`);
 if (manifest.background?.service_worker !== 'background-v3.js' || manifest.background?.type !== 'module') {
-  throw new Error('Dock 0.3.13 popup bridge worker not active');
+  throw new Error('Dock 0.3.14 popup bridge worker not active');
 }
 
 const expectedPermissions = ['activeTab','alarms','identity','identity.email','storage','tabs','unlimitedStorage'].sort();
@@ -51,16 +51,22 @@ if (JSON.stringify(exposed) !== JSON.stringify(expectedExposed)) {
 }
 
 const bridge = fs.readFileSync('dock-extension/background-v3.js', 'utf8');
-if (!bridge.includes('import "./background-v2.js"')) throw new Error('0.3.13 background no longer inherits canonical 0.3.12 worker');
+if (!bridge.includes('import "./background-v2.js"')) throw new Error('background bridge no longer inherits canonical worker');
 if (!bridge.includes('OPEN_DOCK_POPUP') || !bridge.includes('action.openPopup')) throw new Error('floating launcher popup bridge missing');
 if (!bridge.includes('isAllowedLauncherSender')) throw new Error('floating launcher sender validation missing');
 
 const floating = fs.readFileSync('dock-extension/floating-dock.js', 'utf8');
-for (const required of ['window.top !== window', 'attachShadow', 'dockLauncherPosition', 'OPEN_DOCK_POPUP', 'dock_logo_clean.png']) {
+for (const required of ['window.top !== window', 'attachShadow', 'dockLauncherPosition', 'OPEN_DOCK_POPUP', 'dock_logo_clean.png', 'SET_DOCK_LAUNCHER_CAPTURE_HIDDEN', 'renderVisibility']) {
   if (!floating.includes(required)) throw new Error(`floating launcher invariant missing: ${required}`);
 }
 if (floating.includes('setInterval(') || floating.includes('MutationObserver')) {
   throw new Error('floating launcher introduced polling or page-wide observation');
+}
+
+const worker = fs.readFileSync('dock-extension/background-v2.js', 'utf8');
+if (!worker.includes('ensureDockMutationAllowed')) throw new Error('canonical background worker is missing mutation enforcement');
+if (!worker.includes('SET_DOCK_LAUNCHER_CAPTURE_HIDDEN') || !worker.includes('setLauncherCaptureHidden')) {
+  throw new Error('bulk screenshot launcher exclusion missing');
 }
 
 const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
@@ -78,8 +84,6 @@ if (memoriesJs.includes('looksLikeCenterDockWatermark') || memoriesJs.includes('
   throw new Error('heuristic watermark scanner reintroduced');
 }
 
-const worker = fs.readFileSync('dock-extension/background-v2.js', 'utf8');
-if (!worker.includes('ensureDockMutationAllowed')) throw new Error('canonical background worker is missing mutation enforcement');
 const importer = fs.readFileSync('dock-extension/import-v2.js', 'utf8');
 if (!importer.includes('await ensureDockMutationAllowed()')) throw new Error('shared Dock import is missing mutation enforcement');
 const adapter = fs.readFileSync('dock-extension/adapters/index.js', 'utf8');
