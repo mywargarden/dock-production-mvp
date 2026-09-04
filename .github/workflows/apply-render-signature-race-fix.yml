@@ -1,0 +1,34 @@
+name: Apply Safe Harbor render signature race fix
+
+on:
+  push:
+    branches:
+      - release-dock-0-3-12-continuity
+    paths:
+      - scripts/apply_render_signature_race_fix.py
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release-dock-0-3-12-continuity
+          fetch-depth: 0
+      - name: Apply assertion-guarded render race fix
+        run: python3 scripts/apply_render_signature_race_fix.py
+      - name: Verify extension static gate
+        run: bash scripts/static_check.sh
+      - name: Remove one-shot patch tooling
+        run: git rm scripts/apply_render_signature_race_fix.py .github/workflows/apply-render-signature-race-fix.yml
+      - name: Commit production fix
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add dock-extension/memories.js
+          git commit -m "Prevent managed publish render signature races"
+          git push origin HEAD:release-dock-0-3-12-continuity
