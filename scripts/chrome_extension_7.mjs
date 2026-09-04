@@ -317,17 +317,22 @@ const encodedLegacy = Buffer.from(JSON.stringify(legacyPayload), "utf8").toStrin
 const importPage = await browser.newPage();
 await importPage.goto(`${extUrl("import.html")}#data=${encodedLegacy}`, { waitUntil: "domcontentloaded" });
 await importPage.waitForFunction(() => document.body.innerText.includes("ready to import"), { timeout: 10000 });
-await Promise.all([
-  importPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }),
-  importPage.click("#importBtn")
-]);
-await importPage.waitForFunction(() => document.body.innerText.includes("Imported Preview Card"), { timeout: 10000 });
+await importPage.click("#importBtn");
+await importPage.waitForFunction(() => {
+  const button = document.querySelector("#openLibraryBtn");
+  return button && !button.classList.contains("hidden") && document.body.innerText.includes("Imported");
+}, { timeout: 10000 });
 const importedState = await importPage.evaluate(() => chrome.storage.local.get(["dockActiveGroup", "dockGroupItems"]));
 const importedItems = importedState.dockGroupItems?.[importedState.dockActiveGroup] || [];
 const importedTab = importedItems.find((tab) => tab.title === "Imported Preview Card");
 assert.equal(importedTab?.screenshotThumb, INLINE_PREVIEW, "legacy import lost canonical preview in group storage");
 assert.equal(importedTab?.screenshot, undefined, "legacy import persisted duplicate screenshot alias");
 assert.equal(importedTab?.screenshotUrl, undefined, "legacy import persisted duplicate screenshotUrl alias");
+await Promise.all([
+  importPage.waitForNavigation({ waitUntil: "domcontentloaded", timeout: 10000 }),
+  importPage.click("#openLibraryBtn")
+]);
+await importPage.waitForFunction(() => document.body.innerText.includes("Imported Preview Card"), { timeout: 10000 });
 const importedRenderedPreview = await importPage.evaluate(() => {
   for (const card of document.querySelectorAll("#grid .card")) {
     if (card.innerText.includes("Imported Preview Card")) return card.querySelector(".preview img")?.src || "";
