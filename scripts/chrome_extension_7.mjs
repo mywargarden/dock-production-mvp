@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import crypto from "node:crypto";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -7,15 +6,6 @@ import puppeteer from "puppeteer-core";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const extensionPath = path.join(root, "dock-extension");
-const manifest = (await import(path.join(extensionPath, "manifest.json"), { with: { type: "json" } })).default;
-
-function extensionIdFromKey(key) {
-  const digest = crypto.createHash("sha256").update(Buffer.from(key, "base64")).digest().subarray(0, 16);
-  const alphabet = "abcdefghijklmnop";
-  return [...digest].map((byte) => alphabet[byte >> 4] + alphabet[byte & 15]).join("");
-}
-
-const extensionId = extensionIdFromKey(manifest.key);
 let serverMode = "degraded";
 const now = Date.now();
 
@@ -70,6 +60,19 @@ const browser = await puppeteer.launch({
     "--no-default-browser-check"
   ]
 });
+
+// Use Chrome's actual loaded runtime identity rather than predicting an ID from
+// the manifest key. This also proves the MV3 worker really loaded before any
+// Dock behavior is credited to the browser test.
+const workerTarget = await browser.waitForTarget((target) => {
+  const url = target.url();
+  return target.type() === "service_worker" &&
+    url.startsWith("chrome-extension://") &&
+    url.endsWith("/background-v2.js");
+}, { timeout: 15000 });
+const extensionId = new URL(workerTarget.url()).host;
+assert.ok(extensionId, "Chrome loaded Dock worker without an extension identity");
+console.log(`Dock runtime loaded: ${extensionId}`);
 
 const extUrl = (file) => `chrome-extension://${extensionId}/${file}`;
 const control = await browser.newPage();
