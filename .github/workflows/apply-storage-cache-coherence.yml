@@ -21,7 +21,7 @@ jobs:
       - name: Apply assertion-guarded cache coherence patch
         run: python3 scripts/apply_storage_cache_coherence.py
       - name: Verify extension static gate
-        run: bash scripts/extension_static_test.sh
+        run: bash scripts/static_check.sh
       - name: Remove one-shot patch tooling
         run: git rm scripts/apply_storage_cache_coherence.py .github/workflows/apply-storage-cache-coherence.yml
       - name: Commit production fix
