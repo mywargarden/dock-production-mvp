@@ -337,13 +337,12 @@ function dockPreviewScoreForSave20260721(value) {
   const isRemote = /^https?:\/\//i.test(s);
   const isFavicon = /google\.com\/s2\/favicons|favicon\.ico|apple-touch-icon|\/favicon/i.test(s);
 
-  if (isDataImage && s.length > 30000) return 100000000 + s.length;
-  if (isDataImage && s.length > 1000) return 50000000 + s.length;
+  // Match core/preview.js: any valid inline screenshot outranks remote
+  // screenshot candidates. Small inline previews must not be displaced by icons.
+  if (isDataImage) return 100000000 + s.length;
   if (isRemote && !isFavicon) return 20000000 + s.length;
-  if (isDataImage) return 1000000 + s.length;
-  if (isRemote && isFavicon) return 1000 + s.length;
-  if (isRemote) return 500000 + s.length;
-  return s.length;
+  if (isRemote) return 1000 + s.length;
+  return -1;
 }
 
 function dockBestPreviewForSave20260721(tab) {
@@ -360,16 +359,7 @@ function dockBestPreviewForSave20260721(tab) {
     "preview_url",
     "thumbnail",
     "thumbnailUrl",
-    "thumbnail_url",
-    "image",
-    "imageUrl",
-    "image_url",
-    "customIcon",
-    "icon_url",
-    "iconUrl",
-    "faviconUrl",
-    "favIconUrl",
-    "favicon"
+    "thumbnail_url"
   ];
 
   let best = "";
