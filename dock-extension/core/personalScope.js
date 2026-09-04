@@ -17,7 +17,7 @@ const EMPTY_PERSONAL_STATE = Object.freeze({
   savedTabsLite: [],
   dockGroups: [],
   dockGroupItems: {},
-  dockActiveGroup: "",
+  dockActiveGroup: "__all__",
   dockDeletedMemoryTombstones: {}
 });
 
@@ -39,7 +39,7 @@ function normalizeState(source = {}) {
     savedTabsLite: Array.isArray(source.savedTabsLite) ? source.savedTabsLite : [],
     dockGroups: Array.isArray(source.dockGroups) ? source.dockGroups : [],
     dockGroupItems: source.dockGroupItems && typeof source.dockGroupItems === "object" ? source.dockGroupItems : {},
-    dockActiveGroup: norm(source.dockActiveGroup),
+    dockActiveGroup: norm(source.dockActiveGroup) || "__all__",
     dockDeletedMemoryTombstones: source.dockDeletedMemoryTombstones && typeof source.dockDeletedMemoryTombstones === "object"
       ? source.dockDeletedMemoryTombstones
       : {}
