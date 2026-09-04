@@ -65,8 +65,8 @@ async function openDockPopup() {
   if (!launcher) return;
   launcher.classList.add("isOpening");
   try {
-    if (!chrome.action?.openPopup) throw new Error("POPUP_API_UNAVAILABLE");
-    await chrome.action.openPopup();
+    const result = await chrome.runtime.sendMessage({ type: "OPEN_DOCK_POPUP" });
+    if (!result?.ok) throw new Error(result?.code || "POPUP_OPEN_FAILED");
   } catch {
     showTemporaryError("Dock could not open the popup here. Use the Dock toolbar icon instead.");
   } finally {
