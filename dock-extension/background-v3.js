@@ -5,7 +5,7 @@ const api = (typeof browser !== "undefined" && browser?.runtime?.getURL) ? brows
 function isAllowedLauncherSender(sender) {
   const senderUrl = String(sender?.tab?.url || sender?.url || "");
   if (/^https?:\/\//i.test(senderUrl)) return true;
-  return senderUrl === api.runtime.getURL("memories.html");
+  return senderUrl === api.runtime.getURL("memories.html") || senderUrl === api.runtime.getURL("newtab.html");
 }
 
 api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
