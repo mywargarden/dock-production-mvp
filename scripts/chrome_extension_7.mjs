@@ -58,8 +58,6 @@ const browser = await puppeteer.launch({
   ]
 });
 
-// Use Puppeteer's explicit runtime extension-install API. This is the current
-// supported testing path and returns the exact identity Chrome assigned.
 const extensionId = await browser.installExtension(extensionPath);
 assert.match(extensionId, /^[a-p]{32}$/, "Chrome did not return a valid unpacked extension id");
 const extensions = await browser.extensions();
@@ -93,11 +91,11 @@ await control.evaluate(async ({ configUrl, oldWorkspace, now }) => {
     },
     dockManagedWorkspace: oldWorkspace,
     dockManagedMeta: { syncedAt: now - 3600000, version: 1, updatedAt: now + 1, publishedAt: now + 1 },
-    dockPlanState: { plan: "district", label: "District", status: "active", source: "managed" }
+    dockPlanState: { plan: "district", label: "District", status: "active", source: "managed" },
+    dockActiveGroup: "__admin__"
   });
 }, { configUrl, oldWorkspace, now });
 
-// 7a: transient network/server failure must preserve the last valid managed Dock.
 serverMode = "degraded";
 const degraded = await control.evaluate(() => chrome.runtime.sendMessage({ type: "SYNC_MANAGED_WORKSPACE" }));
 assert.equal(degraded?.ok, false);
@@ -105,7 +103,6 @@ assert.equal(degraded?.preserved, true);
 let state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace"]));
 assert.equal(state.dockManagedWorkspace?.version, 1, "degraded sync erased or replaced the valid managed Dock");
 
-// Open the cached managed Dock and instrument visible-blank frames.
 const page = await browser.newPage();
 page.on("dialog", (dialog) => dialog.dismiss().catch(() => {}));
 await page.evaluateOnNewDocument(() => {
@@ -133,7 +130,6 @@ await page.waitForFunction(() => document.body.innerText.includes("Old District"
 let blanks = await page.evaluate(() => window.__dockVisibleBlankFrames || []);
 assert.equal(blanks.length, 0, `visible blank frames during cached load: ${JSON.stringify(blanks.slice(0, 5))}`);
 
-// 7b: a valid newer publish must replace old -> new without an absent intermediate workspace.
 await control.evaluate(() => {
   window.__managedWorkspaceTransitions = [];
   chrome.storage.onChanged.addListener((changes, area) => {
@@ -156,14 +152,12 @@ assert.equal(transitions.some((entry) => entry.removed), false, "managed workspa
 blanks = await page.evaluate(() => window.__dockVisibleBlankFrames || []);
 assert.equal(blanks.length, 0, `visible blank frames during managed replacement: ${JSON.stringify(blanks.slice(0, 5))}`);
 
-// 7c: explicit hard revocation must remove managed access.
 serverMode = "revoked";
 const revoked = await control.evaluate(() => chrome.runtime.sendMessage({ type: "SYNC_MANAGED_WORKSPACE" }));
 assert.equal(revoked?.reason, "ACCESS_REVOKED");
 state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace"]));
 assert.equal(state.dockManagedWorkspace, undefined, "hard revocation failed to remove managed workspace");
 
-// 7d: update-required must preserve view but block user mutation.
 await control.evaluate(async ({ oldWorkspace }) => {
   await chrome.storage.local.set({
     dockManagedWorkspace: oldWorkspace,
@@ -174,7 +168,8 @@ await control.evaluate(async ({ oldWorkspace }) => {
       status: "active",
       source: "managed",
       minExtensionVersion: "99.0.0"
-    }
+    },
+    dockActiveGroup: "__admin__"
   });
 }, { oldWorkspace });
 
