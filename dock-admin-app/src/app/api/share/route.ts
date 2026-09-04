@@ -10,6 +10,12 @@ import {
 const SHARE_TTL_DAYS = 30
 const CANONICAL_CHROME_EXTENSION_ID = 'ljbeicldjiaglnflgnlmafhalpmdpdne'
 const SHARE_PREVIEW_TOKEN_BYTES = 24
+const JUNK_QUERY_PARAMS = new Set([
+  'utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content',
+  'utm_id', 'utm_name', 'utm_cid', 'utm_reader', 'utm_viz_id',
+  'fbclid', 'gclid', 'dclid', 'gbraid', 'wbraid', 'igshid',
+  'mc_cid', 'mc_eid', 'ref', 'ref_src', 'source',
+])
 
 function failure(error: any) {
   const status = Number(error?.status) || 400
@@ -30,18 +36,56 @@ function newShareId() {
   return randomToken(18)
 }
 
+function normalizePreviewLookupUrl(value: unknown) {
+  const raw = String(value ?? '').trim()
+  if (!raw) return ''
+  try {
+    const parsed = new URL(raw)
+    const protocol = parsed.protocol.toLowerCase()
+    if (protocol !== 'http:' && protocol !== 'https:') return ''
+
+    parsed.protocol = protocol
+    parsed.hostname = parsed.hostname.toLowerCase()
+    parsed.hash = ''
+
+    if ((protocol === 'http:' && parsed.port === '80') || (protocol === 'https:' && parsed.port === '443')) {
+      parsed.port = ''
+    }
+
+    const kept: Array<[string, string]> = []
+    for (const [key, val] of parsed.searchParams.entries()) {
+      if (!JUNK_QUERY_PARAMS.has(String(key || '').toLowerCase())) kept.push([key, val])
+    }
+    kept.sort((a, b) => {
+      const keyCompare = a[0].localeCompare(b[0])
+      return keyCompare !== 0 ? keyCompare : a[1].localeCompare(b[1])
+    })
+    parsed.search = ''
+    for (const [key, val] of kept) parsed.searchParams.append(key, val)
+
+    if (parsed.pathname !== '/') parsed.pathname = parsed.pathname.replace(/\/+$/, '')
+    let href = parsed.toString()
+    if (href.endsWith('/') && parsed.pathname !== '/') href = href.slice(0, -1)
+    return href
+  } catch {
+    return ''
+  }
+}
+
 async function attachOwnedPreviewReferences(service: any, userId: string, payload: any) {
   const tabs = Array.isArray(payload?.workspace?.tabs) ? payload.workspace.tabs : []
-  const urls = Array.from(new Set(tabs.map((tab: any) => String(tab?.url || '').trim()).filter(Boolean)))
+  const lookupUrls = Array.from(new Set(
+    tabs.map((tab: any) => normalizePreviewLookupUrl(tab?.url)).filter(Boolean),
+  ))
   const previewToken = randomToken(SHARE_PREVIEW_TOKEN_BYTES)
-  if (!urls.length) return { ...payload, _sharePreviewToken: previewToken }
+  if (!lookupUrls.length) return { ...payload, _sharePreviewToken: previewToken }
 
   const { data, error } = await service
     .from('personal_memories')
     .select('id,url,screenshot_path,updated_at')
     .eq('user_id', userId)
     .is('deleted_at', null)
-    .in('url', urls)
+    .in('url', lookupUrls)
     .order('updated_at', { ascending: false })
 
   if (error) throw Object.assign(new Error('Could not resolve Dock screenshots for this share.'), {
@@ -49,12 +93,14 @@ async function attachOwnedPreviewReferences(service: any, userId: string, payloa
     code: 'SHARE_PREVIEW_LOOKUP_FAILED',
   })
 
-  const previewByUrl = new Map<string, string>()
+  const previewByLookupUrl = new Map<string, string>()
   for (const row of data || []) {
-    const url = String(row?.url || '').trim()
+    const lookupUrl = normalizePreviewLookupUrl(row?.url)
     const memoryId = String(row?.id || '').trim()
     const path = String(row?.screenshot_path || '').trim()
-    if (url && memoryId && path && !previewByUrl.has(url)) previewByUrl.set(url, memoryId)
+    if (lookupUrl && memoryId && path && !previewByLookupUrl.has(lookupUrl)) {
+      previewByLookupUrl.set(lookupUrl, memoryId)
+    }
   }
 
   return {
@@ -64,7 +110,7 @@ async function attachOwnedPreviewReferences(service: any, userId: string, payloa
       ...payload.workspace,
       tabs: tabs.map((tab: any) => ({
         ...tab,
-        _sharePreviewMemoryId: previewByUrl.get(String(tab?.url || '').trim()) || null,
+        _sharePreviewMemoryId: previewByLookupUrl.get(normalizePreviewLookupUrl(tab?.url)) || null,
       })),
     },
   }
