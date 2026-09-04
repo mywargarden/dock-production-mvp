@@ -31,6 +31,35 @@ function parseTime(value) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
 }
 
+function parseVersion(value) {
+  const raw = clean(value).replace(/^v/i, "").split("-")[0];
+  if (!raw) return [];
+  const parts = raw.split(".").map((part) => Number(part));
+  return parts.every((part) => Number.isFinite(part) && part >= 0) ? parts : [];
+}
+
+function compareVersions(left, right) {
+  const a = parseVersion(left);
+  const b = parseVersion(right);
+  if (!a.length || !b.length) return 0;
+  const length = Math.max(a.length, b.length);
+  for (let i = 0; i < length; i += 1) {
+    const av = Number(a[i] || 0);
+    const bv = Number(b[i] || 0);
+    if (av > bv) return 1;
+    if (av < bv) return -1;
+  }
+  return 0;
+}
+
+function currentExtensionVersion() {
+  try {
+    return clean(api.runtime?.getManifest?.()?.version || "");
+  } catch {
+    return "";
+  }
+}
+
 function readStatus(plan, managed) {
   const raw = clean(
     plan?.status ||
@@ -52,25 +81,47 @@ export function normalizeDockLicenseState(raw = {}) {
   const graceUntil = parseTime(plan.graceUntil || managed.licenseGraceUntil || managed.graceUntil);
   const districtId = clean(managed.districtId || managed.orgCode || plan.districtId || plan.orgCode || "");
   const source = clean(plan.source || managed.source || "local");
+  const minimumExtensionVersion = clean(
+    plan.minimumExtensionVersion ||
+    plan.minExtensionVersion ||
+    managed.minimumExtensionVersion ||
+    managed.minExtensionVersion ||
+    ""
+  );
+  const installedExtensionVersion = currentExtensionVersion();
+  const updateRequired = !!(
+    minimumExtensionVersion &&
+    installedExtensionVersion &&
+    compareVersions(installedExtensionVersion, minimumExtensionVersion) < 0
+  );
 
   let mode = "active";
   let message = "Dock license is active.";
+  let reason = "ACTIVE";
 
   if (expiresAt && now > expiresAt) {
     if (graceUntil && now <= graceUntil) {
       status = status === "active" ? "grace" : status;
       mode = "warning";
+      reason = "LICENSE_GRACE";
       message = "Dock license is in grace period.";
     } else {
       status = "expired";
       mode = "blocked";
+      reason = "LICENSE_EXPIRED";
       message = "Dock is inactive because this license has expired.";
     }
   } else if (BLOCKED_STATUSES.has(status)) {
     mode = "blocked";
+    reason = "LICENSE_BLOCKED";
     message = "Dock is inactive for this district. Please contact your district administrator or Dock support.";
+  } else if (updateRequired) {
+    mode = "update-required";
+    reason = "UPDATE_REQUIRED";
+    message = `This district requires Dock ${minimumExtensionVersion} or newer. Your current Dock remains available to view, but changes are paused until Dock is updated.`;
   } else if (WARNING_STATUSES.has(status)) {
     mode = "warning";
+    reason = "LICENSE_WARNING";
     message = status === "past_due" || status === "past-due"
       ? "Dock license is past due. Access remains available during the grace window."
       : "Dock license is available with a notice.";
@@ -78,13 +129,18 @@ export function normalizeDockLicenseState(raw = {}) {
 
   return {
     ok: mode !== "blocked",
+    mutationAllowed: mode !== "blocked" && mode !== "update-required",
     mode,
+    reason,
     status,
     message,
     districtId,
     source,
     expiresAt,
     graceUntil,
+    minimumExtensionVersion,
+    installedExtensionVersion,
+    updateRequired,
     checkedAt: now,
     rawPlan: plan
   };
@@ -101,7 +157,7 @@ async function storageGet(area, keys) {
 export async function getDockLicenseState() {
   const local = await storageGet(api.storage.local, [PLAN_KEY, SIM_PLAN_KEY, "dockLicenseStatus"]);
   const managed = api.storage?.managed?.get
-    ? await storageGet(api.storage.managed, ["districtId", "orgCode", "licenseStatus", "licenseExpiresAt", "licenseGraceUntil"])
+    ? await storageGet(api.storage.managed, ["districtId", "orgCode", "licenseStatus", "licenseExpiresAt", "licenseGraceUntil", "minimumExtensionVersion", "minExtensionVersion"])
     : {};
 
   const basePlan = local[PLAN_KEY] && typeof local[PLAN_KEY] === "object" ? local[PLAN_KEY] : {};
@@ -118,9 +174,20 @@ export async function getDockLicenseState() {
 
 export async function ensureDockLicenseAllowed() {
   const state = await getDockLicenseState();
-  if (!state.ok) {
+  if (state.mode === "blocked") {
     const err = new Error(state.message || "Dock license is inactive.");
-    err.code = "LICENSE_BLOCKED";
+    err.code = state.reason || "LICENSE_BLOCKED";
+    err.license = state;
+    throw err;
+  }
+  return state;
+}
+
+export async function ensureDockMutationAllowed() {
+  const state = await getDockLicenseState();
+  if (!state.mutationAllowed) {
+    const err = new Error(state.message || "Dock changes are unavailable.");
+    err.code = state.reason || "MUTATION_BLOCKED";
     err.license = state;
     throw err;
   }
@@ -148,10 +215,16 @@ function ensureBannerStyle() {
       color: #7a1111;
       border-color: rgba(176, 38, 38, .35);
     }
+    .dockLicenseBanner.updateRequired {
+      background: #eaf2ff;
+      color: #173f73;
+      border-color: rgba(44, 103, 170, .35);
+    }
     body.dockLicenseBlocked button:not(#viewAllBtn):not(#refreshBtn),
     body.dockLicenseBlocked input,
     body.dockLicenseBlocked select,
-    body.dockLicenseBlocked textarea {
+    body.dockLicenseBlocked textarea,
+    body.dockUpdateRequired [data-dock-mutation="true"] {
       opacity: .55;
     }
   `;
@@ -174,6 +247,7 @@ export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
   const state = await getDockLicenseState();
   ensureBannerStyle();
   document.body.classList.toggle("dockLicenseBlocked", state.mode === "blocked");
+  document.body.classList.toggle("dockUpdateRequired", state.mode === "update-required");
 
   let banner = document.getElementById("dockLicenseBanner");
   if (state.mode === "active") {
@@ -186,22 +260,27 @@ export async function applyDockLicenseGateToPage({ page = "generic" } = {}) {
       const target = document.querySelector("main") || document.body;
       target.prepend(banner);
     }
-    banner.className = `dockLicenseBanner ${state.mode === "blocked" ? "blocked" : "warning"}`;
+    banner.className = `dockLicenseBanner ${state.mode === "blocked" ? "blocked" : state.mode === "update-required" ? "updateRequired" : "warning"}`;
     banner.textContent = state.message || "Dock license status needs attention.";
   }
 
+  const mutationDisabled = !state.mutationAllowed;
   if (page === "popup") {
-    setDisabled(["#saveBtn", "#saveAllBtn", "#reason", "#workspaceSelect"], state.mode === "blocked");
+    setDisabled(["#saveBtn", "#saveAllBtn", "#reason", "#workspaceSelect"], mutationDisabled);
   } else if (page === "memories") {
-    setDisabled(["#createGroupBtn", "#addBtn", "#deleteSelectedBtn", "#clearAllBtn", ".deleteBtn", ".card button.deleteBtn"], state.mode === "blocked");
+    setDisabled([
+      "#createGroupBtn",
+      "#addBtn",
+      "#editGroupBtn",
+      "#deleteSelectedBtn",
+      "#clearAllBtn",
+      ".deleteBtn",
+      ".card button.deleteBtn",
+      ".cardDragHandle",
+      ".groupPillX",
+      ".groupPillMenuItem.dangerItem"
+    ], mutationDisabled);
   }
 
   return state;
 }
-
-
-/* LICENSE_GATE_SILENT_TRIAL_PATCH_20260823
-   Active and trial licenses are intentionally silent.
-   Grace and past_due warn.
-   Suspended, expired, canceled, disabled, and terminated block.
-*/
