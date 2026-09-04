@@ -9,7 +9,7 @@ const extensionPath = path.join(root, "dock-extension");
 let serverMode = "degraded";
 const now = Date.now();
 
-function managedPayload(version, title) {
+function managedPayload(version, title, minExtensionVersion = "") {
   return {
     type: "dock-managed-config",
     organization: { id: "test-district", name: "Test District", orgCode: "TEST", emailDomain: "test.invalid" },
@@ -22,7 +22,7 @@ function managedPayload(version, title) {
       branding: { districtAccentColor: "#183246" },
       tabs: [{ title, url: `https://example.com/v${version}` }]
     },
-    license: { plan: "district", status: "active", minExtensionVersion: "" }
+    license: { plan: "district", status: "active", minExtensionVersion }
   };
 }
 
@@ -38,6 +38,10 @@ const server = http.createServer((req, res) => {
   }
   if (serverMode === "revoked") {
     res.writeHead(403).end(JSON.stringify({ code: "LICENSE_SUSPENDED", error: "suspended" }));
+    return;
+  }
+  if (serverMode === "update-required") {
+    res.writeHead(200).end(JSON.stringify(managedPayload(1, "Old District", "99.0.0")));
     return;
   }
   res.writeHead(200).end(JSON.stringify(managedPayload(2, "New District")));
@@ -160,6 +164,8 @@ assert.equal(revoked?.reason, "ACCESS_REVOKED");
 state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace"]));
 assert.equal(state.dockManagedWorkspace, undefined, "hard revocation failed to remove managed workspace");
 
+// Update-required is a distinct active-license authority state, not revocation.
+serverMode = "update-required";
 await control.evaluate(async ({ oldWorkspace }) => {
   await chrome.storage.local.set({
     dockManagedWorkspace: oldWorkspace,
@@ -177,6 +183,12 @@ await control.evaluate(async ({ oldWorkspace }) => {
 
 await page.reload({ waitUntil: "domcontentloaded" });
 await page.waitForFunction(() => document.body.innerText.includes("Old District"), { timeout: 10000 });
+const licenseState = await page.evaluate(async () => {
+  const module = await import("./core/license.js");
+  return await module.getDockLicenseState();
+});
+assert.equal(licenseState.mode, "update-required", `canonical license engine did not compute update-required: ${JSON.stringify(licenseState)}`);
+assert.equal(licenseState.mutationAllowed, false, "update-required unexpectedly allowed mutation");
 await page.waitForFunction(() => document.body.classList.contains("dockUpdateRequired"), { timeout: 10000 });
 assert.equal(await page.$eval("#createGroupBtn", (el) => el.disabled), true, "update-required did not disable Dock mutation action");
 await page.evaluate(() => {
