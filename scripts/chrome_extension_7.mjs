@@ -144,11 +144,13 @@ await control.evaluate(() => {
 });
 serverMode = "new";
 const refreshed = await control.evaluate(() => chrome.runtime.sendMessage({ type: "SYNC_MANAGED_WORKSPACE" }));
-assert.equal(refreshed?.ok, true);
-await page.waitForFunction(() => document.body.innerText.includes("New District"), { timeout: 10000 });
+assert.equal(refreshed?.ok, true, `managed sync did not report success: ${JSON.stringify(refreshed)}`);
+state = await control.evaluate(() => chrome.storage.local.get(["dockManagedWorkspace", "dockManagedMeta"]));
+assert.equal(state.dockManagedWorkspace?.version, 2, `managed sync reported success without applying version 2: response=${JSON.stringify(refreshed)} state=${JSON.stringify(state)}`);
 const transitions = await control.evaluate(() => window.__managedWorkspaceTransitions || []);
-assert.ok(transitions.some((entry) => entry.oldVersion === 1 && entry.newVersion === 2 && !entry.removed), "managed publish was not an atomic old->new storage replacement");
+assert.ok(transitions.some((entry) => entry.oldVersion === 1 && entry.newVersion === 2 && !entry.removed), `managed publish was not an atomic old->new storage replacement: ${JSON.stringify(transitions)}`);
 assert.equal(transitions.some((entry) => entry.removed), false, "managed workspace was removed between valid versions");
+await page.waitForFunction(() => document.body.innerText.includes("New District"), { timeout: 10000 });
 blanks = await page.evaluate(() => window.__dockVisibleBlankFrames || []);
 assert.equal(blanks.length, 0, `visible blank frames during managed replacement: ${JSON.stringify(blanks.slice(0, 5))}`);
 
