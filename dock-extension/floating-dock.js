@@ -133,6 +133,11 @@
     } catch {}
   }
 
+  function setCaptureHidden(hidden) {
+    host.style.visibility = hidden ? "hidden" : "visible";
+    host.style.pointerEvents = hidden ? "none" : "auto";
+  }
+
   function showError(message) {
     root.querySelector(".toast")?.remove();
     if (toastTimer) clearTimeout(toastTimer);
@@ -214,6 +219,13 @@
       event.preventDefault();
       openDock();
     }
+  });
+
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type !== "SET_DOCK_LAUNCHER_CAPTURE_HIDDEN") return;
+    const hidden = !!message.hidden;
+    setCaptureHidden(hidden);
+    sendResponse({ ok: true, hidden });
   });
 
   window.addEventListener("resize", () => {
