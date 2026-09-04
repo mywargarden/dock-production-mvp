@@ -6,6 +6,7 @@
 - Checks for managed updates on load, focus, visibility return, and a short foreground cadence.
 - Newly published district workspace versions replace the previous valid local state only after successful fetch and validation.
 - Keeps managed workspace, metadata, and organization caches coherent across extension contexts so an already-open Safe Harbor can repaint immediately after the background worker applies a newer district publish or revocation.
+- Prevents a render-signature race where storage could advance during a Safe Harbor paint, causing the page to record the newer state as already rendered while old cards remained on screen.
 - Temporary auth/session/bootstrap/network failures preserve the last known valid managed Dock; explicit hard revocation still clears it.
 - Transient token-refresh failures preserve the signed-in identity and recover automatically instead of converting an outage into a sign-out.
 - Personal-memory cloud writes are queued rather than allowing rapid writes to overwrite one pending sync job.
@@ -20,8 +21,7 @@
 
 ## Still under 7
 
-- Real Chrome testing independently exposed and then verified the cross-context managed-cache repaint defect: degraded state preservation, cached rendering, atomic version replacement, live repaint, hard revocation, and update-required view-without-mutation behavior have survived the browser attack after the fix.
-- The expanded real Chrome attack then exposed a preview-reorder regression caused by two competing preview-scoring doctrines. The preservation layer now matches the canonical preview rule; save/reorder/reload has progressed through the real-browser attack without the prior loss.
-- The remaining import-harness mismatch was not a Dock failure: legacy import intentionally completes in place and exposes an Open Library control. The final browser harness now follows that actual contract, verifies canonical group storage immediately after Import, then opens Library and verifies the rendered preview.
-- This candidate remains unmerged until the exact-head static, artifact-lineage, and expanded Chrome 7 triad passes together.
+- Real Chrome testing exposed three genuine production defects during this hardening pass: cross-context managed-cache staleness, competing preview-preservation scoring during reorder, and a render-signature race that could nondeterministically leave an already-open managed Dock stale after a valid publish. Each has been corrected at its authoritative layer.
+- The browser harness now follows Dock's actual legacy import contract: Import completes in place, canonical group storage is verified, then Open Library is used to verify the rendered imported preview.
+- This candidate remains unmerged until the new exact-head static, artifact-lineage, and expanded Chrome 7 triad passes together after the render-race fix.
 - Personal Dock group membership/layout remains local-device state for 1.0; cross-device group-layout sync is parked rather than added to RC1 scope.
