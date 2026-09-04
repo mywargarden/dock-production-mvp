@@ -1,4 +1,5 @@
 import { api } from "../adapters/index.js";
+import { canonicalizeMemoryPreview, makeLiteMemoryPreview } from "./preview.js";
 
 const OWNER_KEY = "dockPersonalOwner";
 const SNAPSHOT_PREFIX = "dockPersonalSnapshot:";
@@ -33,12 +34,27 @@ function snapshotKey(identity) {
   return `${SNAPSHOT_PREFIX}${encodeURIComponent(norm(identity).toLowerCase())}`;
 }
 
+function compactItems(items, { lite = false } = {}) {
+  const map = lite ? makeLiteMemoryPreview : canonicalizeMemoryPreview;
+  return (Array.isArray(items) ? items : []).map((item) => map(item));
+}
+
+function compactGroupItems(groupItems) {
+  if (!groupItems || typeof groupItems !== "object") return {};
+  return Object.fromEntries(
+    Object.entries(groupItems).map(([groupId, items]) => [groupId, compactItems(items)])
+  );
+}
+
 function normalizeState(source = {}) {
+  const savedTabs = compactItems(source.savedTabs);
   return {
-    savedTabs: Array.isArray(source.savedTabs) ? source.savedTabs : [],
-    savedTabsLite: Array.isArray(source.savedTabsLite) ? source.savedTabsLite : [],
+    savedTabs,
+    savedTabsLite: Array.isArray(source.savedTabsLite)
+      ? compactItems(source.savedTabsLite, { lite: true })
+      : compactItems(savedTabs, { lite: true }),
     dockGroups: Array.isArray(source.dockGroups) ? source.dockGroups : [],
-    dockGroupItems: source.dockGroupItems && typeof source.dockGroupItems === "object" ? source.dockGroupItems : {},
+    dockGroupItems: compactGroupItems(source.dockGroupItems),
     dockActiveGroup: norm(source.dockActiveGroup) || "__all__",
     dockDeletedMemoryTombstones: source.dockDeletedMemoryTombstones && typeof source.dockDeletedMemoryTombstones === "object"
       ? source.dockDeletedMemoryTombstones
