@@ -1,3 +1,4 @@
+import "./capture-hardening.js";
 import "./background-v2.js";
 import { migrateLegacyPreviewPayloads } from "./core/previewPayloadStore.js";
 
@@ -12,14 +13,10 @@ function ensurePreviewPayloadMigration() {
   return previewMigrationPromise;
 }
 
-// Run as soon as the worker wakes so an upgraded real profile is cleaned before
-// popup/Safe Harbor repeatedly deserialize legacy base64 screenshot aggregates.
 ensurePreviewPayloadMigration().catch(() => {});
 api.runtime?.onInstalled?.addListener(() => { ensurePreviewPayloadMigration().catch(() => {}); });
 api.runtime?.onStartup?.addListener(() => { ensurePreviewPayloadMigration().catch(() => {}); });
 
-// Keep Dock's floating UI at a browser-chrome scale even when an individual
-// website is zoomed. Chrome exposes page zoom at the tab layer, not DOM layer.
 api.tabs?.onZoomChange?.addListener?.(({ tabId, newZoomFactor }) => {
   if (!Number.isInteger(tabId)) return;
   try {
@@ -30,7 +27,6 @@ api.tabs?.onZoomChange?.addListener?.(({ tabId, newZoomFactor }) => {
     pending?.catch?.(() => {});
   } catch {}
 });
-
 
 const SIDECAR_TOKEN_PREFIX = "dockSidecarToken:";
 const SIDECAR_TOKEN_TTL_MS = 10000;
@@ -92,9 +88,6 @@ async function openDockPopupOnce(sender) {
       lastPopupOpenAt = Date.now();
       return { ok: true };
     } catch (error) {
-      // Chrome can reject an overlapping openPopup call while the prior popup
-      // is still opening/closing. If we just successfully opened it, that is a
-      // harmless transition and must not become a user-facing failure.
       if (Date.now() - lastPopupOpenAt < POPUP_TRANSITION_SILENCE_MS) {
         return { ok: true, coalesced: true };
       }
