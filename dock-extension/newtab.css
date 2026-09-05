@@ -1,14 +1,128 @@
+:root {
+  --newtab-bg: linear-gradient(180deg, #edf7f3 0%, #f8f5ef 100%);
+  --newtab-fg: #17324a;
+  --newtab-muted: rgba(23,50,74,.56);
+  --newtab-field: rgba(255,255,255,.90);
+  --newtab-field-text: #17324a;
+  --newtab-field-border: rgba(43,140,143,.18);
+  --newtab-focus: #2b8c8f;
+  --newtab-shadow: rgba(31,63,68,.14);
+}
+
 html, body {
   margin: 0;
   min-height: 100%;
-  background: #f8f7f4;
-  color: #2f2b27;
+  color: var(--newtab-fg);
   font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 body {
   min-height: 100vh;
   overflow: hidden;
+  background: var(--newtab-bg);
+  background-attachment: fixed;
+  background-position: center;
+  background-size: cover;
+  transition: background-color .16s ease, color .16s ease;
+}
+
+body[data-theme="dock-green"] {
+  --newtab-bg: linear-gradient(180deg, rgba(226,244,237,.98), rgba(248,245,239,.98));
+  --newtab-fg: #17324a;
+  --newtab-muted: rgba(23,50,74,.56);
+  --newtab-field: rgba(255,255,255,.90);
+  --newtab-field-text: #17324a;
+  --newtab-field-border: rgba(43,140,143,.18);
+  --newtab-focus: #2b8c8f;
+  --newtab-shadow: rgba(31,63,68,.14);
+}
+
+body[data-theme="skipper-harbor"] {
+  --newtab-bg: linear-gradient(rgba(12,38,55,.16), rgba(12,38,55,.26)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #ffffff;
+  --newtab-muted: rgba(255,255,255,.78);
+  --newtab-field: rgba(248,252,253,.88);
+  --newtab-field-text: #163042;
+  --newtab-field-border: rgba(255,255,255,.38);
+  --newtab-focus: #4f9fbd;
+  --newtab-shadow: rgba(8,30,44,.28);
+}
+
+body[data-theme="smiley-pop"] {
+  --newtab-bg: linear-gradient(rgba(255,255,255,.03), rgba(255,255,255,.08)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #17324a;
+  --newtab-muted: rgba(23,50,74,.62);
+  --newtab-field: rgba(255,255,255,.88);
+  --newtab-field-text: #17324a;
+  --newtab-field-border: rgba(65,95,125,.16);
+  --newtab-focus: #497fa8;
+  --newtab-shadow: rgba(42,72,95,.17);
+}
+
+body[data-theme="warm"] {
+  --newtab-bg: linear-gradient(rgba(255,247,235,.06), rgba(255,247,235,.13)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #4a3626;
+  --newtab-muted: rgba(74,54,38,.62);
+  --newtab-field: rgba(255,250,243,.90);
+  --newtab-field-text: #4a3626;
+  --newtab-field-border: rgba(120,83,52,.16);
+  --newtab-focus: #b77845;
+  --newtab-shadow: rgba(75,51,31,.16);
+}
+
+body[data-theme="sunset"] {
+  --newtab-bg: linear-gradient(rgba(31,26,48,.13), rgba(31,26,48,.24)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #ffffff;
+  --newtab-muted: rgba(255,255,255,.80);
+  --newtab-field: rgba(255,250,247,.88);
+  --newtab-field-text: #3a3047;
+  --newtab-field-border: rgba(255,255,255,.34);
+  --newtab-focus: #d88f71;
+  --newtab-shadow: rgba(35,22,42,.27);
+}
+
+body[data-theme="tie-dye"] {
+  --newtab-bg: linear-gradient(rgba(255,255,255,.05), rgba(255,255,255,.08)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #ffffff;
+  --newtab-muted: rgba(255,255,255,.82);
+  --newtab-field: rgba(255,255,255,.88);
+  --newtab-field-text: #25324a;
+  --newtab-field-border: rgba(255,255,255,.36);
+  --newtab-focus: #6f5bd4;
+  --newtab-shadow: rgba(40,31,72,.26);
+}
+
+body[data-theme="rubber-ducky"] {
+  --newtab-bg: linear-gradient(rgba(245,252,255,.04), rgba(245,252,255,.08)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #153750;
+  --newtab-muted: rgba(21,55,80,.64);
+  --newtab-field: rgba(255,255,255,.90);
+  --newtab-field-text: #153750;
+  --newtab-field-border: rgba(27,94,130,.16);
+  --newtab-focus: #2380a6;
+  --newtab-shadow: rgba(21,72,96,.17);
+}
+
+body[data-theme="crazy-ducky"] {
+  --newtab-bg: linear-gradient(rgba(250,248,241,.05), rgba(250,248,241,.10)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #27384a;
+  --newtab-muted: rgba(39,56,74,.65);
+  --newtab-field: rgba(255,255,255,.88);
+  --newtab-field-text: #27384a;
+  --newtab-field-border: rgba(55,74,92,.16);
+  --newtab-focus: #628a72;
+  --newtab-shadow: rgba(37,57,45,.18);
+}
+
+body[data-theme="violet-harbor"] {
+  --newtab-bg: linear-gradient(rgba(28,13,70,.05), rgba(28,13,70,.13)), var(--dock-theme-scene, none) center/cover fixed;
+  --newtab-fg: #ffffff;
+  --newtab-muted: rgba(255,255,255,.78);
+  --newtab-field: rgba(247,243,255,.90);
+  --newtab-field-text: #24344a;
+  --newtab-field-border: rgba(214,203,244,.52);
+  --newtab-focus: #7c68c8;
+  --newtab-shadow: rgba(38,21,80,.27);
 }
 
 .newTabShell {
@@ -31,28 +145,31 @@ body {
 .searchForm input {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid rgba(70, 63, 55, .14);
+  border: 1px solid var(--newtab-field-border);
   border-radius: 999px;
   padding: 17px 22px;
-  background: rgba(255,255,255,.96);
-  box-shadow: 0 10px 28px rgba(55,45,35,.10);
-  color: #2f2b27;
+  background: var(--newtab-field);
+  backdrop-filter: blur(14px) saturate(1.08);
+  -webkit-backdrop-filter: blur(14px) saturate(1.08);
+  box-shadow: 0 10px 28px var(--newtab-shadow);
+  color: var(--newtab-field-text);
   font: 500 17px/1.2 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   outline: none;
 }
 
 .searchForm input:focus {
-  border-color: rgba(47,111,149,.44);
-  box-shadow: 0 12px 34px rgba(55,45,35,.12), 0 0 0 3px rgba(47,111,149,.10);
+  border-color: color-mix(in srgb, var(--newtab-focus) 58%, transparent);
+  box-shadow: 0 12px 34px var(--newtab-shadow), 0 0 0 3px color-mix(in srgb, var(--newtab-focus) 16%, transparent);
 }
 
 .searchForm input::placeholder {
-  color: rgba(47,43,39,.46);
+  color: color-mix(in srgb, var(--newtab-field-text) 48%, transparent);
 }
 
 .hint {
   margin: 12px 0 0;
   text-align: center;
-  color: rgba(47,43,39,.46);
+  color: var(--newtab-muted);
   font-size: 13px;
+  text-shadow: 0 1px 4px rgba(0,0,0,.16);
 }
