@@ -1,4 +1,17 @@
 const POSITION_KEY = "dockLauncherPosition";
+const THEME_KEY = "dockTheme";
+const DEFAULT_THEME = "dock-green";
+const THEMES = new Set(["dock-green","skipper-harbor","smiley-pop","warm","sunset","tie-dye","rubber-ducky","crazy-ducky","violet-harbor"]);
+const THEME_SCENE_ASSETS = {
+  "sunset": "assets/dock-sunset-hd.png",
+  "tie-dye": "assets/tie-dye-bg.webp",
+  "rubber-ducky": "assets/rubber-ducky-theme.webp",
+  "crazy-ducky": "assets/cozy-quilt.webp",
+  "skipper-harbor": "assets/skipper-harbor-hd.png",
+  "violet-harbor": "assets/grape-tide.webp",
+  "smiley-pop": "assets/smileys-3d.webp",
+  "warm": "assets/sand-castle-theme.webp"
+};
 const DRAG_THRESHOLD = 5;
 const EDGE_GAP = 12;
 
@@ -8,6 +21,27 @@ const searchInput = document.getElementById("searchInput");
 
 let dragState = null;
 let suppressClick = false;
+
+function applyTheme(theme) {
+  const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
+  document.body.dataset.theme = next;
+  const sceneAsset = THEME_SCENE_ASSETS[next];
+  document.documentElement.style.setProperty("--dock-theme-scene", sceneAsset ? `url("${sceneAsset}")` : "none");
+}
+
+async function loadTheme() {
+  try {
+    const stored = await chrome.storage.local.get([THEME_KEY]);
+    applyTheme(String(stored?.[THEME_KEY] || DEFAULT_THEME));
+  } catch {
+    applyTheme(DEFAULT_THEME);
+  }
+}
+
+chrome.storage?.onChanged?.addListener((changes, areaName) => {
+  if (areaName !== "local" || !changes?.[THEME_KEY]) return;
+  applyTheme(String(changes[THEME_KEY].newValue || DEFAULT_THEME));
+});
 
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), Math.max(min, max));
@@ -143,5 +177,5 @@ window.addEventListener("resize", () => {
   applyPosition({ left: rect.left, top: rect.top });
 });
 
-await loadPosition();
+await Promise.all([loadTheme(), loadPosition()]);
 searchInput?.focus();
