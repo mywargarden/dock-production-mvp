@@ -35,12 +35,18 @@ const must=[
  ['dock-sidecar.js','if (open) { close({ restoreFocus: true }); return; }'],
  ['newtab.html','Let the currents take you, Dock guards the shore.'],
  ['popup.js','DOCK_SIDECAR_READY'],
- ['memories.css','object-fit: contain']
+ ['memories.css','object-fit: contain'],
+ ['floating-dock.js','assets/dock_boat_mark.png'],
+ ['floating-dock.js','Toggle Dock — drag to move'],
+ ['floating-dock.js','POPUP_CLOSE_CLICK_GUARD_MS']
 ];
 for(const [file,needle] of must){
   const s=fs.readFileSync(file,'utf8');
   if(!s.includes(needle)) throw new Error(`${file} missing release contract: ${needle}`);
 }
+const floating=fs.readFileSync('floating-dock.js','utf8');
+if(/focusHidden\s*=/.test(floating)) throw new Error('floating launcher must not hide on page blur');
+if(/dock_logo_clean\.png/.test(floating)) throw new Error('floating launcher regressed to full Dock logo');
 const manifest=JSON.parse(fs.readFileSync('manifest.json','utf8'));
 if(manifest.background.service_worker!=='background-v3.js') throw new Error('background-v3 is not active');
 NODE
