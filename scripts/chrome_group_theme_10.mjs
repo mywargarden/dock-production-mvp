@@ -62,7 +62,7 @@ async function openDockMenu(page, groupId) {
   }, { timeout: 10000 }, groupId);
 }
 
-async function chooseDockTheme(page, groupId, theme) {
+async function openThemePicker(page, groupId) {
   await openDockMenu(page, groupId);
   await page.evaluate((id) => {
     const wrap = document.querySelector(`.groupPillWrap[data-group-id="${id}"]`);
@@ -75,6 +75,10 @@ async function chooseDockTheme(page, groupId, theme) {
     const picker = document.querySelector('.dockGroupThemePopover');
     return !!picker && !picker.classList.contains('hidden');
   }, { timeout: 10000 });
+}
+
+async function chooseDockTheme(page, groupId, theme) {
+  await openThemePicker(page, groupId);
   await page.evaluate((value) => {
     const choice = document.querySelector(`.dockGroupThemeChoice[data-theme="${value}"]`);
     if (!choice) throw new Error(`Theme choice missing: ${value}`);
@@ -100,7 +104,7 @@ try {
   assert.match(extensionId, /^[a-p]{32}$/);
   const dock = (await browser.extensions()).get(extensionId);
   assert.ok(dock);
-  assert.equal(dock.version, '0.3.16');
+  assert.equal(dock.version, '0.3.17');
 
   const page = await browser.newPage();
   await page.goto(`chrome-extension://${extensionId}/memories.html`, { waitUntil: 'domcontentloaded' });
@@ -123,7 +127,31 @@ try {
 
   await page.reload({ waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.groupPillWrap[data-group-id="g_alpha"]', { timeout: 10000 });
-  await waitTheme(page, 'violet-harbor', 'alpha inherits global initially');
+
+  // Created Docks do not silently inherit Safe Harbor. No explicit choice means
+  // the professional, predictable fallback: Dock Default.
+  await waitTheme(page, 'dock-green', 'alpha defaults to Dock Default');
+
+  await openThemePicker(page, 'g_alpha');
+  const pickerContract = await page.evaluate(() => {
+    const choices = [...document.querySelectorAll('.dockGroupThemeChoice[data-theme]')];
+    return {
+      count: choices.length,
+      hasInheritance: !!document.querySelector('.dockGroupThemeChoice[data-theme="__inherit__"]'),
+      thumbnailCount: choices.filter((choice) => {
+        const thumb = choice.querySelector('.dockGroupThemeThumb');
+        return !!thumb && getComputedStyle(thumb).backgroundImage !== 'none';
+      }).length,
+      labels: choices.map((choice) => choice.querySelector('.dockGroupThemeChoiceText')?.textContent?.trim() || ''),
+      defaultSelected: document.querySelector('.dockGroupThemeChoice[data-theme="dock-green"]')?.classList.contains('isSelected') || false
+    };
+  });
+  assert.equal(pickerContract.count, 9, `expected 9 theme choices, got ${pickerContract.count}`);
+  assert.equal(pickerContract.hasInheritance, false, 'Use Safe Harbor theme should not exist');
+  assert.equal(pickerContract.thumbnailCount, 9, 'every per-Dock theme needs a visual mini-waffle thumbnail');
+  assert.equal(pickerContract.defaultSelected, true, 'unset Dock should visually select Dock Default');
+  assert.ok(pickerContract.labels.includes('Skipper') && pickerContract.labels.includes('Grape Tide') && pickerContract.labels.includes('Cozy Quilt'));
+  await page.evaluate(() => document.querySelector('.dockGroupThemeClose')?.click());
 
   await chooseDockTheme(page, 'g_alpha', 'sunset');
   await waitTheme(page, 'sunset', 'alpha set sunset');
@@ -131,13 +159,13 @@ try {
   assert.equal(state.globalTheme, 'violet-harbor', 'per-Dock choice mutated Safe Harbor theme');
   assert.equal(state.groupThemes.g_alpha, 'sunset');
 
-  await clickDock(page, 'g_beta', 'violet-harbor', 'switch to beta inherited');
+  await clickDock(page, 'g_beta', 'dock-green', 'switch to beta default');
 
   await chooseDockTheme(page, 'g_beta', 'skipper-harbor');
   await waitTheme(page, 'skipper-harbor', 'beta set skipper');
   state = await readState(page);
   assert.equal(state.groupThemes.g_beta, 'skipper-harbor');
-  assert.equal(state.groupThemes.g_alpha, 'sunset', 'switching/settings beta clobbered alpha theme');
+  assert.equal(state.groupThemes.g_alpha, 'sunset', 'setting beta clobbered alpha theme');
 
   await clickDock(page, 'g_alpha', 'sunset', 'switch beta to alpha');
   await clickDock(page, 'g_beta', 'skipper-harbor', 'switch alpha to beta');
@@ -149,25 +177,22 @@ try {
   assert.equal(state.groupThemes.g_alpha, 'sunset');
   assert.equal(state.groupThemes.g_beta, 'skipper-harbor');
 
-  await chooseDockTheme(page, 'g_beta', '__inherit__');
-  await waitTheme(page, 'violet-harbor', 'beta returns to inheritance');
-  state = await readState(page);
-  assert.equal(state.groupThemes.g_beta, undefined);
-  assert.equal(state.groupThemes.g_alpha, 'sunset');
-
+  // Changing Safe Harbor later must not affect either created Dock.
   await page.evaluate(async () => { await chrome.storage.local.set({ dockTheme: 'rubber-ducky' }); });
-  await waitTheme(page, 'rubber-ducky', 'inherited beta follows changed global');
+  await waitTheme(page, 'skipper-harbor', 'beta ignores changed Safe Harbor theme');
 
-  await clickDock(page, 'g_alpha', 'sunset', 'explicit alpha ignores changed global');
+  await clickDock(page, 'g_alpha', 'sunset', 'alpha ignores changed Safe Harbor theme');
   state = await readState(page);
   assert.equal(state.globalTheme, 'rubber-ducky');
   assert.equal(state.groupThemes.g_alpha, 'sunset');
+  assert.equal(state.groupThemes.g_beta, 'skipper-harbor');
 
-  console.log('Dock 0.3.16 per-Dock theme Chrome 10 PASS', {
+  console.log('Dock 0.3.17 per-Dock theme Chrome 10 PASS', {
     alpha: 'sunset',
-    beta: 'inherits rubber-ducky',
-    global: state.globalTheme,
-    sidecarIsolation: true,
+    beta: 'skipper-harbor',
+    defaultFallback: 'dock-green',
+    safeHarborCouplingRemoved: true,
+    miniWaffleChoices: pickerContract.count,
     reloadPersistence: true,
     independentSwitching: true
   });
