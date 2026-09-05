@@ -1,10 +1,14 @@
-/* Dock 0.3.12 storage canonicalization.
-   Readers remain backward-compatible with historical preview aliases, while
-   new local writes persist one preview payload and keep the lite cache free of
-   inline base64. Managed district workspace payloads are deliberately untouched.
+/* Dock local storage canonicalization.
+   Metadata used to open/render Dock stays in aggregate records. Heavy inline
+   screenshot bytes are externalized to per-memory preview keys so reading
+   savedTabs/groupItems never deserializes the entire screenshot pile.
 */
 
 import { canonicalizeMemoryPreview, makeLiteMemoryPreview } from "../core/preview.js";
+import {
+  externalizePreviewPayloadsFromWrite,
+  writePreviewPayloads
+} from "../core/previewPayloadStore.js";
 
 const PERSONAL_GROUP_ITEMS_KEY = "dockGroupItems";
 
@@ -43,7 +47,15 @@ export function wrapExtensionStorage(rawApi) {
   const local = new Proxy(rawLocal, {
     get(target, prop) {
       if (prop === "set") {
-        return (items, ...rest) => target.set(canonicalizeLocalWrite(items), ...rest);
+        return async (items, ...rest) => {
+          const canonical = canonicalizeLocalWrite(items);
+          const prepared = externalizePreviewPayloadsFromWrite(canonical);
+
+          // Write screenshot payloads first. Aggregate metadata can then safely
+          // reference them without ever embedding the base64 bytes again.
+          await writePreviewPayloads(target, prepared.payloadWrites);
+          return await target.set(prepared.items, ...rest);
+        };
       }
       const value = Reflect.get(target, prop, target);
       return typeof value === "function" ? value.bind(target) : value;

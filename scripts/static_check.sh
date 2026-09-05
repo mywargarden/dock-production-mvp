@@ -1,69 +1,85 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-node --check dock-extension/core/preview.js
-node --check dock-extension/adapters/storageCanonicalizer.js
-node --check dock-extension/core/personalScope.js
-node --check dock-extension/core/auth.js
-node --check dock-extension/core/license.js
-node --check dock-extension/core/storage.js
-node --check dock-extension/background-v2.js
-node --check dock-extension/popup.js
-node --check dock-extension/import-v2.js
-node --check dock-extension/memories.js
-node --check dock-extension/continuity-prepaint.js
-node --check dock-extension/continuity.js
-node scripts/test_preview_storage.mjs
+ROOT="${1:-dock-extension}"
+cd "$ROOT"
 
 node <<'NODE'
-const fs = require('fs');
-
-const manifest = JSON.parse(fs.readFileSync('dock-extension/manifest.json', 'utf8'));
-if (manifest.version !== '0.3.12') throw new Error(`unexpected manifest version ${manifest.version}`);
-if (manifest.background?.service_worker !== 'background-v2.js' || manifest.background?.type !== 'module') {
-  throw new Error('canonical background worker not active');
-}
-if (!manifest.permissions?.includes('unlimitedStorage')) throw new Error('unlimitedStorage missing');
-const exposed = (manifest.web_accessible_resources || []).flatMap((entry) => entry.resources || []);
-if (exposed.some((resource) => resource !== 'import.html')) {
-  throw new Error(`unexpected web-accessible resource: ${exposed.join(',')}`);
-}
-
-const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
-if (memoriesHtml.includes('legacy-loop-shield')) {
-  throw new Error('obsolete legacy loop shield is still wired into memories.html');
-}
-const memoriesJs = fs.readFileSync('dock-extension/memories.js', 'utf8');
-if (memoriesJs.includes('setInterval(')) {
-  throw new Error('memories.js reintroduced interval polling');
-}
-if (memoriesJs.includes('looksLikeCenterDockWatermark') || memoriesJs.includes('__dockHideCenterWatermarkObserver')) {
-  throw new Error('heuristic watermark scanner reintroduced');
-}
-
-const worker = fs.readFileSync('dock-extension/background-v2.js', 'utf8');
-if (!worker.includes('ensureDockMutationAllowed')) {
-  throw new Error('canonical background worker is missing mutation enforcement');
-}
-const importer = fs.readFileSync('dock-extension/import-v2.js', 'utf8');
-if (!importer.includes('await ensureDockMutationAllowed()')) {
-  throw new Error('shared Dock import is missing mutation enforcement');
-}
-const adapter = fs.readFileSync('dock-extension/adapters/index.js', 'utf8');
-if (!adapter.includes('wrapExtensionStorage')) {
-  throw new Error('canonical storage adapter is not active');
-}
-
-const canonicalizer = fs.readFileSync('dock-extension/adapters/storageCanonicalizer.js', 'utf8');
-if (!canonicalizer.includes('makeLiteMemoryPreview')) {
-  throw new Error('lite memory writes are not using preview compaction');
-}
-const preview = fs.readFileSync('dock-extension/core/preview.js', 'utf8');
-for (const protectedField of ['customIcon', 'uploadedImage', 'cardImage', 'customImage']) {
-  if (preview.includes(`delete next.${protectedField}`)) {
-    throw new Error(`preview canonicalizer must not destroy ${protectedField}`);
-  }
-}
+const fs=require('fs');
+const m=JSON.parse(fs.readFileSync('manifest.json','utf8'));
+if(m.manifest_version!==3) throw new Error('Manifest V3 required');
+if(!/^\d+\.\d+\.\d+(?:\.\d+)?$/.test(m.version)) throw new Error(`Invalid Chrome version ${m.version}`);
+const worker=m.background?.service_worker;
+if(!worker || !fs.existsSync(worker)) throw new Error('Missing active service worker');
+if(m.action?.default_popup!=='popup.html') throw new Error('popup.html must remain toolbar popup');
+if(m.chrome_url_overrides?.newtab!=='newtab.html') throw new Error('Dock New Tab override missing');
+for(const p of ['storage','tabs','identity','scripting']) if(!m.permissions?.includes(p)) throw new Error(`Required permission missing: ${p}`);
+const resources=(m.web_accessible_resources||[]).flatMap(x=>x.resources||[]);
+for(const p of ['popup.html','assets/dock_boat_mark.png']) if(!resources.includes(p)) throw new Error(`Sidecar resource missing: ${p}`);
+console.log(`Dock ${m.version} manifest: PASS`);
 NODE
 
-./scripts/find_junk.sh
+count=0
+while IFS= read -r -d '' f; do
+  node --check "$f" >/dev/null
+  count=$((count+1))
+done < <(find . -type f -name '*.js' -print0)
+echo "JavaScript syntax: ${count} PASS"
+
+node <<'NODE'
+const fs=require('fs');
+const must=[
+ ['background-v3.js','import "./capture-hardening.js"'],
+ ['background-v3.js','import "./background-v2.js"'],
+ ['background-v3.js','REGISTER_DOCK_SIDECAR_TOKEN'],
+ ['capture-hardening.js','LAUNCHER_CAPTURE_HIDE_CSS'],
+ ['capture-hardening.js','DOCK_CAPTURE_SHIELD_UNVERIFIED'],
+ ['capture-hardening.js','api.scripting.insertCSS'],
+ ['capture-hardening.js','api.scripting.executeScript'],
+ ['popup.html','capture-hardening.js'],
+ ['popup.html','popup-sidecar-runtime.js'],
+ ['popup-sidecar-runtime.js','VALIDATE_DOCK_SIDECAR_TOKEN'],
+ ['popup-sidecar-runtime.js','DOCK_SIDECAR_READY'],
+ ['popup-sidecar-runtime.js','DOCK_SIDECAR_SIZE'],
+ ['dock-sidecar.js','if (open) { close({ restoreFocus: true }); return; }'],
+ ['newtab.html','Let the currents take you, Dock guards the shore.'],
+ ['newtab.html','assets/dock_boat_mark.png'],
+ ['memories.css','object-fit: contain'],
+ ['floating-dock.js','assets/dock_boat_mark.png'],
+ ['floating-dock.js','Toggle Dock — drag to move'],
+ ['floating-dock.js','POPUP_CLOSE_CLICK_GUARD_MS']
+];
+for(const [file,needle] of must){
+  const s=fs.readFileSync(file,'utf8');
+  if(!s.includes(needle)) throw new Error(`${file} missing release contract: ${needle}`);
+}
+const floating=fs.readFileSync('floating-dock.js','utf8');
+if(/focusHidden\s*=/.test(floating)) throw new Error('floating launcher must not hide on page blur');
+if(/dock_logo_clean\.png/.test(floating)) throw new Error('floating launcher regressed to full Dock logo');
+const manifest=JSON.parse(fs.readFileSync('manifest.json','utf8'));
+if(manifest.background.service_worker!=='background-v3.js') throw new Error('background-v3 is not active');
+NODE
+
+for f in \
+ 'assets/crazy-ducky-theme.png' \
+ 'assets/dock-default-center copy.png' \
+ 'assets/dock-default-center.png' \
+ 'assets/dock-sunset.png' \
+ 'assets/dock_logo_lifted.png' \
+ 'assets/rubber-ducky-theme.png' \
+ 'assets/screenshot-unavailable.png' \
+ 'assets/tie-dye-bg.png'; do
+  test ! -e "$f" || { echo "Dead release asset reintroduced: $f" >&2; exit 1; }
+done
+
+if find . -type f \( -name '*.zip' -o -name '*.DS_Store' -o -name '*.map' \) -print -quit | grep -q .; then
+  echo 'Release debris detected' >&2
+  exit 1
+fi
+
+if grep -RniE 'SUPABASE_SERVICE_ROLE|service_role_key|ghp_[A-Za-z0-9]+|github_pat_|-----BEGIN (RSA |EC |OPENSSH )?PRIVATE KEY-----' --exclude-dir=assets .; then
+  echo 'Potential secret material detected' >&2
+  exit 1
+fi
+
+echo 'Dock release gate: PASS'

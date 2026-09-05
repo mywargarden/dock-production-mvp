@@ -1,0 +1,57 @@
+name: Sync Dock 0.3.27 Exact Extension Source
+
+on:
+  push:
+    branches:
+      - release/dock-0.3.27-rc
+    paths:
+      - '.release-overlay/READY'
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: release/dock-0.3.27-rc
+          fetch-depth: 0
+      - name: Overlay exact 0.3.27 extension source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .release-overlay/READY
+          cat .release-overlay/chunk-* > /tmp/dock-overlay.b64
+          base64 -d /tmp/dock-overlay.b64 > /tmp/dock-overlay.tar.gz
+
+          # Overlay only the files that changed after the last complete branch
+          # lineage. Unchanged core/runtime files remain source-controlled.
+          tar -xzf /tmp/dock-overlay.tar.gz -C dock-extension
+
+          # Remove assets proven to be dead duplicates in the approved build.
+          rm -f \
+            dock-extension/assets/crazy-ducky-theme.png \
+            'dock-extension/assets/dock-default-center copy.png' \
+            dock-extension/assets/dock-default-center.png \
+            dock-extension/assets/dock-sunset.png \
+            dock-extension/assets/dock_logo_lifted.png \
+            dock-extension/assets/rubber-ducky-theme.png \
+            dock-extension/assets/screenshot-unavailable.png \
+            dock-extension/assets/tie-dye-bg.png
+
+          bash scripts/static_check.sh
+
+          rm -rf .release-overlay
+          git rm -f .github/workflows/sync-0327-overlay.yml
+          git add -A dock-extension .release-overlay || true
+
+          git config user.name 'Dock Release Bot'
+          git config user.email 'dock-release-bot@users.noreply.github.com'
+          if git diff --cached --quiet; then
+            echo 'No extension changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Sync exact Dock 0.3.27 extension source'
+          git push origin HEAD:release/dock-0.3.27-rc

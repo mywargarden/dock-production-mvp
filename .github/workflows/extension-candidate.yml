@@ -1,13 +1,12 @@
-name: Dock 0.3.12 Candidate Artifact
+name: Dock Extension Candidate Artifact
 
 on:
+  workflow_dispatch:
   pull_request:
     paths:
-      - dock-extension/**
-      - scripts/static_check.sh
-      - scripts/find_junk.sh
-      - .github/workflows/extension-candidate.yml
-  workflow_dispatch:
+      - 'dock-extension/**'
+      - 'scripts/static_check.sh'
+      - '.github/workflows/extension-candidate.yml'
 
 permissions:
   contents: read
@@ -24,7 +23,7 @@ jobs:
           ref: ${{ env.CANDIDATE_SHA }}
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       - name: Verify exact candidate checkout
         shell: bash
         run: |
@@ -32,62 +31,66 @@ jobs:
           actual="$(git rev-parse HEAD)"
           test "$actual" = "$CANDIDATE_SHA"
           echo "Candidate head: $actual"
-      - name: Static gate
+      - name: Static release gate
         run: bash scripts/static_check.sh
       - name: Build exact store-ready candidate
         shell: bash
         run: |
           set -euo pipefail
+          VERSION="$(node -p "require('./dock-extension/manifest.json').version")"
+          WORKER="$(node -p "require('./dock-extension/manifest.json').background.service_worker")"
+          OUT="candidate-out/Dock-${VERSION}"
           rm -rf candidate-out
-          mkdir -p candidate-out/Dock-0.3.12
-          rsync -a dock-extension/ candidate-out/Dock-0.3.12/ \
+          mkdir -p "$OUT"
+          rsync -a dock-extension/ "$OUT/" \
             --exclude='*.md' \
             --exclude='background.js' \
-            --exclude='import.js'
+            --exclude='import.js' \
+            --exclude='crazy-ducky-theme.png' \
+            --exclude='dock-default-center copy.png' \
+            --exclude='dock-default-center.png' \
+            --exclude='dock-sunset.png' \
+            --exclude='dock_logo_lifted.png' \
+            --exclude='rubber-ducky-theme.png' \
+            --exclude='screenshot-unavailable.png' \
+            --exclude='tie-dye-bg.png'
 
-          test -f candidate-out/Dock-0.3.12/manifest.json
-          test -f candidate-out/Dock-0.3.12/background-v2.js
-          test -f candidate-out/Dock-0.3.12/import-v2.js
-          test ! -e candidate-out/Dock-0.3.12/background.js
-          test ! -e candidate-out/Dock-0.3.12/import.js
+          test -f "$OUT/manifest.json"
+          test -f "$OUT/$WORKER"
+          test -f "$OUT/background-v2.js"
+          test -f "$OUT/dock-sidecar.js"
+          test -f "$OUT/floating-dock.js"
+          test -f "$OUT/newtab.html"
+          test ! -e "$OUT/background.js"
+          test ! -e "$OUT/import.js"
 
           extension_tree="$(git rev-parse HEAD:dock-extension)"
-          printf 'commit=%s\nversion=0.3.12\nextension_tree=%s\n' "$CANDIDATE_SHA" "$extension_tree" > candidate-out/ARTIFACT_ID.txt
+          printf 'commit=%s\nversion=%s\nextension_tree=%s\n' "$CANDIDATE_SHA" "$VERSION" "$extension_tree" > candidate-out/ARTIFACT_ID.txt
           printf '%s\n' "$extension_tree" > candidate-out/SOURCE_EXTENSION_TREE.txt
-          (
-            cd candidate-out/Dock-0.3.12
-            find . -type f -print | LC_ALL=C sort
-          ) > candidate-out/FILE_MANIFEST.txt
-          (
-            cd candidate-out/Dock-0.3.12
-            find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum
-          ) > candidate-out/FILE_SHA256_MANIFEST.txt
+          (cd "$OUT" && find . -type f -print | LC_ALL=C sort) > candidate-out/FILE_MANIFEST.txt
+          (cd "$OUT" && find . -type f -print0 | LC_ALL=C sort -z | xargs -0 sha256sum) > candidate-out/FILE_SHA256_MANIFEST.txt
 
-          # Chrome Web Store packages require manifest.json at the ZIP root.
-          (
-            cd candidate-out/Dock-0.3.12
-            zip -X -q -r ../Dock-0.3.12.zip .
-          )
-          sha256sum candidate-out/Dock-0.3.12.zip > candidate-out/Dock-0.3.12.zip.sha256
+          (cd "$OUT" && zip -X -q -r "../Dock-${VERSION}.zip" .)
+          sha256sum "candidate-out/Dock-${VERSION}.zip" > "candidate-out/Dock-${VERSION}.zip.sha256"
 
-          # Fail closed if packaging regresses to a wrapper-directory ZIP.
-          unzip -Z1 candidate-out/Dock-0.3.12.zip | grep -qx 'manifest.json'
-          if unzip -Z1 candidate-out/Dock-0.3.12.zip | grep -q '^Dock-0.3.12/'; then
-            echo 'Store package must not contain a Dock-0.3.12 wrapper directory.' >&2
+          unzip -Z1 "candidate-out/Dock-${VERSION}.zip" | grep -qx 'manifest.json'
+          if unzip -Z1 "candidate-out/Dock-${VERSION}.zip" | grep -Eq '\.zip$|^Dock-[^/]+/'; then
+            echo 'Store package contains a nested archive or wrapper directory.' >&2
             exit 1
           fi
-          test "$(unzip -p candidate-out/Dock-0.3.12.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).version))')" = '0.3.12'
-          test -n "$(unzip -p candidate-out/Dock-0.3.12.zip manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).background?.service_worker||""))')"
+          test "$(unzip -p "candidate-out/Dock-${VERSION}.zip" manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).version))')" = "$VERSION"
+          test "$(unzip -p "candidate-out/Dock-${VERSION}.zip" manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).background?.service_worker||""))')" = "$WORKER"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - name: Upload candidate with lineage
         uses: actions/upload-artifact@v4
         with:
-          name: Dock-0.3.12-${{ env.CANDIDATE_SHA }}
+          name: Dock-${{ env.VERSION }}-${{ env.CANDIDATE_SHA }}
           path: |
-            candidate-out/Dock-0.3.12.zip
-            candidate-out/Dock-0.3.12.zip.sha256
+            candidate-out/Dock-${{ env.VERSION }}.zip
+            candidate-out/Dock-${{ env.VERSION }}.zip.sha256
             candidate-out/ARTIFACT_ID.txt
             candidate-out/SOURCE_EXTENSION_TREE.txt
             candidate-out/FILE_MANIFEST.txt
             candidate-out/FILE_SHA256_MANIFEST.txt
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30

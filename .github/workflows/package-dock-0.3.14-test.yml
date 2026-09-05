@@ -1,0 +1,46 @@
+name: Package Dock 0.3.14 Test Build
+
+on:
+  push:
+    branches:
+      - feature/dock-0.3.14-clean-capture
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Static gate
+        run: bash scripts/static_check.sh
+      - name: Build test package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf candidate-out
+          mkdir -p candidate-out/Dock-0.3.14
+          rsync -a dock-extension/ candidate-out/Dock-0.3.14/ \
+            --exclude='*.md' \
+            --exclude='background.js' \
+            --exclude='import.js'
+          test -f candidate-out/Dock-0.3.14/manifest.json
+          test "$(node -p "require('./candidate-out/Dock-0.3.14/manifest.json').version")" = '0.3.14'
+          (
+            cd candidate-out/Dock-0.3.14
+            zip -X -q -r ../Dock-0.3.14.zip .
+          )
+          sha256sum candidate-out/Dock-0.3.14.zip > candidate-out/Dock-0.3.14.zip.sha256
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.14-test
+          path: |
+            candidate-out/Dock-0.3.14.zip
+            candidate-out/Dock-0.3.14.zip.sha256
+          if-no-files-found: error
+          retention-days: 14

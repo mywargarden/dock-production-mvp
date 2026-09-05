@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>New Tab</title>
+  <script src="newtab-prepaint.js"></script>
+  <link rel="stylesheet" href="newtab.css" />
+  <link rel="stylesheet" href="launcher.css" />
+</head>
+<body>
+  <main class="newTabShell" aria-label="Dock new tab">
+    <div class="newTabCenter">
+      <form id="searchForm" class="searchForm" autocomplete="off">
+        <input id="searchInput" type="text" inputmode="url" spellcheck="false" aria-label="Search or enter address" placeholder="Search or enter address" autofocus />
+      </form>
+      <nav class="newTabActions" aria-label="Dock shortcuts">
+        <button id="safeHarborQuick" class="newTabAction" type="button">Safe Harbor</button>
+        <button id="lastDockQuick" class="newTabAction" type="button">Last Dock</button>
+        <button id="relaxQuick" class="newTabAction" type="button">Relax</button>
+      </nav>
+      <p class="hint">Let the currents take you, Dock guards the shore.</p>
+    </div>
+  </main>
+
+  <button id="dockLauncher" class="dockLauncher" type="button" title="Toggle Dock — drag to move" aria-label="Toggle Dock popup. Drag to move.">
+    <img src="assets/dock_boat_mark.png" alt="" />
+  </button>
+
+  <script src="dock-sidecar.js"></script>
+  <script type="module" src="newtab.js"></script>
+</body>
+</html>
