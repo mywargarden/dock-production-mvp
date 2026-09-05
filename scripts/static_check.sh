@@ -75,7 +75,7 @@ const newtabCss = fs.readFileSync('dock-extension/newtab.css', 'utf8');
 for (const required of ['dockLauncher', 'searchInput', 'dock_logo_clean.png']) {
   if (!newtabHtml.includes(required)) throw new Error(`Dock New Tab markup missing: ${required}`);
 }
-for (const required of ['dockLauncherPosition', 'OPEN_DOCK_POPUP', 'resolveNavigation', 'dockTheme', 'chrome.storage.local.get', 'chrome.storage.onChanged', 'violet-harbor', 'assets/grape-tide.webp']) {
+for (const required of ['dockLauncherPosition', 'OPEN_DOCK_POPUP', 'resolveNavigation', 'dockTheme', 'chrome.storage.local.get', 'onChanged?.addListener', 'violet-harbor', 'assets/grape-tide.webp']) {
   if (!newtabJs.includes(required)) throw new Error(`Dock New Tab behavior missing: ${required}`);
 }
 for (const required of ['body[data-theme="violet-harbor"]', '--dock-theme-scene', '--newtab-field', '--newtab-focus']) {
