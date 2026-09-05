@@ -1,6 +1,22 @@
 import "./background-v2.js";
+import { migrateLegacyPreviewPayloads } from "./core/previewPayloadStore.js";
 
 const api = (typeof browser !== "undefined" && browser?.runtime?.getURL) ? browser : chrome;
+
+let previewMigrationPromise = null;
+function ensurePreviewPayloadMigration() {
+  if (previewMigrationPromise) return previewMigrationPromise;
+  previewMigrationPromise = migrateLegacyPreviewPayloads(api.storage?.local)
+    .catch(() => ({ ok: false }))
+    .finally(() => { previewMigrationPromise = null; });
+  return previewMigrationPromise;
+}
+
+// Run as soon as the worker wakes so an upgraded real profile is cleaned before
+// popup/Safe Harbor repeatedly deserialize legacy base64 screenshot aggregates.
+ensurePreviewPayloadMigration().catch(() => {});
+api.runtime?.onInstalled?.addListener(() => { ensurePreviewPayloadMigration().catch(() => {}); });
+api.runtime?.onStartup?.addListener(() => { ensurePreviewPayloadMigration().catch(() => {}); });
 
 function isAllowedLauncherSender(sender) {
   const tabUrl = String(sender?.tab?.url || "");
@@ -15,6 +31,13 @@ function isAllowedLauncherSender(sender) {
 }
 
 api.runtime.onMessage.addListener((msg, sender, sendResponse) => {
+  if (msg?.type === "MIGRATE_DOCK_PREVIEW_PAYLOADS") {
+    ensurePreviewPayloadMigration()
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((error) => sendResponse({ ok: false, error: String(error?.message || error || "") }));
+    return true;
+  }
+
   if (msg?.type !== "OPEN_DOCK_POPUP") return;
 
   (async () => {
