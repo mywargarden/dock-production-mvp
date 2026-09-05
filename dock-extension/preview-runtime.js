@@ -1,8 +1,10 @@
 import { api } from "./adapters/index.js";
 import { previewStorageKey } from "./core/previewPayloadStore.js";
 
-const PLACEHOLDER = "assets/screenshot-unavailable.webp";
 const memoryByUrl = new Map();
+const resolvedPayloads = new Map();
+let savedTabsList = [];
+let groupItemsById = {};
 let metadataLoaded = false;
 let metadataPromise = null;
 const inflightPayloads = new Map();
@@ -56,13 +58,16 @@ async function loadMetadata() {
   if (metadataPromise) return metadataPromise;
   metadataPromise = (async () => {
     const stored = await api.storage.local.get(["savedTabs", "dockGroupItems"]);
-    (Array.isArray(stored.savedTabs) ? stored.savedTabs : []).forEach(addMemory);
-    const groups = stored.dockGroupItems;
-    if (groups && typeof groups === "object") {
-      Object.values(groups).forEach((items) => {
-        if (Array.isArray(items)) items.forEach(addMemory);
-      });
-    }
+    savedTabsList = Array.isArray(stored.savedTabs) ? stored.savedTabs : [];
+    groupItemsById = stored.dockGroupItems && typeof stored.dockGroupItems === "object"
+      ? stored.dockGroupItems
+      : {};
+
+    memoryByUrl.clear();
+    savedTabsList.forEach(addMemory);
+    Object.values(groupItemsById).forEach((items) => {
+      if (Array.isArray(items)) items.forEach(addMemory);
+    });
     metadataLoaded = true;
   })();
   try { await metadataPromise; }
@@ -72,6 +77,7 @@ async function loadMetadata() {
 async function payloadForRef(ref) {
   const clean = norm(ref);
   if (!clean) return "";
+  if (resolvedPayloads.has(clean)) return resolvedPayloads.get(clean);
   if (inflightPayloads.has(clean)) return inflightPayloads.get(clean);
 
   const promise = (async () => {
@@ -79,7 +85,9 @@ async function payloadForRef(ref) {
     if (!key) return "";
     const stored = await api.storage.local.get([key]);
     const value = norm(stored?.[key]);
-    return /^data:image\//i.test(value) ? value : "";
+    const payload = /^data:image\//i.test(value) ? value : "";
+    if (payload) resolvedPayloads.set(clean, payload);
+    return payload;
   })();
 
   inflightPayloads.set(clean, promise);
@@ -87,7 +95,25 @@ async function payloadForRef(ref) {
   finally { inflightPayloads.delete(clean); }
 }
 
+function popupItemForCard(card) {
+  if (!card?.classList?.contains("tabItem")) return null;
+  const list = document.getElementById("tabList");
+  if (!list) return null;
+  const cards = Array.from(list.children).filter((node) => node instanceof Element && node.classList.contains("tabItem"));
+  const index = cards.indexOf(card);
+  if (index < 0) return null;
+
+  const workspaceId = String(document.getElementById("workspaceSelect")?.value || "__all__");
+  const source = !workspaceId || workspaceId === "__all__"
+    ? savedTabsList
+    : (Array.isArray(groupItemsById?.[workspaceId]) ? groupItemsById[workspaceId] : []);
+  return source[index] || null;
+}
+
 function itemForCard(card) {
+  const popupItem = popupItemForCard(card);
+  if (popupItem) return popupItem;
+
   const link = card.querySelector("a[href]");
   const href = normalizeUrl(link?.href || card.dataset?.url || "");
   return href ? memoryByUrl.get(href) || null : null;
@@ -114,10 +140,12 @@ async function hydrateCard(card) {
   const ref = norm(item.previewRef);
   if (!ref) return;
 
-  // Mark before awaiting so repeated mutations do not queue duplicate reads.
   card.dataset.dockPreviewResolved = "1";
   const payload = await payloadForRef(ref).catch(() => "");
-  if (!payload) return;
+  if (!payload) {
+    delete card.dataset.dockPreviewResolved;
+    return;
+  }
 
   img.loading = "eager";
   img.decoding = "async";
@@ -147,7 +175,16 @@ function install(root) {
   observer.observe(root, { childList: true, subtree: true });
 }
 
+function resetCards() {
+  document.querySelectorAll("[data-dock-preview-resolved]").forEach((card) => {
+    delete card.dataset.dockPreviewResolved;
+  });
+}
+
 function boot() {
+  // Do not await migration: UI must paint immediately. This message merely
+  // guarantees an upgraded real profile wakes the worker and starts cleanup.
+  api.runtime.sendMessage({ type: "MIGRATE_DOCK_PREVIEW_PAYLOADS" }).catch?.(() => {});
   loadMetadata().catch(() => {});
   install(document.getElementById("grid"));
   install(document.getElementById("tabList"));
@@ -164,7 +201,10 @@ if (api.storage?.onChanged?.addListener) {
     if (areaName !== "local") return;
     if (changes?.savedTabs || changes?.dockGroupItems) {
       metadataLoaded = false;
+      savedTabsList = [];
+      groupItemsById = {};
       memoryByUrl.clear();
+      resetCards();
       loadMetadata().then(() => {
         scheduleCards(document.getElementById("grid"));
         scheduleCards(document.getElementById("tabList"));
