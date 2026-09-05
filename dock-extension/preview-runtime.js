@@ -63,10 +63,23 @@ function remotePreview(item) {
   return "";
 }
 
+function previewRank(item) {
+  if (!item || typeof item !== "object") return 0;
+  if (norm(item.previewRef)) return 30;
+  if (inlinePreview(item)) return 20;
+  if (remotePreview(item)) return 10;
+  return 0;
+}
+
 function addMemory(item) {
   if (!item || typeof item !== "object") return;
   const key = normalizeUrl(item.url || item.local_id || "");
-  if (key) memoryByUrl.set(key, item);
+  if (!key) return;
+
+  const existing = memoryByUrl.get(key);
+  if (!existing || previewRank(item) > previewRank(existing)) {
+    memoryByUrl.set(key, item);
+  }
 }
 
 function allItems() {
@@ -152,6 +165,14 @@ async function payloadForRef(ref) {
   finally { inflightPayloads.delete(clean); }
 }
 
+function canonicalItemFor(item) {
+  if (!item || typeof item !== "object") return item;
+  const key = normalizeUrl(item.url || item.local_id || "");
+  const canonical = key ? memoryByUrl.get(key) : null;
+  if (!canonical) return item;
+  return previewRank(canonical) >= previewRank(item) ? canonical : item;
+}
+
 function popupItemForCard(card) {
   if (!card?.classList?.contains("tabItem")) return null;
   const list = document.getElementById("tabList");
@@ -164,7 +185,7 @@ function popupItemForCard(card) {
   const source = !workspaceId || workspaceId === "__all__"
     ? savedTabsList
     : (Array.isArray(groupItemsById?.[workspaceId]) ? groupItemsById[workspaceId] : []);
-  return source[index] || null;
+  return canonicalItemFor(source[index] || null);
 }
 
 function itemForCard(card) {
@@ -264,8 +285,10 @@ function resetCards() {
   });
 }
 
-function boot() {
-  api.runtime.sendMessage({ type: "MIGRATE_DOCK_PREVIEW_PAYLOADS" }).catch?.(() => {});
+async function boot() {
+  // Version-2 migration is local-only and fast. Wait for it before resolving
+  // preview metadata so old group copies can inherit the canonical local ref.
+  try { await api.runtime.sendMessage({ type: "MIGRATE_DOCK_PREVIEW_PAYLOADS" }); } catch {}
   loadMetadata().catch(() => {});
   installWhenAvailable("grid");
   installWhenAvailable("tabList");
