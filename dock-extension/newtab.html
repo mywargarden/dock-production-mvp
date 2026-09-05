@@ -14,14 +14,20 @@
       <form id="searchForm" class="searchForm" autocomplete="off">
         <input id="searchInput" type="text" inputmode="url" spellcheck="false" aria-label="Search or enter address" placeholder="Search or enter address" autofocus />
       </form>
-      <p class="hint">Dock is ready when you are.</p>
+      <nav class="newTabActions" aria-label="Dock shortcuts">
+        <button id="safeHarborQuick" class="newTabAction" type="button">Safe Harbor</button>
+        <button id="lastDockQuick" class="newTabAction" type="button">Last Dock</button>
+        <button id="relaxQuick" class="newTabAction" type="button">Relax</button>
+      </nav>
+      <p class="hint">Let the currents take you, Dock guards the shore.</p>
     </div>
   </main>
 
-  <button id="dockLauncher" class="dockLauncher" type="button" title="Open Dock — drag to move" aria-label="Open Dock popup. Drag to move.">
-    <img src="assets/dock_logo_clean.png" alt="" />
+  <button id="dockLauncher" class="dockLauncher" type="button" title="Toggle Dock — drag to move" aria-label="Toggle Dock popup. Drag to move.">
+    <img src="assets/dock_boat_mark.png" alt="" />
   </button>
 
+  <script src="dock-sidecar.js"></script>
   <script type="module" src="newtab.js"></script>
 </body>
 </html>
