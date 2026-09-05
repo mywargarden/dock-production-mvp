@@ -18,7 +18,7 @@ jobs:
         with:
           ref: release/dock-0.3.27-rc
           fetch-depth: 0
-      - name: Rehydrate exact extension source overlay
+      - name: Overlay exact 0.3.27 extension source
         shell: bash
         run: |
           set -euo pipefail
@@ -26,31 +26,20 @@ jobs:
           cat .release-overlay/chunk-* > /tmp/dock-overlay.b64
           base64 -d /tmp/dock-overlay.b64 > /tmp/dock-overlay.tar.gz
 
-          # Preserve only the heavyweight theme assets whose Git blob hashes
-          # are byte-identical to the approved 0.3.26 candidate. Everything
-          # else is replaced from the exact hardening overlay below.
-          mkdir -p /tmp/dock-heavy/assets
-          for f in \
-            cozy-quilt.webp \
-            crazy-ducky-theme.webp \
-            dock-default-theme-20260901.png \
-            dock-sunset-hd.png \
-            dock-sunset.webp \
-            dock_logo.png \
-            grape-tide.webp \
-            rubber-ducky-theme.webp \
-            sand-castle-theme.webp \
-            smileys-3d.webp \
-            tie-dye-bg.webp \
-            skipper-harbor-hd.png \
-            skipper-harbor.png; do
-            cp "dock-extension/assets/$f" "/tmp/dock-heavy/assets/$f"
-          done
-
-          rm -rf dock-extension
-          mkdir -p dock-extension/assets
-          cp /tmp/dock-heavy/assets/* dock-extension/assets/
+          # Overlay only the files that changed after the last complete branch
+          # lineage. Unchanged core/runtime files remain source-controlled.
           tar -xzf /tmp/dock-overlay.tar.gz -C dock-extension
+
+          # Remove assets proven to be dead duplicates in the approved build.
+          rm -f \
+            dock-extension/assets/crazy-ducky-theme.png \
+            'dock-extension/assets/dock-default-center copy.png' \
+            dock-extension/assets/dock-default-center.png \
+            dock-extension/assets/dock-sunset.png \
+            dock-extension/assets/dock_logo_lifted.png \
+            dock-extension/assets/rubber-ducky-theme.png \
+            dock-extension/assets/screenshot-unavailable.png \
+            dock-extension/assets/tie-dye-bg.png
 
           bash scripts/static_check.sh
 
