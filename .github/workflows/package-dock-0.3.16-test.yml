@@ -1,0 +1,78 @@
+name: Package Dock 0.3.16 Per-Dock Themes
+
+on:
+  push:
+    branches:
+      - feature/dock-0.3.16-per-dock-themes
+
+permissions:
+  contents: read
+
+env:
+  CANDIDATE_SHA: ${{ github.sha }}
+
+jobs:
+  test-and-package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify exact candidate checkout
+        run: test "$(git rev-parse HEAD)" = "$CANDIDATE_SHA"
+      - name: Run static gates
+        run: ./scripts/static_check.sh
+      - name: Install Chrome test harness
+        run: npm install --no-save puppeteer@25.10.0
+      - name: Run Chrome New Tab regression attack
+        run: xvfb-run -a node scripts/chrome_newtab_8.mjs
+      - name: Run screenshot cold-start regression attack
+        run: xvfb-run -a node scripts/chrome_preview_storage_9.mjs
+      - name: Run per-Dock theme ownership attack
+        run: xvfb-run -a node scripts/chrome_group_theme_10.mjs
+      - name: Build single unambiguous user package
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf candidate-out
+          mkdir -p candidate-out/LOAD_THIS_DOCK_0316
+          rsync -a dock-extension/ candidate-out/LOAD_THIS_DOCK_0316/ \
+            --exclude='*.md' \
+            --exclude='background.js' \
+            --exclude='import.js'
+
+          test -f candidate-out/LOAD_THIS_DOCK_0316/manifest.json
+          test -f candidate-out/LOAD_THIS_DOCK_0316/group-theme.js
+          test -f candidate-out/LOAD_THIS_DOCK_0316/preview-runtime.js
+          test -f candidate-out/LOAD_THIS_DOCK_0316/core/previewPayloadStore.js
+          test ! -e candidate-out/LOAD_THIS_DOCK_0316/background.js
+          test ! -e candidate-out/LOAD_THIS_DOCK_0316/import.js
+
+          test "$(node -e 'const m=require("./candidate-out/LOAD_THIS_DOCK_0316/manifest.json"); process.stdout.write(m.version)')" = '0.3.16'
+          test "$(node -e 'const m=require("./candidate-out/LOAD_THIS_DOCK_0316/manifest.json"); process.stdout.write(m.background?.service_worker||"")')" = 'background-v3.js'
+
+          (
+            cd candidate-out
+            zip -X -q -r LOAD_THIS_DOCK_0316.zip LOAD_THIS_DOCK_0316
+          )
+
+          # Delivery contract: unzip once, select exactly LOAD_THIS_DOCK_0316,
+          # and manifest.json is immediately at that folder's top level.
+          unzip -Z1 candidate-out/LOAD_THIS_DOCK_0316.zip | grep -qx 'LOAD_THIS_DOCK_0316/manifest.json'
+          test "$(unzip -p candidate-out/LOAD_THIS_DOCK_0316.zip LOAD_THIS_DOCK_0316/manifest.json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).version))')" = '0.3.16'
+
+          sha256sum candidate-out/LOAD_THIS_DOCK_0316.zip > candidate-out/LOAD_THIS_DOCK_0316.zip.sha256
+          printf 'commit=%s\nversion=0.3.16\ninstall_folder=LOAD_THIS_DOCK_0316\nmanifest_path=LOAD_THIS_DOCK_0316/manifest.json\n' "$CANDIDATE_SHA" > candidate-out/ARTIFACT_ID.txt
+      - name: Upload exact tested user package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Dock-0.3.16-professional-test
+          path: |
+            candidate-out/LOAD_THIS_DOCK_0316.zip
+            candidate-out/LOAD_THIS_DOCK_0316.zip.sha256
+            candidate-out/ARTIFACT_ID.txt
+          if-no-files-found: error
+          retention-days: 14
