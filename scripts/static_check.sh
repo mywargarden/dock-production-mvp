@@ -27,12 +27,12 @@ node <<'NODE'
 const fs = require('fs');
 
 const manifest = JSON.parse(fs.readFileSync('dock-extension/manifest.json', 'utf8'));
-if (manifest.version !== '0.3.16') throw new Error(`unexpected manifest version ${manifest.version}`);
+if (manifest.version !== '0.3.17') throw new Error(`unexpected manifest version ${manifest.version}`);
 if (manifest.background?.service_worker !== 'background-v3.js' || manifest.background?.type !== 'module') {
-  throw new Error('Dock 0.3.16 popup bridge worker not active');
+  throw new Error('Dock 0.3.17 popup bridge worker not active');
 }
 if (manifest.chrome_url_overrides?.newtab !== 'newtab.html') {
-  throw new Error('Dock 0.3.16 does not own the Chrome New Tab surface');
+  throw new Error('Dock 0.3.17 does not own the Chrome New Tab surface');
 }
 
 const expectedPermissions = ['activeTab','alarms','identity','identity.email','storage','tabs','unlimitedStorage'].sort();
@@ -100,17 +100,40 @@ for (const required of ['isPopupDocument', 'captureVisibleTab', 'SET_DOCK_LAUNCH
 }
 
 const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
+const popupHtml = fs.readFileSync('dock-extension/popup.html', 'utf8');
 if (memoriesHtml.includes('legacy-loop-shield')) throw new Error('obsolete legacy loop shield is still wired into memories.html');
 if (!memoriesHtml.includes('assets/dock_logo_clean.png')) throw new Error('Safe Harbor launcher is not using clean Dock mark');
 for (const required of ['preview-runtime.js','group-theme.js']) {
   if (!memoriesHtml.includes(required)) throw new Error(`Safe Harbor runtime missing: ${required}`);
 }
+if (memoriesHtml.indexOf('preview-runtime.js') > memoriesHtml.indexOf('memories.js')) {
+  throw new Error('Safe Harbor preview runtime must start before memories renderer');
+}
+if (popupHtml.indexOf('preview-runtime.js') > popupHtml.indexOf('popup.js')) {
+  throw new Error('popup preview runtime must start before popup renderer');
+}
 
 const groupTheme = fs.readFileSync('dock-extension/group-theme.js', 'utf8');
-for (const required of ['dockGroups','dockActiveGroup','Use Safe Harbor theme','data-dock-group-theme-entry','setDockTheme','effectiveTheme']) {
+for (const required of ['dockGroups','dockActiveGroup','dockGroupThemes','data-dock-group-theme-entry','setDockTheme','Dock Default','dockGroupThemeThumb']) {
   if (!groupTheme.includes(required)) throw new Error(`per-Dock theme invariant missing: ${required}`);
 }
+if (groupTheme.includes('Use Safe Harbor theme') || groupTheme.includes('__inherit__')) {
+  throw new Error('created Docks still expose hidden Safe Harbor theme inheritance');
+}
 if (groupTheme.includes('setInterval(')) throw new Error('per-Dock themes introduced interval polling');
+
+const previewRuntime = fs.readFileSync('dock-extension/preview-runtime.js', 'utf8');
+for (const required of ['previewRank','canonicalItemFor','primePayloadCache','previewRef','fetchPriority']) {
+  if (!previewRuntime.includes(required)) throw new Error(`local preview runtime invariant missing: ${required}`);
+}
+if (previewRuntime.indexOf('const ref = norm(item.previewRef)') > previewRuntime.indexOf('const remote = remotePreview(item)')) {
+  throw new Error('preview runtime no longer prioritizes local previewRef before remote screenshots');
+}
+
+const previewStore = fs.readFileSync('dock-extension/core/previewPayloadStore.js', 'utf8');
+for (const required of ['PREVIEW_PAYLOAD_VERSION = 2','normalizedUrl','byUrl','sharedRef']) {
+  if (!previewStore.includes(required)) throw new Error(`preview v2 sharing invariant missing: ${required}`);
+}
 
 const launcherJs = fs.readFileSync('dock-extension/launcher.js', 'utf8');
 if (!launcherJs.includes('OPEN_DOCK_POPUP') || !launcherJs.includes('dockLauncherPosition')) {
