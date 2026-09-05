@@ -4,6 +4,7 @@ const THEME_MIRROR_KEY = "dockThemeCurrent";
 const DEFAULT_THEME = "dock-green";
 const THEMES = new Set(["dock-green","skipper-harbor","smiley-pop","warm","sunset","tie-dye","rubber-ducky","crazy-ducky","violet-harbor"]);
 const THEME_SCENE_ASSETS = {
+  "dock-green": "assets/dock-default-theme-20260901.png",
   "sunset": "assets/dock-sunset-hd.png",
   "tie-dye": "assets/tie-dye-bg.webp",
   "rubber-ducky": "assets/rubber-ducky-theme.webp",
