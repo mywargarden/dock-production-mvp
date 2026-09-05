@@ -1,6 +1,6 @@
 const PREVIEW_PREFIX = "dockPreviewPayload:v1:";
 export const PREVIEW_PAYLOAD_VERSION_KEY = "dockPreviewPayloadVersion";
-export const PREVIEW_PAYLOAD_VERSION = 1;
+export const PREVIEW_PAYLOAD_VERSION = 2;
 
 const INLINE_PREVIEW_FIELDS = [
   "screenshotThumb",
@@ -41,6 +41,19 @@ function stableIdentity(item) {
   return norm(item.local_id || item.id || item.url || item.title || "");
 }
 
+function normalizedUrl(item) {
+  const raw = norm(item?.url);
+  if (!raw) return "";
+  try {
+    const parsed = new URL(raw);
+    parsed.hash = "";
+    if (parsed.pathname !== "/") parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    return parsed.toString();
+  } catch {
+    return raw;
+  }
+}
+
 function hashText(value) {
   const text = String(value || "");
   let h1 = 0x811c9dc5;
@@ -76,11 +89,22 @@ function firstInlinePreview(item) {
   return "";
 }
 
-function externalizeItem(item, payloadWrites, refByIdentity = null) {
+function externalizeItem(item, payloadWrites, refs = null) {
   if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+
   const next = { ...item };
   const inline = firstInlinePreview(next);
-  let ref = previewRefForItem(next);
+  const url = normalizedUrl(next);
+  const identity = stableIdentity(next);
+
+  const existingRef = /^pv1_[a-z0-9]+$/i.test(norm(next.previewRef)) ? norm(next.previewRef) : "";
+  const sharedRef = url && refs?.byUrl?.get(url) ? refs.byUrl.get(url) : "";
+  const identityRef = identity && refs?.byIdentity?.get(identity) ? refs.byIdentity.get(identity) : "";
+  const ref = existingRef || sharedRef || identityRef || previewRefForItem(next);
+
+  if (ref && (inline || sharedRef || identityRef || existingRef)) {
+    next.previewRef = ref;
+  }
 
   if (inline && ref) {
     payloadWrites[previewStorageKey(ref)] = inline;
@@ -91,30 +115,36 @@ function externalizeItem(item, payloadWrites, refByIdentity = null) {
     if (isInlinePreviewPayload(next[field])) delete next[field];
   }
 
-  const identity = stableIdentity(next);
-  if (identity && next.previewRef && refByIdentity) refByIdentity.set(identity, next.previewRef);
+  if (next.previewRef && refs) {
+    if (url) refs.byUrl.set(url, next.previewRef);
+    if (identity) refs.byIdentity.set(identity, next.previewRef);
+  }
+
   return next;
 }
 
-function externalizeArray(items, payloadWrites, refByIdentity = null) {
-  return (Array.isArray(items) ? items : []).map((item) => externalizeItem(item, payloadWrites, refByIdentity));
+function externalizeArray(items, payloadWrites, refs = null) {
+  return (Array.isArray(items) ? items : []).map((item) => externalizeItem(item, payloadWrites, refs));
 }
 
-function externalizeGroupItems(groupItems, payloadWrites) {
+function externalizeGroupItems(groupItems, payloadWrites, refs) {
   if (!groupItems || typeof groupItems !== "object" || Array.isArray(groupItems)) return groupItems;
   const out = {};
   for (const [groupId, items] of Object.entries(groupItems)) {
-    out[groupId] = Array.isArray(items) ? externalizeArray(items, payloadWrites) : items;
+    out[groupId] = Array.isArray(items) ? externalizeArray(items, payloadWrites, refs) : items;
   }
   return out;
 }
 
-function propagatePreviewRefs(liteItems, refByIdentity) {
-  if (!Array.isArray(liteItems) || !refByIdentity?.size) return liteItems;
-  return liteItems.map((item) => {
+function propagatePreviewRefs(items, refs) {
+  if (!Array.isArray(items)) return items;
+  return items.map((item) => {
     if (!item || typeof item !== "object") return item;
-    if (item.previewRef) return item;
-    const ref = refByIdentity.get(stableIdentity(item));
+    if (/^pv1_[a-z0-9]+$/i.test(norm(item.previewRef))) return item;
+
+    const url = normalizedUrl(item);
+    const identity = stableIdentity(item);
+    const ref = (url && refs?.byUrl?.get(url)) || (identity && refs?.byIdentity?.get(identity)) || "";
     return ref ? { ...item, previewRef: ref } : item;
   });
 }
@@ -126,16 +156,16 @@ export function externalizePreviewPayloadsFromWrite(items) {
 
   const next = { ...items };
   const payloadWrites = {};
-  const refByIdentity = new Map();
+  const refs = { byUrl: new Map(), byIdentity: new Map() };
 
   if (Array.isArray(next.savedTabs)) {
-    next.savedTabs = externalizeArray(next.savedTabs, payloadWrites, refByIdentity);
+    next.savedTabs = externalizeArray(next.savedTabs, payloadWrites, refs);
   }
   if (Array.isArray(next.savedTabsLite)) {
-    next.savedTabsLite = propagatePreviewRefs(next.savedTabsLite, refByIdentity);
+    next.savedTabsLite = propagatePreviewRefs(next.savedTabsLite, refs);
   }
   if (Object.prototype.hasOwnProperty.call(next, "dockGroupItems")) {
-    next.dockGroupItems = externalizeGroupItems(next.dockGroupItems, payloadWrites);
+    next.dockGroupItems = externalizeGroupItems(next.dockGroupItems, payloadWrites, refs);
   }
 
   return { items: next, payloadWrites };
