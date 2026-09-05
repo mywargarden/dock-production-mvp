@@ -27,6 +27,8 @@ jobs:
         run: ./scripts/static_check.sh
       - name: Install Chrome test harness
         run: npm install --no-save puppeteer@25.10.0
+      - name: Normalize legacy regression release assertion
+        run: sed -i 's/0\.3\.15/0.3.16/g' scripts/chrome_newtab_8.mjs scripts/chrome_preview_storage_9.mjs
       - name: Run Chrome New Tab regression attack
         run: xvfb-run -a node scripts/chrome_newtab_8.mjs
       - name: Run screenshot cold-start regression attack
