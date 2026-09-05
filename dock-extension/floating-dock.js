@@ -6,6 +6,7 @@
   const POSITION_KEY = "dockLauncherPosition";
   const DRAG_THRESHOLD = 5;
   const EDGE_GAP = 12;
+  const POPUP_CLOSE_CLICK_GUARD_MS = 280;
 
   const host = document.createElement("div");
   host.id = "dock-floating-launcher-host";
@@ -17,7 +18,9 @@
     "width:60px",
     "height:60px",
     "z-index:2147483646",
-    "pointer-events:auto"
+    "pointer-events:auto",
+    "visibility:visible",
+    "opacity:1"
   ].join(";");
 
   const root = host.attachShadow({ mode: "open" });
@@ -36,17 +39,17 @@
         cursor: grab;
         user-select: none;
         touch-action: none;
-        background: rgba(238, 231, 219, .97);
-        border: 1px solid rgba(92, 76, 58, .12);
-        box-shadow: 0 12px 30px rgba(55, 45, 35, .18), inset 0 1px 0 rgba(255,255,255,.72);
-        transition: transform .15s ease, box-shadow .15s ease, opacity .15s ease;
+        background: linear-gradient(145deg, rgba(255,255,255,.98), rgba(232,247,250,.97));
+        border: 2px solid rgba(75,183,201,.82);
+        box-shadow: 0 12px 30px rgba(41,101,133,.20), inset 0 1px 0 rgba(255,255,255,.78);
+        transition: transform .15s ease, box-shadow .15s ease, opacity .12s ease;
       }
       button:hover {
         transform: translateY(-2px) scale(1.025);
-        box-shadow: 0 16px 34px rgba(55, 45, 35, .22), inset 0 1px 0 rgba(255,255,255,.78);
+        box-shadow: 0 16px 34px rgba(41,101,133,.25), inset 0 1px 0 rgba(255,255,255,.84);
       }
       button:focus-visible {
-        outline: 3px solid rgba(47, 111, 149, .72);
+        outline: 3px solid rgba(47,111,149,.72);
         outline-offset: 3px;
       }
       button.dragging {
@@ -59,8 +62,8 @@
         pointer-events: none;
       }
       img {
-        width: 47px;
-        height: 47px;
+        width: 54px;
+        height: 42px;
         display: block;
         object-fit: contain;
         pointer-events: none;
@@ -75,29 +78,29 @@
         box-sizing: border-box;
         border-radius: 12px;
         padding: 9px 11px;
-        background: rgba(46, 42, 37, .94);
+        background: rgba(46,42,37,.94);
         color: #fff;
         box-shadow: 0 12px 28px rgba(0,0,0,.22);
         font: 600 12px/1.35 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
-      @media (prefers-reduced-motion: reduce) {
-        button { transition: none; }
-      }
+      @media (max-width: 640px) { img { width: 50px; height: 39px; } }
+      @media (prefers-reduced-motion: reduce) { button { transition: none; } }
     </style>
-    <button type="button" title="Open Dock — drag to move" aria-label="Open Dock popup. Drag to move.">
+    <button type="button" title="Toggle Dock — drag to move" aria-label="Toggle Dock popup. Drag to move.">
       <img alt="" />
     </button>
   `;
 
   const button = root.querySelector("button");
   const image = root.querySelector("img");
-  image.src = chrome.runtime.getURL("assets/dock_logo_clean.png");
+  image.src = chrome.runtime.getURL("assets/dock_boat_mark.png");
 
   let dragState = null;
   let suppressClick = false;
   let toastTimer = null;
   let captureHidden = false;
-  let focusHidden = !document.hasFocus();
+  let popupLikelyOpen = false;
+  let popupClosedAt = 0;
 
   function clamp(value, min, max) {
     return Math.min(Math.max(value, min), Math.max(min, max));
@@ -136,9 +139,9 @@
   }
 
   function renderVisibility() {
-    const hidden = captureHidden || focusHidden;
-    host.style.visibility = hidden ? "hidden" : "visible";
-    host.style.pointerEvents = hidden ? "none" : "auto";
+    host.style.visibility = captureHidden ? "hidden" : "visible";
+    host.style.pointerEvents = captureHidden ? "none" : "auto";
+    host.style.opacity = captureHidden ? "0" : "1";
   }
 
   function setCaptureHidden(hidden) {
@@ -161,7 +164,9 @@
     try {
       const result = await chrome.runtime.sendMessage({ type: "OPEN_DOCK_POPUP" });
       if (!result?.ok) throw new Error(result?.code || "POPUP_OPEN_FAILED");
+      popupLikelyOpen = true;
     } catch {
+      popupLikelyOpen = false;
       showError("Dock couldn’t open here. Use the Dock toolbar icon instead.");
     } finally {
       button.classList.remove("opening");
@@ -218,12 +223,16 @@
       event.preventDefault();
       return;
     }
+    if (popupClosedAt && Date.now() - popupClosedAt < POPUP_CLOSE_CLICK_GUARD_MS) {
+      event.preventDefault();
+      return;
+    }
     openDock();
   });
   button.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
-      openDock();
+      if (!popupClosedAt || Date.now() - popupClosedAt >= POPUP_CLOSE_CLICK_GUARD_MS) openDock();
     }
   });
 
@@ -234,12 +243,17 @@
     sendResponse({ ok: true, hidden });
   });
 
+  // The launcher intentionally remains visible when the browser action popup takes focus.
+  // When focus returns after a successful popup open, treat that as the popup closing and
+  // guard the click that caused the close so it cannot immediately reopen Dock.
   window.addEventListener("blur", () => {
-    focusHidden = true;
     renderVisibility();
   });
   window.addEventListener("focus", () => {
-    focusHidden = false;
+    if (popupLikelyOpen) {
+      popupLikelyOpen = false;
+      popupClosedAt = Date.now();
+    }
     renderVisibility();
   });
   window.addEventListener("resize", () => {
