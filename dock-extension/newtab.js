@@ -23,6 +23,13 @@ const searchInput = document.getElementById("searchInput");
 
 let dragState = null;
 let suppressClick = false;
+let popupOpenPromise = null;
+let lastPopupOpenSuccessAt = 0;
+let popupLikelyOpen = false;
+let popupClosedAt = 0;
+const POPUP_REOPEN_GUARD_MS = 900;
+const POPUP_TRANSITION_SILENCE_MS = 8000;
+const POPUP_CLOSE_CLICK_GUARD_MS = 280;
 
 function normalizeTheme(theme) {
   const value = String(theme || "").trim();
@@ -49,7 +56,6 @@ function applyTheme(theme) {
 }
 
 async function loadTheme() {
-  // Safe Harbor mirror wins first paint. Canonical extension storage then verifies it.
   applyTheme(mirroredTheme());
   try {
     const stored = await chrome.storage.local.get([THEME_KEY]);
@@ -102,17 +108,28 @@ async function savePosition() {
   } catch {}
 }
 
-async function openDockPopup() {
+async function openDockPopupNative() {
   if (!launcher) return;
+  if (Date.now() - popupClosedAt < POPUP_CLOSE_CLICK_GUARD_MS) return;
+  if (popupOpenPromise) return popupOpenPromise;
+  if (Date.now() - lastPopupOpenSuccessAt < POPUP_REOPEN_GUARD_MS) return;
+
   launcher.classList.add("isOpening");
-  try {
-    const result = await chrome.runtime.sendMessage({ type: "OPEN_DOCK_POPUP" });
-    if (!result?.ok) throw new Error(result?.code || "POPUP_OPEN_FAILED");
-  } catch {
-    launcher.classList.remove("isOpening");
-    return;
-  }
-  launcher.classList.remove("isOpening");
+  popupOpenPromise = (async () => {
+    try {
+      const result = await chrome.runtime.sendMessage({ type: "OPEN_DOCK_POPUP" });
+      if (!result?.ok) throw new Error(result?.code || "POPUP_OPEN_FAILED");
+      lastPopupOpenSuccessAt = Date.now();
+      popupLikelyOpen = true;
+    } catch {
+      if (Date.now() - lastPopupOpenSuccessAt >= POPUP_TRANSITION_SILENCE_MS) return;
+    } finally {
+      launcher.classList.remove("isOpening");
+      popupOpenPromise = null;
+    }
+  })();
+
+  return popupOpenPromise;
 }
 
 function beginDrag(event) {
@@ -144,6 +161,7 @@ function moveDrag(event) {
   launcher.style.top = `${clamp(dragState.startTop + dy, EDGE_GAP, bounds.maxTop)}px`;
   launcher.style.right = "auto";
   launcher.style.bottom = "auto";
+  dockSidecar?.reposition?.();
 }
 
 async function endDrag(event) {
@@ -168,6 +186,11 @@ function resolveNavigation(value) {
   return `https://www.google.com/search?q=${encodeURIComponent(raw)}`;
 }
 
+const dockSidecar = globalThis.DockSidecar?.create({
+  launcher,
+  onFallback: () => { openDockPopupNative().catch(() => {}); }
+});
+
 launcher?.addEventListener("pointerdown", beginDrag);
 launcher?.addEventListener("pointermove", moveDrag);
 launcher?.addEventListener("pointerup", endDrag);
@@ -177,14 +200,95 @@ launcher?.addEventListener("click", (event) => {
     event.preventDefault();
     return;
   }
-  openDockPopup();
+  dockSidecar?.toggle();
 });
 launcher?.addEventListener("keydown", (event) => {
   if (event.key === "Enter" || event.key === " ") {
     event.preventDefault();
-    openDockPopup();
+    dockSidecar?.toggle();
   }
 });
+
+const safeHarborQuick = document.getElementById("safeHarborQuick");
+const lastDockQuick = document.getElementById("lastDockQuick");
+const relaxQuick = document.getElementById("relaxQuick");
+
+async function focusOrReuseSafeHarbor() {
+  const safeHarborUrl = chrome.runtime.getURL("memories.html");
+  const dockNewTabUrl = chrome.runtime.getURL("newtab.html");
+  try {
+    const [currentTab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const allTabs = await chrome.tabs.query({});
+    const sameWindowHarbors = (allTabs || []).filter((tab) =>
+      tab?.windowId === currentTab?.windowId &&
+      typeof tab?.url === "string" &&
+      tab.url.startsWith(safeHarborUrl)
+    );
+
+    if (sameWindowHarbors.length) {
+      const primary = sameWindowHarbors
+        .slice()
+        .sort((a, b) => (a.index ?? 9999) - (b.index ?? 9999))[0];
+
+      if (primary?.id != null) await chrome.tabs.update(primary.id, { active: true }).catch(() => null);
+      if (primary?.windowId != null) await chrome.windows.update(primary.windowId, { focused: true }).catch(() => null);
+
+      const duplicateIds = sameWindowHarbors
+        .filter((tab) => tab?.id != null && tab.id !== primary?.id)
+        .map((tab) => tab.id);
+      const currentIsDockNewTab = typeof currentTab?.url === "string" && currentTab.url.startsWith(dockNewTabUrl);
+      if (currentIsDockNewTab && currentTab?.id != null && currentTab.id !== primary?.id) duplicateIds.push(currentTab.id);
+      if (duplicateIds.length) {
+        await chrome.tabs.remove([...new Set(duplicateIds)]).catch(() => null);
+      }
+      return primary || null;
+    }
+
+    if (currentTab?.id != null) {
+      return await chrome.tabs.update(currentTab.id, { url: safeHarborUrl, active: true });
+    }
+  } catch {}
+
+  window.location.replace(safeHarborUrl);
+  return null;
+}
+
+function openSafeHarborHere() {
+  return focusOrReuseSafeHarbor();
+}
+
+async function openLastDockHere() {
+  try {
+    const stored = await chrome.storage.local.get(["dockLastVisitedGroup", "dockActiveGroup", "dockGroups"]);
+    const groups = Array.isArray(stored?.dockGroups) ? stored.dockGroups : [];
+    const validIds = new Set(groups.map((group) => String(group?.id || "")).filter(Boolean));
+    let target = String(stored?.dockLastVisitedGroup || "").trim();
+    if (!validIds.has(target)) target = String(stored?.dockActiveGroup || "").trim();
+    if (!validIds.has(target)) {
+      target = groups.slice().sort((a, b) => Number(b?.createdAt || 0) - Number(a?.createdAt || 0))[0]?.id || "";
+    }
+    if (target) await chrome.storage.local.set({ dockActiveGroup: target, dockLastVisitedGroup: target });
+  } catch {}
+  await focusOrReuseSafeHarbor();
+}
+
+async function relaxFromNewTab() {
+  if (!relaxQuick || relaxQuick.disabled) return;
+  relaxQuick.disabled = true;
+  const original = relaxQuick.textContent;
+  relaxQuick.textContent = "Relaxing…";
+  try {
+    const result = await chrome.runtime.sendMessage({ type: "CLOSE_ALL_OTHER_TABS", announceResult: true });
+    if (!result?.ok) throw new Error(result?.error || "Relax failed");
+  } catch {
+    relaxQuick.disabled = false;
+    relaxQuick.textContent = original;
+  }
+}
+
+safeHarborQuick?.addEventListener("click", openSafeHarborHere);
+lastDockQuick?.addEventListener("click", () => { openLastDockHere().catch(openSafeHarborHere); });
+relaxQuick?.addEventListener("click", () => { relaxFromNewTab().catch(() => {}); });
 
 searchForm?.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -192,10 +296,22 @@ searchForm?.addEventListener("submit", (event) => {
   if (target) window.location.href = target;
 });
 
+window.addEventListener("blur", () => {
+  if (Date.now() - lastPopupOpenSuccessAt < 1800) popupLikelyOpen = true;
+});
+window.addEventListener("focus", () => {
+  if (popupLikelyOpen) {
+    popupClosedAt = Date.now();
+    popupLikelyOpen = false;
+    lastPopupOpenSuccessAt = 0;
+  }
+});
+
 window.addEventListener("resize", () => {
   if (!launcher) return;
   const rect = launcher.getBoundingClientRect();
   applyPosition({ left: rect.left, top: rect.top });
+  dockSidecar?.reposition?.();
 });
 
 applyTheme(mirroredTheme());
