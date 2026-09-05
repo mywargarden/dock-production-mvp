@@ -18,24 +18,32 @@
   ];
 
   const keepAlive = [];
+  let preferredSources = [];
 
-  function previewSource(item) {
+  function preferredPreviewSource(item) {
     if (!item || typeof item !== "object") return "";
+
+    // Prefer an already-local inline preview over a remote URL on cold start.
+    // The screenshot is already in extension storage, so this avoids waiting on
+    // a network round-trip before the popup/Safe Harbor can paint it.
     for (const field of previewFields) {
       const value = String(item[field] || "").trim();
-      if (/^(?:https?:\/\/|data:image\/)/i.test(value)) return value;
+      if (/^data:image\//i.test(value)) return value;
     }
+
+    for (const field of previewFields) {
+      const value = String(item[field] || "").trim();
+      if (/^https?:\/\//i.test(value)) return value;
+    }
+
     return "";
   }
 
   function collectSources(payload) {
     const out = [];
-    const seen = new Set();
     const add = (item) => {
-      const source = previewSource(item);
-      if (!source || seen.has(source)) return;
-      seen.add(source);
-      out.push(source);
+      const source = preferredPreviewSource(item);
+      if (source) out.push(source);
     };
 
     (Array.isArray(payload?.savedTabs) ? payload.savedTabs : []).forEach(add);
@@ -64,7 +72,8 @@
   async function prewarmStoredPreviews() {
     try {
       const stored = await chrome.storage.local.get(STORAGE_KEYS);
-      collectSources(stored).forEach(prewarmSource);
+      preferredSources = collectSources(stored);
+      preferredSources.forEach(prewarmSource);
     } catch {}
   }
 
@@ -74,6 +83,8 @@
       img.loading = "eager";
       img.decoding = "async";
       img.fetchPriority = "high";
+      const preferred = preferredSources[index];
+      if (preferred && img.src !== preferred) img.src = preferred;
     } catch {}
   }
 
