@@ -29,6 +29,8 @@ jobs:
         run: npm install --no-save puppeteer@25.10.0
       - name: Run real Chrome New Tab continuity attack
         run: xvfb-run -a node scripts/chrome_newtab_8.mjs
+      - name: Run heavy screenshot cold-start attack
+        run: xvfb-run -a node scripts/chrome_preview_storage_9.mjs
       - name: Build load-unpacked and store ZIPs
         shell: bash
         run: |
@@ -43,7 +45,8 @@ jobs:
           test -f candidate-out/Dock-0.3.15/newtab.html
           test -f candidate-out/Dock-0.3.15/newtab.js
           test -f candidate-out/Dock-0.3.15/floating-dock.js
-          test -f candidate-out/Dock-0.3.15/preview-accelerator.js
+          test -f candidate-out/Dock-0.3.15/preview-runtime.js
+          test -f candidate-out/Dock-0.3.15/core/previewPayloadStore.js
           test "$(node -e 'const m=require("./candidate-out/Dock-0.3.15/manifest.json"); process.stdout.write(m.version)')" = '0.3.15'
           test "$(node -e 'const m=require("./candidate-out/Dock-0.3.15/manifest.json"); process.stdout.write(m.chrome_url_overrides?.newtab||"")')" = 'newtab.html'
           (
