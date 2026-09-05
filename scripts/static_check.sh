@@ -71,11 +71,15 @@ if (floating.includes('setInterval(') || floating.includes('MutationObserver')) 
 
 const newtabHtml = fs.readFileSync('dock-extension/newtab.html', 'utf8');
 const newtabJs = fs.readFileSync('dock-extension/newtab.js', 'utf8');
+const newtabCss = fs.readFileSync('dock-extension/newtab.css', 'utf8');
 for (const required of ['dockLauncher', 'searchInput', 'dock_logo_clean.png']) {
   if (!newtabHtml.includes(required)) throw new Error(`Dock New Tab markup missing: ${required}`);
 }
-for (const required of ['dockLauncherPosition', 'OPEN_DOCK_POPUP', 'resolveNavigation']) {
+for (const required of ['dockLauncherPosition', 'OPEN_DOCK_POPUP', 'resolveNavigation', 'dockTheme', 'chrome.storage.local.get', 'chrome.storage.onChanged', 'violet-harbor', 'assets/grape-tide.webp']) {
   if (!newtabJs.includes(required)) throw new Error(`Dock New Tab behavior missing: ${required}`);
+}
+for (const required of ['body[data-theme="violet-harbor"]', '--dock-theme-scene', '--newtab-field', '--newtab-focus']) {
+  if (!newtabCss.includes(required)) throw new Error(`Dock New Tab theme styling missing: ${required}`);
 }
 if (newtabJs.includes('setInterval(') || newtabJs.includes('MutationObserver')) {
   throw new Error('Dock New Tab introduced polling or page-wide observation');
