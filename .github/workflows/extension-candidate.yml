@@ -12,7 +12,7 @@ permissions:
   contents: read
 
 env:
-  CANDIDATE_SHA: ${{ github.sha }}
+  CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
   candidate:
