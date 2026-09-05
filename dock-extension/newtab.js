@@ -1,5 +1,6 @@
 const POSITION_KEY = "dockLauncherPosition";
 const THEME_KEY = "dockTheme";
+const THEME_MIRROR_KEY = "dockThemeCurrent";
 const DEFAULT_THEME = "dock-green";
 const THEMES = new Set(["dock-green","skipper-harbor","smiley-pop","warm","sunset","tie-dye","rubber-ducky","crazy-ducky","violet-harbor"]);
 const THEME_SCENE_ASSETS = {
@@ -22,25 +23,44 @@ const searchInput = document.getElementById("searchInput");
 let dragState = null;
 let suppressClick = false;
 
+function normalizeTheme(theme) {
+  const value = String(theme || "").trim();
+  return THEMES.has(value) ? value : DEFAULT_THEME;
+}
+
+function mirrorTheme(theme) {
+  const next = normalizeTheme(theme);
+  try { localStorage.setItem(THEME_MIRROR_KEY, next); } catch {}
+  return next;
+}
+
+function mirroredTheme() {
+  try { return normalizeTheme(localStorage.getItem(THEME_MIRROR_KEY)); }
+  catch { return DEFAULT_THEME; }
+}
+
 function applyTheme(theme) {
-  const next = THEMES.has(theme) ? theme : DEFAULT_THEME;
+  const next = mirrorTheme(theme);
   document.body.dataset.theme = next;
   const sceneAsset = THEME_SCENE_ASSETS[next];
   document.documentElement.style.setProperty("--dock-theme-scene", sceneAsset ? `url("${sceneAsset}")` : "none");
+  return next;
 }
 
 async function loadTheme() {
+  // Safe Harbor mirror wins first paint. Canonical extension storage then verifies it.
+  applyTheme(mirroredTheme());
   try {
     const stored = await chrome.storage.local.get([THEME_KEY]);
-    applyTheme(String(stored?.[THEME_KEY] || DEFAULT_THEME));
+    applyTheme(stored?.[THEME_KEY] || DEFAULT_THEME);
   } catch {
-    applyTheme(DEFAULT_THEME);
+    applyTheme(mirroredTheme());
   }
 }
 
 chrome.storage?.onChanged?.addListener((changes, areaName) => {
   if (areaName !== "local" || !changes?.[THEME_KEY]) return;
-  applyTheme(String(changes[THEME_KEY].newValue || DEFAULT_THEME));
+  applyTheme(changes[THEME_KEY].newValue || DEFAULT_THEME);
 });
 
 function clamp(value, min, max) {
@@ -177,5 +197,6 @@ window.addEventListener("resize", () => {
   applyPosition({ left: rect.left, top: rect.top });
 });
 
+applyTheme(mirroredTheme());
 await Promise.all([loadTheme(), loadPosition()]);
 searchInput?.focus();
