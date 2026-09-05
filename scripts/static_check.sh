@@ -2,6 +2,7 @@
 set -euo pipefail
 
 node --check dock-extension/core/preview.js
+node --check dock-extension/core/previewPayloadStore.js
 node --check dock-extension/adapters/storageCanonicalizer.js
 node --check dock-extension/adapters/chromeAdapter.js
 node --check dock-extension/core/personalScope.js
@@ -16,6 +17,8 @@ node --check dock-extension/newtab.js
 node --check dock-extension/popup.js
 node --check dock-extension/import-v2.js
 node --check dock-extension/memories.js
+node --check dock-extension/preview-runtime.js
+node --check dock-extension/group-theme.js
 node --check dock-extension/continuity-prepaint.js
 node --check dock-extension/continuity.js
 node scripts/test_preview_storage.mjs
@@ -24,12 +27,12 @@ node <<'NODE'
 const fs = require('fs');
 
 const manifest = JSON.parse(fs.readFileSync('dock-extension/manifest.json', 'utf8'));
-if (manifest.version !== '0.3.15') throw new Error(`unexpected manifest version ${manifest.version}`);
+if (manifest.version !== '0.3.16') throw new Error(`unexpected manifest version ${manifest.version}`);
 if (manifest.background?.service_worker !== 'background-v3.js' || manifest.background?.type !== 'module') {
-  throw new Error('Dock 0.3.15 popup bridge worker not active');
+  throw new Error('Dock 0.3.16 popup bridge worker not active');
 }
 if (manifest.chrome_url_overrides?.newtab !== 'newtab.html') {
-  throw new Error('Dock 0.3.15 does not own the Chrome New Tab surface');
+  throw new Error('Dock 0.3.16 does not own the Chrome New Tab surface');
 }
 
 const expectedPermissions = ['activeTab','alarms','identity','identity.email','storage','tabs','unlimitedStorage'].sort();
@@ -99,6 +102,15 @@ for (const required of ['isPopupDocument', 'captureVisibleTab', 'SET_DOCK_LAUNCH
 const memoriesHtml = fs.readFileSync('dock-extension/memories.html', 'utf8');
 if (memoriesHtml.includes('legacy-loop-shield')) throw new Error('obsolete legacy loop shield is still wired into memories.html');
 if (!memoriesHtml.includes('assets/dock_logo_clean.png')) throw new Error('Safe Harbor launcher is not using clean Dock mark');
+for (const required of ['preview-runtime.js','group-theme.js']) {
+  if (!memoriesHtml.includes(required)) throw new Error(`Safe Harbor runtime missing: ${required}`);
+}
+
+const groupTheme = fs.readFileSync('dock-extension/group-theme.js', 'utf8');
+for (const required of ['dockGroups','dockActiveGroup','Use Safe Harbor theme','data-dock-group-theme-entry','setDockTheme','effectiveTheme']) {
+  if (!groupTheme.includes(required)) throw new Error(`per-Dock theme invariant missing: ${required}`);
+}
+if (groupTheme.includes('setInterval(')) throw new Error('per-Dock themes introduced interval polling');
 
 const launcherJs = fs.readFileSync('dock-extension/launcher.js', 'utf8');
 if (!launcherJs.includes('OPEN_DOCK_POPUP') || !launcherJs.includes('dockLauncherPosition')) {
