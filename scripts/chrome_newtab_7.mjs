@@ -30,21 +30,55 @@ try {
 
   const page = await browser.newPage();
   await page.setViewport({ width: 1100, height: 760 });
+
+  // Seed Safe Harbor's real theme key before opening a genuinely fresh Chrome New Tab.
+  await page.goto(`chrome-extension://${extensionId}/newtab.html`, { waitUntil: "domcontentloaded" });
+  await page.evaluate(async () => {
+    await chrome.storage.local.set({ dockTheme: "violet-harbor" });
+  });
+
   await page.goto("chrome://newtab/", { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#dockLauncher", { timeout: 10000 });
   await page.waitForSelector("#searchInput", { timeout: 10000 });
+  await page.waitForFunction(() => document.body.dataset.theme === "violet-harbor", { timeout: 10000 });
 
   const newTabState = await page.evaluate(() => ({
     url: location.href,
     launcherCount: document.querySelectorAll("#dockLauncher").length,
     launcherRect: document.getElementById("dockLauncher")?.getBoundingClientRect().toJSON() || null,
-    searchPlaceholder: document.getElementById("searchInput")?.getAttribute("placeholder") || ""
+    searchPlaceholder: document.getElementById("searchInput")?.getAttribute("placeholder") || "",
+    theme: document.body.dataset.theme || "",
+    scene: getComputedStyle(document.documentElement).getPropertyValue("--dock-theme-scene").trim(),
+    backgroundImage: getComputedStyle(document.body).backgroundImage
   }));
 
   assert.match(newTabState.url, new RegExp(`^chrome-extension://${extensionId}/newtab\\.html`), "Chrome New Tab was not replaced by Dock");
   assert.equal(newTabState.launcherCount, 1, "Dock New Tab does not contain exactly one launcher");
   assert.match(newTabState.searchPlaceholder, /search or enter address/i, "Dock New Tab search/navigation field missing");
   assert.ok(newTabState.launcherRect?.width >= 56 && newTabState.launcherRect?.height >= 56, "Dock New Tab launcher is unexpectedly tiny");
+  assert.equal(newTabState.theme, "violet-harbor", "Dock New Tab did not inherit the saved Grape Tide theme");
+  assert.match(newTabState.scene, /grape-tide\.webp/i, "Dock New Tab did not load the Grape Tide scene asset");
+  assert.match(newTabState.backgroundImage, /grape-tide\.webp/i, "Dock New Tab did not render Grape Tide as its background");
+
+  // Theme changes made through the shared storage authority must update an already-open New Tab live.
+  await page.evaluate(async () => {
+    await chrome.storage.local.set({ dockTheme: "sunset" });
+  });
+  await page.waitForFunction(() => document.body.dataset.theme === "sunset", { timeout: 5000 });
+  const liveThemeState = await page.evaluate(() => ({
+    theme: document.body.dataset.theme || "",
+    scene: getComputedStyle(document.documentElement).getPropertyValue("--dock-theme-scene").trim(),
+    backgroundImage: getComputedStyle(document.body).backgroundImage
+  }));
+  assert.equal(liveThemeState.theme, "sunset", "Dock New Tab did not react to a live theme change");
+  assert.match(liveThemeState.scene, /dock-sunset-hd\.png/i, "Dock New Tab live theme change did not swap scene assets");
+  assert.match(liveThemeState.backgroundImage, /dock-sunset-hd\.png/i, "Dock New Tab live theme change did not repaint the background");
+
+  // Restore Grape Tide for the remainder of the continuity attack.
+  await page.evaluate(async () => {
+    await chrome.storage.local.set({ dockTheme: "violet-harbor" });
+  });
+  await page.waitForFunction(() => document.body.dataset.theme === "violet-harbor", { timeout: 5000 });
 
   // Drag on the genuinely new tab using real pointer input.
   const start = newTabState.launcherRect;
@@ -91,7 +125,7 @@ try {
   assert.ok(Math.abs(inherited.x - moved.x) <= 3, `launcher x position did not continue from New Tab to web page: ${moved.x} -> ${inherited.x}`);
   assert.ok(Math.abs(inherited.y - moved.y) <= 3, `launcher y position did not continue from New Tab to web page: ${moved.y} -> ${inherited.y}`);
 
-  console.log("Dock 0.3.15 New Tab Chrome 7 PASS");
+  console.log("Dock 0.3.15 New Tab theme + continuity Chrome 7 PASS");
 } finally {
   await browser.close().catch(() => {});
   await new Promise((resolve) => server.close(resolve));
