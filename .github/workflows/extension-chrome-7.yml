@@ -1,4 +1,4 @@
-name: Dock 0.3.13 Chrome 7
+name: Dock 0.3.27 Chrome Attack
 
 on:
   pull_request:
@@ -16,7 +16,7 @@ env:
   CANDIDATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
 
 jobs:
-  chrome-7:
+  chrome-attack:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -33,5 +33,5 @@ jobs:
         run: npm install --no-save puppeteer@25.10.0
       - name: Report Chrome for Testing
         run: node -e 'import("puppeteer").then(async ({default:p}) => { console.log(await p.executablePath()); })'
-      - name: Run Dock 0.3.13 launcher browser attack
+      - name: Run Dock 0.3.27 launcher browser attack
         run: xvfb-run -a node scripts/chrome_launcher_7.mjs
