@@ -27,14 +27,14 @@ body {
 }
 
 body[data-theme="dock-green"] {
-  --newtab-bg: linear-gradient(180deg, rgba(226,244,237,.98), rgba(248,245,239,.98));
+  --newtab-bg: linear-gradient(rgba(233,247,241,.04), rgba(248,245,239,.08)), var(--dock-theme-scene, none) center/cover fixed;
   --newtab-fg: #17324a;
-  --newtab-muted: rgba(23,50,74,.56);
-  --newtab-field: rgba(255,255,255,.90);
+  --newtab-muted: rgba(23,50,74,.62);
+  --newtab-field: rgba(255,255,255,.91);
   --newtab-field-text: #17324a;
-  --newtab-field-border: rgba(43,140,143,.18);
+  --newtab-field-border: rgba(43,140,143,.20);
   --newtab-focus: #2b8c8f;
-  --newtab-shadow: rgba(31,63,68,.14);
+  --newtab-shadow: rgba(31,63,68,.16);
 }
 
 body[data-theme="skipper-harbor"] {
@@ -135,7 +135,7 @@ body[data-theme="violet-harbor"] {
 
 .newTabCenter {
   width: min(720px, calc(100vw - 48px));
-  transform: translateY(-4vh);
+  transform: translateY(clamp(120px, 23vh, 210px));
 }
 
 .searchForm {
