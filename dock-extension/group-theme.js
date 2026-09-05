@@ -36,6 +36,9 @@ let pickerGroupId = "";
 let pickerAnchor = null;
 let syncTimer = null;
 let menuObserver = null;
+let visualObserver = null;
+let lastEffectiveState = null;
+let visualRepairQueued = false;
 
 function norm(value) {
   return String(value == null ? "" : value).trim();
@@ -95,6 +98,7 @@ function applyVisualTheme(theme, activeGroup = "__all__") {
 async function applyEffectiveTheme() {
   try {
     const state = await readThemeState();
+    lastEffectiveState = state;
     applyVisualTheme(state.effectiveTheme, state.activeGroup);
     refreshPickerSelection(state);
     return state;
@@ -109,6 +113,23 @@ function scheduleThemeSync(delay = 0) {
     syncTimer = null;
     applyEffectiveTheme().catch(() => {});
   }, Math.max(0, delay));
+}
+
+function enforceExplicitDockThemeIfNeeded() {
+  const state = lastEffectiveState;
+  if (!state?.explicitGroupTheme || !document.body) return;
+  if (document.body.dataset.theme === state.explicitGroupTheme) return;
+  if (visualRepairQueued) return;
+
+  visualRepairQueued = true;
+  queueMicrotask(() => {
+    visualRepairQueued = false;
+    const latest = lastEffectiveState;
+    if (!latest?.explicitGroupTheme || !document.body) return;
+    if (document.body.dataset.theme !== latest.explicitGroupTheme) {
+      applyVisualTheme(latest.explicitGroupTheme, latest.activeGroup);
+    }
+  });
 }
 
 async function setDockTheme(groupId, themeValue) {
@@ -341,7 +362,12 @@ function ensurePicker() {
 function closeNativePillMenus() {
   document.querySelectorAll(".groupPillMenu").forEach((menu) => {
     menu.classList.add("hidden");
-    menu.style.removeProperty("visibility");
+    for (const prop of ["position","left","top","right","bottom","z-index","visibility"]) {
+      menu.style.removeProperty(prop);
+    }
+    if (menu.__dockHome && menu.parentNode !== menu.__dockHome) {
+      menu.__dockHome.appendChild(menu);
+    }
   });
 }
 
@@ -445,11 +471,18 @@ function installObservers() {
     menuObserver.observe(rail, { childList: true, subtree: true });
   }
 
+  if (document.body && typeof MutationObserver !== "undefined") {
+    visualObserver = new MutationObserver(() => {
+      enforceExplicitDockThemeIfNeeded();
+    });
+    visualObserver.observe(document.body, { attributes: true, attributeFilter: ["data-theme"] });
+  }
+
   document.addEventListener("click", (event) => {
     const target = event.target instanceof Element ? event.target : null;
     if (target?.closest(".groupPill")) {
       scheduleThemeSync(0);
-      scheduleThemeSync(90);
+      scheduleThemeSync(120);
       return;
     }
     if (picker && !picker.classList.contains("hidden") && !target?.closest(".dockGroupThemePopover")) {
