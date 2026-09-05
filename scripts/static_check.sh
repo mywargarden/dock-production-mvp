@@ -29,9 +29,14 @@ echo "JavaScript syntax: ${count} PASS"
 node <<'NODE'
 const fs=require('fs');
 const must=[
+ ['background-v3.js','import "./capture-hardening.js"'],
  ['background-v3.js','import "./background-v2.js"'],
  ['background-v3.js','REGISTER_DOCK_SIDECAR_TOKEN'],
- ['background-v2.js','LAUNCHER_CAPTURE_HIDE_CSS'],
+ ['capture-hardening.js','LAUNCHER_CAPTURE_HIDE_CSS'],
+ ['capture-hardening.js','DOCK_CAPTURE_SHIELD_UNVERIFIED'],
+ ['capture-hardening.js','api.scripting.insertCSS'],
+ ['capture-hardening.js','api.scripting.executeScript'],
+ ['popup.html','capture-hardening.js'],
  ['dock-sidecar.js','if (open) { close({ restoreFocus: true }); return; }'],
  ['newtab.html','Let the currents take you, Dock guards the shore.'],
  ['popup.js','DOCK_SIDECAR_READY'],
