@@ -102,18 +102,11 @@ try {
   }
   assert.equal(popupSeen, true, "clicking the ordinary-page Dock launcher did not open the real Dock popup");
 
-  // Popup focus must not make the floating launcher disappear.
   const visibleDuringPopup = await second.$eval("#dock-floating-launcher-host", (host) => {
     const style = getComputedStyle(host);
     return style.visibility === "visible" && style.opacity !== "0" && style.pointerEvents !== "none";
   });
   assert.equal(visibleDuringPopup, true, "Dock launcher disappeared while popup had focus");
-
-  // Capture hiding must suppress Dock UI, then restore it cleanly.
-  const hideResponse = await second.evaluate(async () => chrome.runtime.sendMessage({ type: "SET_DOCK_LAUNCHER_CAPTURE_HIDDEN", hidden: true }).catch(() => null));
-  // Content pages cannot directly message their own content-script listener through runtime in Chrome;
-  // verify the DOM-side invariant by asking the extension page itself below instead of treating this as required.
-  void hideResponse;
 
   await second.reload({ waitUntil: "domcontentloaded" });
   await second.waitForSelector("#dock-floating-launcher-host", { timeout: 10000 });
