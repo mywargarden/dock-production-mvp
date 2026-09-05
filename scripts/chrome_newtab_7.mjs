@@ -20,6 +20,26 @@ const browser = await puppeteer.launch({
   args: ["--no-sandbox", "--disable-dev-shm-usage", "--no-first-run", "--no-default-browser-check"]
 });
 
+async function openFreshNewTab(extensionId) {
+  const page = await browser.newPage();
+  await page.setViewport({ width: 1100, height: 760 });
+  await page.goto("chrome://newtab/", { waitUntil: "domcontentloaded" });
+  await page.waitForSelector("#dockLauncher", { timeout: 10000 });
+  await page.waitForSelector("#searchInput", { timeout: 10000 });
+  assert.match(page.url(), new RegExp(`^chrome-extension://${extensionId}/newtab\\.html`), "Chrome New Tab was not replaced by Dock");
+  return page;
+}
+
+async function readThemeState(page) {
+  return await page.evaluate(() => ({
+    theme: document.body.dataset.theme || "",
+    prepaintTheme: document.documentElement.dataset.dockNewtabPrepaintTheme || "",
+    mirror: localStorage.getItem("dockThemeCurrent") || "",
+    scene: getComputedStyle(document.documentElement).getPropertyValue("--dock-theme-scene").trim(),
+    backgroundImage: getComputedStyle(document.body).backgroundImage
+  }));
+}
+
 try {
   const extensionId = await browser.installExtension(extensionPath);
   assert.match(extensionId, /^[a-p]{32}$/, "Chrome did not return a valid Dock extension id");
@@ -28,60 +48,79 @@ try {
   assert.ok(dock, "Dock was not registered in Chrome");
   assert.equal(dock.version, "0.3.15", `unexpected Dock version ${dock.version}`);
 
-  const page = await browser.newPage();
-  await page.setViewport({ width: 1100, height: 760 });
+  // Safe Harbor is the theme authority. Choose Grape Tide through the actual UI.
+  const safeHarbor = await browser.newPage();
+  await safeHarbor.goto(`chrome-extension://${extensionId}/memories.html`, { waitUntil: "domcontentloaded" });
+  await safeHarbor.waitForSelector('#themeMenuBtn', { timeout: 10000 });
+  await safeHarbor.click('#themeMenuBtn');
+  await safeHarbor.waitForSelector('.themeItem[data-theme="violet-harbor"]', { visible: true, timeout: 5000 });
+  await safeHarbor.click('.themeItem[data-theme="violet-harbor"]');
+  await safeHarbor.waitForFunction(async () => {
+    const stored = await chrome.storage.local.get(["dockTheme"]);
+    return document.body.dataset.theme === "violet-harbor" &&
+      stored.dockTheme === "violet-harbor" &&
+      localStorage.getItem("dockThemeCurrent") === "violet-harbor";
+  }, { timeout: 10000 });
 
-  // Seed Safe Harbor's real theme key before opening a genuinely fresh Chrome New Tab.
-  await page.goto(`chrome-extension://${extensionId}/newtab.html`, { waitUntil: "domcontentloaded" });
-  await page.evaluate(async () => {
-    await chrome.storage.local.set({ dockTheme: "violet-harbor" });
-  });
-
-  await page.goto("chrome://newtab/", { waitUntil: "domcontentloaded" });
-  await page.waitForSelector("#dockLauncher", { timeout: 10000 });
-  await page.waitForSelector("#searchInput", { timeout: 10000 });
+  // Every fresh New Tab must inherit the current Safe Harbor theme.
+  const page = await openFreshNewTab(extensionId);
   await page.waitForFunction(() => document.body.dataset.theme === "violet-harbor", { timeout: 10000 });
-
   const newTabState = await page.evaluate(() => ({
-    url: location.href,
     launcherCount: document.querySelectorAll("#dockLauncher").length,
     launcherRect: document.getElementById("dockLauncher")?.getBoundingClientRect().toJSON() || null,
     searchPlaceholder: document.getElementById("searchInput")?.getAttribute("placeholder") || "",
     theme: document.body.dataset.theme || "",
+    prepaintTheme: document.documentElement.dataset.dockNewtabPrepaintTheme || "",
+    mirror: localStorage.getItem("dockThemeCurrent") || "",
     scene: getComputedStyle(document.documentElement).getPropertyValue("--dock-theme-scene").trim(),
     backgroundImage: getComputedStyle(document.body).backgroundImage
   }));
 
-  assert.match(newTabState.url, new RegExp(`^chrome-extension://${extensionId}/newtab\\.html`), "Chrome New Tab was not replaced by Dock");
   assert.equal(newTabState.launcherCount, 1, "Dock New Tab does not contain exactly one launcher");
   assert.match(newTabState.searchPlaceholder, /search or enter address/i, "Dock New Tab search/navigation field missing");
   assert.ok(newTabState.launcherRect?.width >= 56 && newTabState.launcherRect?.height >= 56, "Dock New Tab launcher is unexpectedly tiny");
-  assert.equal(newTabState.theme, "violet-harbor", "Dock New Tab did not inherit the saved Grape Tide theme");
+  assert.equal(newTabState.theme, "violet-harbor", "fresh Dock New Tab did not inherit Safe Harbor Grape Tide");
+  assert.equal(newTabState.prepaintTheme, "violet-harbor", "Grape Tide was not known at New Tab prepaint");
+  assert.equal(newTabState.mirror, "violet-harbor", "New Tab did not read Safe Harbor theme mirror");
   assert.match(newTabState.scene, /grape-tide\.webp/i, "Dock New Tab did not load the Grape Tide scene asset");
   assert.match(newTabState.backgroundImage, /grape-tide\.webp/i, "Dock New Tab did not render Grape Tide as its background");
 
-  // Theme changes made through the shared storage authority must update an already-open New Tab live.
-  await page.evaluate(async () => {
-    await chrome.storage.local.set({ dockTheme: "sunset" });
-  });
-  await page.waitForFunction(() => document.body.dataset.theme === "sunset", { timeout: 5000 });
-  const liveThemeState = await page.evaluate(() => ({
-    theme: document.body.dataset.theme || "",
-    scene: getComputedStyle(document.documentElement).getPropertyValue("--dock-theme-scene").trim(),
-    backgroundImage: getComputedStyle(document.body).backgroundImage
-  }));
-  assert.equal(liveThemeState.theme, "sunset", "Dock New Tab did not react to a live theme change");
-  assert.match(liveThemeState.scene, /dock-sunset-hd\.png/i, "Dock New Tab live theme change did not swap scene assets");
-  assert.match(liveThemeState.backgroundImage, /dock-sunset-hd\.png/i, "Dock New Tab live theme change did not repaint the background");
+  const secondFresh = await openFreshNewTab(extensionId);
+  await secondFresh.waitForFunction(() => document.body.dataset.theme === "violet-harbor", { timeout: 10000 });
+  const secondState = await readThemeState(secondFresh);
+  assert.equal(secondState.theme, "violet-harbor", "second fresh New Tab lost the current Safe Harbor theme");
+  assert.match(secondState.backgroundImage, /grape-tide\.webp/i, "second fresh New Tab lost Grape Tide background");
 
-  // Restore Grape Tide for the remainder of the continuity attack.
-  await page.evaluate(async () => {
-    await chrome.storage.local.set({ dockTheme: "violet-harbor" });
-  });
+  // Change the actual Safe Harbor control to Dock Default. The next new page must be Dock Default.
+  await safeHarbor.bringToFront();
+  await safeHarbor.click('#themeMenuBtn');
+  await safeHarbor.waitForSelector('.themeItem[data-theme="dock-green"]', { visible: true, timeout: 5000 });
+  await safeHarbor.click('.themeItem[data-theme="dock-green"]');
+  await safeHarbor.waitForFunction(async () => {
+    const stored = await chrome.storage.local.get(["dockTheme"]);
+    return document.body.dataset.theme === "dock-green" &&
+      stored.dockTheme === "dock-green" &&
+      localStorage.getItem("dockThemeCurrent") === "dock-green";
+  }, { timeout: 10000 });
+
+  const defaultFresh = await openFreshNewTab(extensionId);
+  await defaultFresh.waitForFunction(() => document.body.dataset.theme === "dock-green", { timeout: 10000 });
+  const defaultState = await readThemeState(defaultFresh);
+  assert.equal(defaultState.theme, "dock-green", "Dock Default Safe Harbor did not produce Dock Default New Tab");
+  assert.equal(defaultState.prepaintTheme, "dock-green", "Dock Default was not present at New Tab prepaint");
+  assert.equal(defaultState.mirror, "dock-green", "Dock Default mirror drifted");
+  assert.doesNotMatch(defaultState.backgroundImage, /grape-tide|dock-sunset|tie-dye|rubber-ducky|cozy-quilt|skipper-harbor|smileys-3d|sand-castle/i, "Dock Default New Tab leaked a scene theme");
+
+  // Restore Grape Tide and prove already-open New Tabs react live as well.
+  await safeHarbor.bringToFront();
+  await safeHarbor.click('#themeMenuBtn');
+  await safeHarbor.waitForSelector('.themeItem[data-theme="violet-harbor"]', { visible: true, timeout: 5000 });
+  await safeHarbor.click('.themeItem[data-theme="violet-harbor"]');
   await page.waitForFunction(() => document.body.dataset.theme === "violet-harbor", { timeout: 5000 });
 
   // Drag on the genuinely new tab using real pointer input.
-  const start = newTabState.launcherRect;
+  await page.bringToFront();
+  const start = await page.$eval("#dockLauncher", (el) => el.getBoundingClientRect().toJSON());
   const fromX = start.x + start.width / 2;
   const fromY = start.y + start.height / 2;
   const toX = Math.max(120, fromX - 210);
@@ -125,7 +164,7 @@ try {
   assert.ok(Math.abs(inherited.x - moved.x) <= 3, `launcher x position did not continue from New Tab to web page: ${moved.x} -> ${inherited.x}`);
   assert.ok(Math.abs(inherited.y - moved.y) <= 3, `launcher y position did not continue from New Tab to web page: ${moved.y} -> ${inherited.y}`);
 
-  console.log("Dock 0.3.15 New Tab theme + continuity Chrome 7 PASS");
+  console.log("Dock 0.3.15 Safe Harbor theme authority + New Tab continuity Chrome 7 PASS");
 } finally {
   await browser.close().catch(() => {});
   await new Promise((resolve) => server.close(resolve));
