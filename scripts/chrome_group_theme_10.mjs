@@ -49,9 +49,12 @@ async function waitActiveGroup(page, expected, label = '') {
 }
 
 async function openDockMenu(page, groupId) {
-  const menuButton = `.groupPillWrap[data-group-id="${groupId}"] .groupPillMenuBtn`;
-  await page.waitForSelector(menuButton, { visible: true, timeout: 10000 });
-  await page.click(menuButton);
+  await page.waitForFunction((id) => !!document.querySelector(`.groupPillWrap[data-group-id="${id}"] .groupPillMenuBtn`), { timeout: 10000 }, groupId);
+  await page.evaluate((id) => {
+    const button = document.querySelector(`.groupPillWrap[data-group-id="${id}"] .groupPillMenuBtn`);
+    if (!button) throw new Error(`Menu button missing for ${id}`);
+    button.click();
+  }, groupId);
   await page.waitForFunction((id) => {
     const wrap = document.querySelector(`.groupPillWrap[data-group-id="${id}"]`);
     const menu = wrap?.querySelector('.groupPillMenu') || document.querySelector('.groupPillMenu:not(.hidden)');
@@ -68,12 +71,24 @@ async function chooseDockTheme(page, groupId, theme) {
     if (!entry) throw new Error('Theme entry missing');
     entry.click();
   }, groupId);
-  await page.waitForSelector('.dockGroupThemePopover:not(.hidden)', { visible: true, timeout: 10000 });
-  await page.click(`.dockGroupThemeChoice[data-theme="${theme}"]`);
+  await page.waitForFunction(() => {
+    const picker = document.querySelector('.dockGroupThemePopover');
+    return !!picker && !picker.classList.contains('hidden');
+  }, { timeout: 10000 });
+  await page.evaluate((value) => {
+    const choice = document.querySelector(`.dockGroupThemeChoice[data-theme="${value}"]`);
+    if (!choice) throw new Error(`Theme choice missing: ${value}`);
+    choice.click();
+  }, theme);
 }
 
 async function clickDock(page, groupId, expectedTheme, label) {
-  await page.click(`.groupPillWrap[data-group-id="${groupId}"] .groupPill`);
+  await page.waitForFunction((id) => !!document.querySelector(`.groupPillWrap[data-group-id="${id}"] .groupPill`), { timeout: 10000 }, groupId);
+  await page.evaluate((id) => {
+    const pill = document.querySelector(`.groupPillWrap[data-group-id="${id}"] .groupPill`);
+    if (!pill) throw new Error(`Dock pill missing: ${id}`);
+    pill.click();
+  }, groupId);
   await Promise.all([
     waitActiveGroup(page, groupId, label),
     waitTheme(page, expectedTheme, label)
