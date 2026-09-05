@@ -7,6 +7,8 @@ let savedTabsList = [];
 let groupItemsById = {};
 let metadataLoaded = false;
 let metadataPromise = null;
+let primedPayloads = false;
+let primePromise = null;
 const inflightPayloads = new Map();
 
 function norm(value) {
@@ -26,15 +28,13 @@ function normalizeUrl(value) {
   }
 }
 
-function directPreview(item) {
+function inlinePreview(item) {
   const fields = [
-    "screenshot_url",
-    "screenshotUrl",
     "screenshotThumb",
     "screenshot",
     "screenshot_data_url",
-    "customIcon",
-    "icon_url",
+    "screenshotDataUrl",
+    "screenshotDataURI",
     "previewImage",
     "previewUrl",
     "thumbnail",
@@ -42,7 +42,23 @@ function directPreview(item) {
   ];
   for (const field of fields) {
     const value = norm(item?.[field]);
-    if (/^(?:https?:\/\/|data:image\/)/i.test(value)) return value;
+    if (/^data:image\//i.test(value)) return value;
+  }
+  return "";
+}
+
+function remotePreview(item) {
+  const fields = [
+    "screenshot_url",
+    "screenshotUrl",
+    "previewImage",
+    "previewUrl",
+    "thumbnail",
+    "image"
+  ];
+  for (const field of fields) {
+    const value = norm(item?.[field]);
+    if (/^https?:\/\//i.test(value)) return value;
   }
   return "";
 }
@@ -53,9 +69,46 @@ function addMemory(item) {
   if (key) memoryByUrl.set(key, item);
 }
 
+function allItems() {
+  const out = [...savedTabsList];
+  Object.values(groupItemsById).forEach((items) => {
+    if (Array.isArray(items)) out.push(...items);
+  });
+  return out;
+}
+
+async function primePayloadCache() {
+  if (primedPayloads) return;
+  if (primePromise) return primePromise;
+
+  primePromise = (async () => {
+    const refs = [...new Set(allItems().map((item) => norm(item?.previewRef)).filter(Boolean))];
+    const keys = refs.map(previewStorageKey).filter(Boolean);
+    if (!keys.length) {
+      primedPayloads = true;
+      return;
+    }
+
+    const stored = await api.storage.local.get(keys);
+    refs.forEach((ref) => {
+      const key = previewStorageKey(ref);
+      const value = norm(stored?.[key]);
+      if (/^data:image\//i.test(value)) resolvedPayloads.set(ref, value);
+    });
+    primedPayloads = true;
+  })();
+
+  try { await primePromise; }
+  finally { primePromise = null; }
+}
+
 async function loadMetadata() {
-  if (metadataLoaded) return;
+  if (metadataLoaded) {
+    await primePayloadCache();
+    return;
+  }
   if (metadataPromise) return metadataPromise;
+
   metadataPromise = (async () => {
     const stored = await api.storage.local.get(["savedTabs", "dockGroupItems"]);
     savedTabsList = Array.isArray(stored.savedTabs) ? stored.savedTabs : [];
@@ -68,8 +121,12 @@ async function loadMetadata() {
     Object.values(groupItemsById).forEach((items) => {
       if (Array.isArray(items)) items.forEach(addMemory);
     });
+
     metadataLoaded = true;
+    primedPayloads = false;
+    await primePayloadCache();
   })();
+
   try { await metadataPromise; }
   finally { metadataPromise = null; }
 }
@@ -119,6 +176,13 @@ function itemForCard(card) {
   return href ? memoryByUrl.get(href) || null : null;
 }
 
+function paintLocal(img, payload) {
+  img.loading = "eager";
+  img.decoding = "async";
+  try { img.fetchPriority = "high"; } catch {}
+  img.src = payload;
+}
+
 async function hydrateCard(card) {
   if (!(card instanceof Element) || card.dataset.dockPreviewResolved === "1") return;
   const img = card.querySelector(".preview img, .thumb img, img");
@@ -128,28 +192,31 @@ async function hydrateCard(card) {
   const item = itemForCard(card);
   if (!item) return;
 
-  const direct = directPreview(item);
-  if (direct) {
-    img.loading = "eager";
-    img.decoding = "async";
-    img.src = direct;
+  const ref = norm(item.previewRef);
+  if (ref) {
+    card.dataset.dockPreviewResolved = "1";
+    const payload = resolvedPayloads.get(ref) || await payloadForRef(ref).catch(() => "");
+    if (payload) {
+      paintLocal(img, payload);
+      return;
+    }
+    delete card.dataset.dockPreviewResolved;
+  }
+
+  const inline = inlinePreview(item);
+  if (inline) {
+    paintLocal(img, inline);
     card.dataset.dockPreviewResolved = "1";
     return;
   }
 
-  const ref = norm(item.previewRef);
-  if (!ref) return;
-
-  card.dataset.dockPreviewResolved = "1";
-  const payload = await payloadForRef(ref).catch(() => "");
-  if (!payload) {
-    delete card.dataset.dockPreviewResolved;
-    return;
+  const remote = remotePreview(item);
+  if (remote) {
+    img.loading = "lazy";
+    img.decoding = "async";
+    img.src = remote;
+    card.dataset.dockPreviewResolved = "1";
   }
-
-  img.loading = "eager";
-  img.decoding = "async";
-  img.src = payload;
 }
 
 function visibleCards(root) {
@@ -159,7 +226,7 @@ function visibleCards(root) {
 
 function scheduleCards(root) {
   const cards = visibleCards(root);
-  const immediate = cards.slice(0, 12);
+  const immediate = cards.slice(0, 18);
   immediate.forEach((card) => hydrateCard(card).catch(() => {}));
   if (cards.length > immediate.length) {
     requestAnimationFrame(() => {
@@ -175,6 +242,22 @@ function install(root) {
   observer.observe(root, { childList: true, subtree: true });
 }
 
+function installWhenAvailable(id) {
+  const existing = document.getElementById(id);
+  if (existing) {
+    install(existing);
+    return;
+  }
+
+  const observer = new MutationObserver(() => {
+    const root = document.getElementById(id);
+    if (!root) return;
+    observer.disconnect();
+    install(root);
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
+}
+
 function resetCards() {
   document.querySelectorAll("[data-dock-preview-resolved]").forEach((card) => {
     delete card.dataset.dockPreviewResolved;
@@ -182,25 +265,21 @@ function resetCards() {
 }
 
 function boot() {
-  // Do not await migration: UI must paint immediately. This message merely
-  // guarantees an upgraded real profile wakes the worker and starts cleanup.
   api.runtime.sendMessage({ type: "MIGRATE_DOCK_PREVIEW_PAYLOADS" }).catch?.(() => {});
   loadMetadata().catch(() => {});
-  install(document.getElementById("grid"));
-  install(document.getElementById("tabList"));
+  installWhenAvailable("grid");
+  installWhenAvailable("tabList");
 }
 
-if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", boot, { once: true });
-} else {
-  boot();
-}
+boot();
 
 if (api.storage?.onChanged?.addListener) {
   api.storage.onChanged.addListener((changes, areaName) => {
     if (areaName !== "local") return;
+
     if (changes?.savedTabs || changes?.dockGroupItems) {
       metadataLoaded = false;
+      primedPayloads = false;
       savedTabsList = [];
       groupItemsById = {};
       memoryByUrl.clear();
@@ -209,6 +288,14 @@ if (api.storage?.onChanged?.addListener) {
         scheduleCards(document.getElementById("grid"));
         scheduleCards(document.getElementById("tabList"));
       }).catch(() => {});
+      return;
+    }
+
+    for (const [key, change] of Object.entries(changes || {})) {
+      if (!key.startsWith("dockPreviewPayload:v1:")) continue;
+      const ref = key.slice("dockPreviewPayload:v1:".length);
+      const value = norm(change?.newValue);
+      if (/^data:image\//i.test(value)) resolvedPayloads.set(ref, value);
     }
   });
 }
